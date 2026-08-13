@@ -1,0 +1,1 @@
+"""Editable Quixstreams processor template for the WAMA Compose PoC."""

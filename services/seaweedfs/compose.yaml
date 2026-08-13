@@ -1,0 +1,29 @@
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.41
+    env_file:
+      - ./seaweedfs.env
+    command:
+      [
+        "mini",
+        "-dir=/data",
+        "-webdav=false",
+        "-s3.port.iceberg=0",
+        "-master.telemetry=false",
+      ]
+    ports:
+      - "8333:8333"
+      - "23646:23646"
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1:9333/cluster/healthz",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped

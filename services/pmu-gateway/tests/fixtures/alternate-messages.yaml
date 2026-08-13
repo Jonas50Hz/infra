@@ -1,0 +1,8 @@
+publish_interval_ms: 250
+messages:
+  - mrid: urn:wama:poc:pmu:alternate:frequency
+    value:
+      double_value: 49.95
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 5

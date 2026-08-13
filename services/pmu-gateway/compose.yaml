@@ -1,0 +1,20 @@
+services:
+  pmu-gateway:
+    image: "${WAMA_IMAGE_PREFIX:-wama.local/wama}/pmu-gateway:${WAMA_IMAGE_TAG:-main}"
+    build:
+      context: ../..
+      dockerfile: services/pmu-gateway/Dockerfile
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: LiveMeasurement
+      PMU_GATEWAY_CONFIG_PATH: /etc/wama/messages.yaml
+      PMU_GATEWAY_PUBLISH_INTERVAL_MS: ${PMU_GATEWAY_PUBLISH_INTERVAL_MS:-}
+    volumes:
+      - type: bind
+        source: ${PMU_GATEWAY_CONFIG_SOURCE:-./messages.yaml}
+        target: /etc/wama/messages.yaml
+        read_only: true
+    restart: unless-stopped

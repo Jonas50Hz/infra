@@ -1,0 +1,22 @@
+services:
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:16.0.2
+    env_file:
+      - ./forgejo.env
+    environment:
+      FORGEJO__server__DOMAIN: "${FORGEJO_DOMAIN:-localhost}"
+      FORGEJO__server__ROOT_URL: "${FORGEJO_ROOT_URL:-http://localhost:3000/}"
+      FORGEJO__server__LOCAL_ROOT_URL: "http://forgejo:3000/"
+      FORGEJO__server__SSH_DOMAIN: "${FORGEJO_DOMAIN:-localhost}"
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - forgejo-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped

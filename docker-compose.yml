@@ -3,6 +3,21 @@ include:
   - ./services/kafka/compose.yaml
   - ./services/kafka-init/compose.yaml
   - ./services/kafka-ui/compose.yaml
+  - ./services/kafka-exporter/compose.yaml
+  - ./services/pmu-gateway/compose.yaml
+  - ./services/seaweedfs/compose.yaml
+  - ./services/forgejo/compose.yaml
+  - ./services/forgejo-init/compose.yaml
+  - ./services/forgejo-runner/compose.yaml
+  - ./services/victoria-metrics/compose.yaml
+  - ./services/node-exporter/compose.yaml
+  - ./services/cadvisor/compose.yaml
+  - ./services/grafana/compose.yaml
 
 volumes:
   kafka-data:
+  seaweedfs-data:
+  forgejo-data:
+  forgejo-runner-data:
+  victoria-metrics-data:
+  grafana-data:

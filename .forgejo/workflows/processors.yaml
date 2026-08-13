@@ -1,0 +1,133 @@
+name: Validate and deploy WAMA services
+
+on:
+  pull_request:
+    paths:
+      - .env.example
+      - .forgejo/workflows/processors.yaml
+      - .github/copilot-instructions.md
+      - README.md
+      - docker-compose.yml
+      - docs/wama/schema/rtd_schema.proto
+      - services/forgejo/**
+      - services/forgejo-init/**
+      - services/forgejo-runner/**
+      - services/pmu-gateway/**
+      - services/processor-*/**
+      - templates/quixstreams-processor/**
+      - scripts/**
+      - tests/**
+  push:
+    branches:
+      - main
+    paths:
+      - .env.example
+      - .forgejo/workflows/processors.yaml
+      - .github/copilot-instructions.md
+      - README.md
+      - docker-compose.yml
+      - docs/wama/schema/rtd_schema.proto
+      - services/forgejo/**
+      - services/forgejo-init/**
+      - services/forgejo-runner/**
+      - services/pmu-gateway/**
+      - services/processor-*/**
+      - templates/quixstreams-processor/**
+      - scripts/**
+      - tests/**
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    runs-on: wama-ci
+    timeout-minutes: 20
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate Compose service ownership
+        run: python3 scripts/validate_services.py
+      - name: Test repository helpers
+        run: python3 -m unittest discover -s tests -v
+      - name: Test processor template
+        run: docker build --target test -f templates/quixstreams-processor/Dockerfile .
+      - name: Test PMU gateway
+        run: docker build --target test -f services/pmu-gateway/Dockerfile .
+      - name: Test provisioned processors
+        run: |
+          for dockerfile in services/processor-*/Dockerfile; do
+            [[ -e "$dockerfile" ]] || continue
+            docker build --target test --file "$dockerfile" .
+          done
+
+  publish:
+    needs: validate
+    if: forgejo.ref == 'refs/heads/main'
+    runs-on: wama-ci
+    timeout-minutes: 30
+    outputs:
+      image_prefix: ${{ steps.registry.outputs.image_prefix }}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - id: registry
+        name: Resolve registry image prefix
+        run: |
+          registry="${FORGEJO_SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry%/}"
+          repository="$(printf '%s' "$FORGEJO_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          printf 'registry=%s\n' "$registry" >> "$FORGEJO_OUTPUT"
+          printf 'image_prefix=%s/%s\n' "$registry" "$repository" >> "$FORGEJO_OUTPUT"
+      - name: Authenticate to Forgejo Packages
+        env:
+          REGISTRY: ${{ steps.registry.outputs.registry }}
+        run: printf '%s' "$FORGEJO_TOKEN" | docker login "$REGISTRY" --username "$FORGEJO_ACTOR" --password-stdin
+      - name: Build and publish application images
+        env:
+          IMAGE_PREFIX: ${{ steps.registry.outputs.image_prefix }}
+        run: |
+          services=(pmu-gateway)
+          for directory in services/processor-*; do
+            [[ -d "$directory" ]] || continue
+            services+=("${directory#services/}")
+          done
+          for service in "${services[@]}"; do
+            image="$IMAGE_PREFIX/$service"
+            docker build \
+              --label "org.opencontainers.image.source=$FORGEJO_SERVER_URL/$FORGEJO_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$FORGEJO_SHA" \
+              --tag "$image:sha-$FORGEJO_SHA" \
+              --tag "$image:main" \
+              --file "services/$service/Dockerfile" \
+              .
+            docker push "$image:sha-$FORGEJO_SHA"
+            docker push "$image:main"
+            revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image:main")"
+            digest="$(docker image inspect --format '{{ index .RepoDigests 0 }}' "$image:main")"
+            [[ "$revision" == "$FORGEJO_SHA" ]]
+            [[ -n "$digest" && "$digest" != "<no value>" ]]
+          done
+
+  deploy:
+    needs: publish
+    if: forgejo.ref == 'refs/heads/main'
+    runs-on: wama-deploy
+    timeout-minutes: 20
+    concurrency:
+      group: wama-compose-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Authenticate to Forgejo Packages
+        run: |
+          registry="${FORGEJO_SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry%/}"
+          printf '%s' "$FORGEJO_TOKEN" | docker login "$registry" --username "$FORGEJO_ACTOR" --password-stdin
+      - name: Synchronize and deploy approved revision
+        run: |
+          python3 scripts/deploy_services.py \
+            --commit "$FORGEJO_SHA" \
+            --image-prefix "${{ needs.publish.outputs.image_prefix }}"

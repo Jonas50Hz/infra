@@ -1,0 +1,19 @@
+services:
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.117.0
+    command:
+      - -promscrape.config=/etc/victoriametrics/prometheus.yml
+      - -storageDataPath=/victoria-metrics-data
+      - -retentionPeriod=1
+    ports:
+      - "127.0.0.1:8428:8428"
+    volumes:
+      - victoria-metrics-data:/victoria-metrics-data
+      - ./prometheus.yml:/etc/victoriametrics/prometheus.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped

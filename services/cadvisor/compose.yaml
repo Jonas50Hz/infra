@@ -1,0 +1,21 @@
+services:
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.5
+    command:
+      - --containerd=/run/containerd/containerd.sock
+      - --docker=unix:///var/run/docker.sock
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --disable_metrics=disk,diskIO
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.service
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    restart: unless-stopped

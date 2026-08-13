@@ -1,0 +1,1 @@
+"""Python bindings generated from the canonical Common Format schema."""

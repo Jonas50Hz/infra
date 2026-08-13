@@ -10,6 +10,7 @@ This plan only. Not Nexus.
 | Config & delivery | Git + Forgejo + ArgoCD | Versioned config/logic; CI tests; GitOps deploy |
 | Stream processing | Quixstreams | Power-User pipelines; detection & derived values |
 | Time-series store | Druid | Live + historical query on Common Format |
+| Operational observability | Grafana + VictoriaMetrics | Host and container health metrics and dashboards |
 | Raw / waveform store | SeaweedFS | Blob for raw samples, waveforms, events |
 | Config store | PostgreSQL (via Kafka Connector) | Masterdata / Schema / Blobmeta backing store |
 | Visualisation | Grafana (+ Trino later) | Dashboards; federated query later |
@@ -24,7 +25,11 @@ This plan only. Not Nexus.
   derived values back to Kafka, emit events/alarms/export records.
 - **Druid** ingests from Kafka for live + historical query.
 - **SeaweedFS** holds raw measurements + long-term events (off Kafka).
-- **Grafana** (+ **Trino** later for federated query) for dashboards.
+- **VictoriaMetrics** directly collects host, Docker-container, Kafka
+  broker/topic metadata, and monitoring-service telemetry for operational
+  health.
+- **Grafana** uses VictoriaMetrics for operational dashboards now, then Druid
+  (+ **Trino** later for federated query) for Common Format data dashboards.
 - **Export:** IEC 104 exporter (real-time) + File Export (xlsx/csv). MQTT
   exporter for OT/EAS targets.
 - **CI/CD:** Forgejo/Git → Infra Git + ArgoCD (GitOps deploy).
@@ -42,11 +47,22 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 - Common Format maps every source to one schema; comparable quantities
   regardless of protocol. Raw data kept OFF Kafka on a separate path.
 
-### Git + Forgejo + ArgoCD
+### Git + Forgejo + ArgoCD (target)
 - Git = single source of truth for config, schema, masterdata, processing logic.
 - Forgejo Actions run CI: test + containerize.
 - ArgoCD watches Git and auto-deploys to Kubernetes.
 - Onboarding a source is automatic once masterdata is created.
+
+### Compose PoC delivery
+- `forgejo-init` bootstraps one private repository and a repository-scoped
+  runner; `forgejo-runner` runs the Actions jobs.
+- Pull requests validate the PMU gateway, processor template, and provisioned
+  `processor-*` services. Trusted `main` pushes publish OCI images to Forgejo
+  Packages and run `docker compose up -d` from a dedicated deployment root.
+- Processor authors edit Python/Quixstreams code in their provisioned service;
+  YAML is optional service configuration, not a substitute for the pipeline.
+- The deployment runner has host Docker access by design for this local PoC.
+  It is not a production isolation model.
 
 ### Quixstreams
 - Power Users (electrical engineers) write processing/detection pipelines in Python.
@@ -59,6 +75,16 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 ### Druid (time-series)
 - Native Kafka supervisor = query-on-arrival. Auto-aggregation after ~6 weeks.
 - Open decision: Druid vs ClickHouse (ClickHouse = simpler fallback).
+
+### VictoriaMetrics + Grafana (operational observability)
+- VictoriaMetrics scrapes host and Docker-container metrics directly in the
+  Compose PoC, plus Kafka broker/topic/partition/offset metadata through
+  `kafka-exporter`; Grafana provisions infrastructure dashboards over it.
+- This is operational telemetry only. `MCCSMeasurementValue` records, raw
+  waveforms, events, alarms, and Kafka message payloads do not enter
+  VictoriaMetrics.
+- Grafana adds Druid (and later Trino) separately when measurement data becomes
+  queryable.
 
 ### SeaweedFS (raw/blob)
 - S3-compatible object store for raw/waveform (PMU samples now; COMTRADE/WMU later)

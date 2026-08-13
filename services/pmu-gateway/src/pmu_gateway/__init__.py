@@ -1,0 +1,1 @@
+"""Configurable fake PMU gateway for the WAMA Compose proof of concept."""

@@ -1,0 +1,22 @@
+services:
+  forgejo-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wama-forgejo-runner:local
+    user: "0:0"
+    depends_on:
+      forgejo-init:
+        condition: service_completed_successfully
+    environment:
+      WAMA_DEPLOY_ROOT: "${WAMA_DEPLOY_ROOT:-/var/lib/wama-deploy}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - forgejo-runner-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: "${WAMA_DEPLOY_ROOT:-/var/lib/wama-deploy}"
+        target: "${WAMA_DEPLOY_ROOT:-/var/lib/wama-deploy}"
+    command: ["/bin/forgejo-runner", "daemon", "--config", "/data/config.yaml"]
+    restart: unless-stopped

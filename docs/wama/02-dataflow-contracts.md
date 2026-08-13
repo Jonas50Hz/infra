@@ -22,7 +22,11 @@ Source: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
    - Raw / waveform data goes to SeaweedFS (off Kafka). Raw is deleted after
      X weeks; aggregated live data is archived.
    - Events go to long-term storage (not deleted after 6 weeks).
-5. **Visualisation.** Grafana over Druid (Trino for federated query later).
+5. **Visualisation.** Grafana over Druid (Trino for federated query later) for
+  Common Format measurement data. This is separate from the Compose PoC's
+  Grafana-over-VictoriaMetrics infrastructure dashboards. Kafka exporter sends
+  only operational broker/topic metadata there; no measurement, waveform,
+  event, alarm, or Kafka message records are sent to VictoriaMetrics.
 6. **Export.** IEC 104 exporter (real-time) and File Export (xlsx/csv, on a
    configured event or manual selection). MQTT exporter for OT/EAS.
 

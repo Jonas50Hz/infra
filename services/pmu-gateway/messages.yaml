@@ -1,0 +1,50 @@
+publish_interval_ms: 1000
+messages:
+  - mrid: urn:wama:poc:pmu:bay-01:voltage-l1
+    value:
+      double_value: 230.4
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:voltage-l2
+    value:
+      double_value: 229.8
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:voltage-l3
+    value:
+      double_value: 230.1
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:current-l1
+    value:
+      double_value: 318.2
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:current-l2
+    value:
+      double_value: 316.7
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:current-l3
+    value:
+      double_value: 317.4
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:frequency
+    value:
+      double_value: 50.01
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
+  - mrid: urn:wama:poc:pmu:bay-01:rocof
+    value:
+      double_value: -0.003
+    quality:
+      valid: true
+    field_timestamp_offset_ms: 20
