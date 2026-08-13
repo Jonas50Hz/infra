@@ -1,0 +1,9 @@
+services:
+  kafka-data-init:
+    image: apache/kafka:4.0.0
+    user: "0:0"
+    entrypoint: ["/bin/bash", "/opt/wama/initialize-volume.sh"]
+    volumes:
+      - ./initialize-volume.sh:/opt/wama/initialize-volume.sh:ro
+      - kafka-data:/tmp/kraft-combined-logs
+    restart: "no"

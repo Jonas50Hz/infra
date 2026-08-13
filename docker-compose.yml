@@ -1,0 +1,8 @@
+include:
+  - ./services/kafka-data-init/compose.yaml
+  - ./services/kafka/compose.yaml
+  - ./services/kafka-init/compose.yaml
+  - ./services/kafka-ui/compose.yaml
+
+volumes:
+  kafka-data:

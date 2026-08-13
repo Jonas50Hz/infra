@@ -1,0 +1,12 @@
+services:
+  kafka-init:
+    image: apache/kafka:4.0.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    env_file:
+      - ./kafka-init.env
+    volumes:
+      - ./create-topics.sh:/opt/wama/create-topics.sh:ro
+    entrypoint: ["/bin/bash", "/opt/wama/create-topics.sh"]
+    restart: "no"
