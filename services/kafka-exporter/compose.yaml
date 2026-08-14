@@ -4,9 +4,11 @@ services:
     command:
       - --kafka.server=kafka:9092
       - --web.listen-address=:9308
-      - --topic.filter=^(LiveMeasurement|Event|Alarm|Export|Masterdata|Schema|Blobmeta)$
+      - --topic.filter=^(LiveMeasurement|MeasurementSession|Alarm|Export|Masterdata|Schema|Blobmeta)$
       - --group.filter=.*
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped

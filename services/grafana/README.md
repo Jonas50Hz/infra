@@ -6,13 +6,9 @@ datasource and dashboard files from this directory; dashboard edits belong in
 the tracked JSON files rather than the UI. The provisioned views cover host
 infrastructure, Compose containers, and Kafka operations.
 
-Before the first start, create the ignored local credential file:
-
-```sh
-[ -e grafana.env ] || install -m 600 grafana.env.example grafana.env
-```
-
-The initial Grafana administrator username and password are both `wama-admin`.
+The tracked [grafana.env](grafana.env) file supplies intentionally public local
+PoC credentials, so no first-start setup is required. The initial Grafana
+administrator username and password are both `wama-admin`.
 
 Anonymous access and self-registration are disabled. Set
 `GRAFANA_ROOT_URL=http://<host-ip>:3001/` when Grafana needs to generate URLs

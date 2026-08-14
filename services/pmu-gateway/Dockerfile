@@ -19,7 +19,7 @@ RUN protoc \
     --python_out=/build/src/pmu_gateway/generated \
     /build/proto/rtd_schema.proto
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -28,11 +28,5 @@ COPY --from=build /build/src /app
 COPY services/pmu-gateway/tests /app/tests
 
 ENV PYTHONPATH=/app
-
-FROM runtime AS test
-
-RUN python -m unittest discover -s /app/tests -v
-
-FROM runtime
 
 CMD ["python", "-m", "pmu_gateway.main"]

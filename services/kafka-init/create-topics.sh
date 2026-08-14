@@ -76,7 +76,7 @@ verify_cleanup_policy() {
 
 stream_topics=(
   "LiveMeasurement"
-  "Event"
+  "MeasurementSession"
   "Alarm"
   "Export"
 )

@@ -6,19 +6,20 @@ services:
         condition: service_healthy
     environment:
       FORGEJO_BOOTSTRAP_ADMIN_EMAIL: "${FORGEJO_BOOTSTRAP_ADMIN_EMAIL:-wama-admin@local}"
-      FORGEJO_BOOTSTRAP_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-}"
+      FORGEJO_BOOTSTRAP_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_BOOTSTRAP_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_BOOTSTRAP_REPOSITORY: "${FORGEJO_BOOTSTRAP_REPOSITORY:-infra}"
+      FORGEJO_APPLICATION_REPOSITORY: "${FORGEJO_APPLICATION_REPOSITORY:-wama-applications}"
       FORGEJO_RUNNER_URL: "${FORGEJO_RUNNER_URL:-http://host.docker.internal:3000/}"
-      WAMA_COMPOSE_PROJECT_NAME: "${WAMA_COMPOSE_PROJECT_NAME:-wama-poc}"
-      WAMA_DEPLOY_ROOT: "${WAMA_DEPLOY_ROOT:-/var/lib/wama-deploy}"
+      WAMA_APPS_COMPOSE_PROJECT_NAME: "${WAMA_APPS_COMPOSE_PROJECT_NAME:-wama-applications}"
+      WAMA_APPS_DEPLOY_ROOT: "${WAMA_APPS_DEPLOY_ROOT:-/var/lib/wama-applications}"
+      WAMA_INFRA_NETWORK: "${WAMA_INFRA_NETWORK:-wama-infra}"
     volumes:
       - forgejo-data:/data
       - forgejo-runner-data:/runner
       - ./bootstrap.sh:/opt/wama/bootstrap.sh:ro
       - type: bind
-        source: "${WAMA_DEPLOY_ROOT:-/var/lib/wama-deploy}"
-        target: "${WAMA_DEPLOY_ROOT:-/var/lib/wama-deploy}"
+        source: "${WAMA_APPS_DEPLOY_ROOT:-/var/lib/wama-applications}"
+        target: "${WAMA_APPS_DEPLOY_ROOT:-/var/lib/wama-applications}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     entrypoint: ["/bin/sh", "/opt/wama/bootstrap.sh"]

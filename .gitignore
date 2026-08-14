@@ -1,3 +1,6 @@
-/services/grafana/grafana.env
 /.env
+/.forgejo/
 /services/forgejo-init/forgejo-init.env
+/forgejo-repos/*/.git/
+/forgejo-repos/*/.env
+__pycache__/

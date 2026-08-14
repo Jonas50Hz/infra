@@ -1,0 +1,12 @@
+name: ${WAMA_APPS_COMPOSE_PROJECT_NAME:-wama-applications}
+
+include:
+  # provisioned-processor-includes:start
+  # provisioned-processor-includes:end
+
+services: {}
+
+networks:
+  wama-infra:
+    external: true
+    name: ${WAMA_INFRA_NETWORK:-wama-infra}

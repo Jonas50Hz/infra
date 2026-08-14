@@ -2,9 +2,10 @@ include:
   - ./services/kafka-data-init/compose.yaml
   - ./services/kafka/compose.yaml
   - ./services/kafka-init/compose.yaml
-  - ./services/kafka-ui/compose.yaml
   - ./services/kafka-exporter/compose.yaml
+  - ./services/kafka-ui/compose.yaml
   - ./services/pmu-gateway/compose.yaml
+  - ./services/postgres/compose.yaml
   - ./services/seaweedfs/compose.yaml
   - ./services/forgejo/compose.yaml
   - ./services/forgejo-init/compose.yaml
@@ -13,11 +14,17 @@ include:
   - ./services/node-exporter/compose.yaml
   - ./services/cadvisor/compose.yaml
   - ./services/grafana/compose.yaml
+  - ./services/infra-readiness/compose.yaml
 
 volumes:
   kafka-data:
+  postgres-data:
   seaweedfs-data:
   forgejo-data:
   forgejo-runner-data:
   victoria-metrics-data:
   grafana-data:
+
+networks:
+  default:
+    name: "${WAMA_INFRA_NETWORK:-wama-infra}"

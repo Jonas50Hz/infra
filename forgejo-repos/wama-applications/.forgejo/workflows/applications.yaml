@@ -1,0 +1,105 @@
+name: Validate and deploy WAMA applications
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    runs-on: wama-app-ci
+    timeout-minutes: 20
+    outputs:
+      has_processors: ${{ steps.processors.outputs.has_processors }}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Test application helpers
+        run: python3 -m unittest discover -s tests -v
+      - name: Validate application processors
+        run: python3 scripts/validate_processors.py
+      - name: Test processor template
+        run: docker build --target test -f templates/quixstreams-processor/Dockerfile .
+      - id: processors
+        name: Discover provisioned processors
+        run: |
+          shopt -s nullglob
+          processors=(processors/processor-*)
+          if [[ ${#processors[@]} -eq 0 ]]; then
+            echo "has_processors=false" >> "$FORGEJO_OUTPUT"
+            exit 0
+          fi
+          echo "has_processors=true" >> "$FORGEJO_OUTPUT"
+          for processor in "${processors[@]}"; do
+            docker build --target test --file "$processor/Dockerfile" .
+          done
+
+  publish:
+    needs: validate
+    if: forgejo.ref == 'refs/heads/main' && needs.validate.outputs.has_processors == 'true'
+    runs-on: wama-app-ci
+    timeout-minutes: 30
+    outputs:
+      image_prefix: ${{ steps.registry.outputs.image_prefix }}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - id: registry
+        name: Resolve application registry prefix
+        run: |
+          registry="${FORGEJO_SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry%/}"
+          repository="$(printf '%s' "$FORGEJO_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "registry=$registry" >> "$FORGEJO_OUTPUT"
+          echo "image_prefix=$registry/$repository" >> "$FORGEJO_OUTPUT"
+      - name: Authenticate to Forgejo Packages
+        env:
+          REGISTRY: ${{ steps.registry.outputs.registry }}
+        run: printf '%s' "$FORGEJO_TOKEN" | docker login "$REGISTRY" --username "$FORGEJO_ACTOR" --password-stdin
+      - name: Build and publish processors
+        env:
+          IMAGE_PREFIX: ${{ steps.registry.outputs.image_prefix }}
+        run: |
+          for directory in processors/processor-*; do
+            [[ -d "$directory" ]] || continue
+            service="${directory#processors/}"
+            image="$IMAGE_PREFIX/$service"
+            docker build \
+              --label "org.opencontainers.image.source=$FORGEJO_SERVER_URL/$FORGEJO_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$FORGEJO_SHA" \
+              --tag "$image:sha-$FORGEJO_SHA" \
+              --tag "$image:main" \
+              --file "$directory/Dockerfile" \
+              .
+            docker push "$image:sha-$FORGEJO_SHA"
+            docker push "$image:main"
+          done
+
+  deploy:
+    needs:
+      - validate
+      - publish
+    if: forgejo.ref == 'refs/heads/main' && needs.validate.outputs.has_processors == 'true'
+    runs-on: wama-app-deploy
+    timeout-minutes: 20
+    concurrency:
+      group: wama-applications-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Authenticate to Forgejo Packages
+        run: |
+          registry="${FORGEJO_SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry%/}"
+          printf '%s' "$FORGEJO_TOKEN" | docker login "$registry" --username "$FORGEJO_ACTOR" --password-stdin
+      - name: Synchronize and deploy processors
+        run: |
+          python3 scripts/deploy_processors.py \
+            --commit "$FORGEJO_SHA" \
+            --image-prefix "${{ needs.publish.outputs.image_prefix }}"

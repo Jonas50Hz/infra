@@ -8,19 +8,21 @@ operational scripts, service definition (`compose.yaml`), and service
 documentation in the matching directory. The root Compose file owns only
 fragment assembly and shared top-level resources.
 
-[`../templates/quixstreams-processor/`](../templates/quixstreams-processor/)
-is intentionally not a Compose service. Use `python3
-scripts/provision_processor.py <name>` from the repository root to create a
-tracked `processor-<name>` service and register it below.
+This directory is infrastructure-only. Do not add application `processor-*`
+services here. The separate
+[`../forgejo-repos/wama-applications/`](../forgejo-repos/wama-applications/)
+seed owns processor services and joins this stack through the external
+`wama-infra` network.
 
 | Directory | Compose service |
 | --- | --- |
 | [`kafka/`](kafka/) | `kafka` |
 | [`kafka-data-init/`](kafka-data-init/) | `kafka-data-init` |
 | [`kafka-init/`](kafka-init/) | `kafka-init` |
-| [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
 | [`kafka-exporter/`](kafka-exporter/) | `kafka-exporter` |
+| [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
 | [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` |
+| [`postgres/`](postgres/) | `postgres` |
 | [`seaweedfs/`](seaweedfs/) | `seaweedfs` |
 | [`forgejo/`](forgejo/) | `forgejo` |
 | [`forgejo-init/`](forgejo-init/) | `forgejo-init` |
@@ -29,7 +31,4 @@ tracked `processor-<name>` service and register it below.
 | [`node-exporter/`](node-exporter/) | `node-exporter` |
 | [`cadvisor/`](cadvisor/) | `cadvisor` |
 | [`grafana/`](grafana/) | `grafana` |
-
-## Provisioned processors
-<!-- provisioned-processor-services:start -->
-<!-- provisioned-processor-services:end -->
+| [`infra-readiness/`](infra-readiness/) | `infra-readiness` |

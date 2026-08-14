@@ -1,13 +1,13 @@
 # WAMA Data Flow (Common Format)
 
-Source: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
-"Process — Event & alarm", "Architecture at a glance". This plan only.
+Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
+"Process — MeasurementSession & alarm", and "Architecture at a glance"; the
+[architecture image](image.png); and the [live-data BPMN](Livedaten_Prozess_WAMA.bpmn).
 
-> NOTE: This is deliberately NOT the WAMA Nexus data flow. Nexus uses a
-> Concentrator that time-aligns readings into TimeStep envelopes, Confluent
-> Schema Registry, and a PMUReading/STAT contract. **None of that applies here.**
-> This plan normalises every source to **Common Format** and routes it through
-> the topics below.
+> The image and BPMN are authoritative for process/component vocabulary. The
+> PoC data plane remains separate from Nexus-specific Concentrator/TimeStep,
+> Confluent Schema Registry, and PMUReading/STAT choices. It normalises every
+> source to **Common Format** and routes it through the topics below.
 
 ## Path
 1. **Source → Gateway.** One gateway container per source (PMU, PQM,
@@ -15,33 +15,38 @@ Source: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
    Common Format (`MCCSMeasurementValue`).
 2. **Gateway → Kafka.** Normalised measurements published to `LiveMeasurement`.
 3. **Processing.** Quixstreams processors consume `LiveMeasurement`, compute
-   derived values, and write them back to Kafka. They also emit `Event`,
-   `Alarm`, and `Export` records.
+  derived values, and write them back to Kafka. They also emit
+  `MeasurementSession`, `Alarm`, and `Export` records.
 4. **Storage.**
    - Druid ingests from Kafka for live + historical query.
    - Raw / waveform data goes to SeaweedFS (off Kafka). Raw is deleted after
      X weeks; aggregated live data is archived.
-   - Events go to long-term storage (not deleted after 6 weeks).
+   - Measurement sessions go to long-term storage (not deleted after six
+     weeks).
 5. **Visualisation.** Grafana over Druid (Trino for federated query later) for
   Common Format measurement data. This is separate from the Compose PoC's
   Grafana-over-VictoriaMetrics infrastructure dashboards. Kafka exporter sends
   only operational broker/topic metadata there; no measurement, waveform,
-  event, alarm, or Kafka message records are sent to VictoriaMetrics.
+  measurement-session, alarm, or Kafka message records are sent to
+  VictoriaMetrics.
 6. **Export.** IEC 104 exporter (real-time) and File Export (xlsx/csv, on a
-   configured event or manual selection). MQTT exporter for OT/EAS.
+   configured measurement session or manual selection). MQTT exporter for
+   OT/EAS.
 
 ## Kafka topics
 | Topic | Type | Contents |
 |-------|------|----------|
 | `LiveMeasurement` | stream | `MCCSMeasurementValue` (Common Format) + derived values |
-| `Event` | stream | Detected/classified events (start/end/measurements) |
-| `Alarm` | stream | Alarm records raised from events |
+| `MeasurementSession` | stream | Bounded measurement sessions (start/end/measurement context) |
+| `Alarm` | stream | Alarm records raised from measurement sessions |
 | `Export` | stream | Records destined for IEC 104 / file export |
 | `Masterdata` | compacted | Source masterdata (IP + location, capabilities) |
 | `Schema` | compacted | Common-Format schema definitions |
 | `Blobmeta` | compacted | Pointers/metadata for blobs in SeaweedFS |
 
-Compacted topics are mirrored to PostgreSQL via a Kafka Connector.
+PostgreSQL is provisioned as an empty target. A future Kafka Connector will
+mirror these compacted topics into it; Kafka remains the source of truth until
+then.
 
 ## Common Format — the contract
 **`MCCSMeasurementValue`**, proto3, package `rtd_schema.v1`. Canonical file:
@@ -73,16 +78,20 @@ Value meaning is resolved by **Master Data config in the consuming
 module/service**, not hard-coded. `uint_value` enum meanings are bound at
 engineering time via ValueToAlias.
 
-## Event & alarm flow
-- Event recognised (or Störschrieb processed) → recorded with start point, end
-  point, and measurements → written to `Event` + long-term blob.
+## Measurement session & alarm flow
+- A `MeasurementSession` is recognised (or a Störschrieb is processed) and
+  recorded with start point, end point, and measurements → written to
+  `MeasurementSession` + long-term blob.
 - Decision: should an alarm be sent? If yes → `Alarm` + Power-User notification.
-- Event data viewable in-system and exportable to CSV.
+- Measurement-session data is viewable in-system and exportable to CSV.
+- `MeasurementSession` is a lifecycle record, not another
+  `MCCSMeasurementValue`; its payload schema is a follow-up contract and is not
+  introduced by this PoC terminology migration.
 
 ## Live-data retention
 - All live data stored (medium-term) then aggregated after X weeks and archived.
 - Raw data stored then deleted after X weeks.
-- Events retained long-term (no 6-week deletion).
+- Measurement sessions retained long-term (no six-week deletion).
 
 ## Consumer guidance (PoC)
 - Kafka delivery is at-least-once → make processors **idempotent**.

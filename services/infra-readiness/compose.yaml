@@ -1,0 +1,58 @@
+services:
+  infra-readiness:
+    build:
+      context: ../..
+      dockerfile: services/infra-readiness/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      kafka-exporter:
+        condition: service_started
+      kafka-ui:
+        condition: service_started
+      pmu-gateway:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      forgejo:
+        condition: service_healthy
+      forgejo-init:
+        condition: service_completed_successfully
+      forgejo-runner:
+        condition: service_started
+      victoria-metrics:
+        condition: service_healthy
+      node-exporter:
+        condition: service_started
+      cadvisor:
+        condition: service_started
+      grafana:
+        condition: service_healthy
+    env_file:
+      - ../grafana/grafana.env
+    environment:
+      FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
+      FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
+      FORGEJO_APPLICATION_REPOSITORY: "${FORGEJO_APPLICATION_REPOSITORY:-wama-applications}"
+      FORGEJO_URL: http://forgejo:3000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUME_TIMEOUT_SECONDS: "${INFRA_READINESS_KAFKA_CONSUME_TIMEOUT_SECONDS:-12}"
+      KAFKA_TOPIC: LiveMeasurement
+      PMU_EXPECTED_MRID_PREFIX: "${PMU_GATEWAY_EXPECTED_MRID_PREFIX:-urn:wama:poc:pmu:}"
+      POSTGRES_DATABASE: wama
+      POSTGRES_DSN: postgresql://wama:wama-postgres-password@postgres:5432/wama
+      POSTGRES_USER: wama
+      READINESS_RETRY_INTERVAL_SECONDS: "${INFRA_READINESS_RETRY_INTERVAL_SECONDS:-2}"
+      READINESS_TIMEOUT_SECONDS: "${INFRA_READINESS_TIMEOUT_SECONDS:-180}"
+      S3_ACCESS_KEY_ID: wama-s3-admin
+      S3_BUCKETS: wama-raw,wama-measurement-sessions
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: wama-s3-admin-secret
+      VICTORIA_METRICS_URL: http://victoria-metrics:8428
+      GRAFANA_URL: http://grafana:3000
+    restart: "no"

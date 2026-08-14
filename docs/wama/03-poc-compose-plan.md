@@ -1,7 +1,9 @@
 # WAMA PoC — Docker Compose Plan (full end-to-end)
 
-Decision record for the compose-based PoC. Follows the **WAMA Platform Concept
-(Gerbrand Jonas)** only. Not Nexus. Deviations from the target are intentional.
+Decision record for the Compose-based PoC. It uses the WAMA Platform Concept
+(Gerbrand Jonas) plus the authoritative image/BPMN process and component
+vocabulary. Nexus-specific data-plane choices remain excluded; deviations from
+the target are intentional.
 
 ## Objective
 Prove one source end-to-end on docker-compose, mirroring this plan's data path
@@ -26,15 +28,16 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 ## Target compose services (full PoC)
 - `kafka` — Apache Kafka, KRaft, single broker.
 - `kafka-ui` — topic/message inspection.
-- `kafka-exporter` — broker availability, topic/partition/offset, replication,
-  and consumer-lag metadata for operational monitoring.
 - `pmu-gateway` — fake PMU gateway: reads a startup YAML fixture and continuously
    emits raw-Protobuf `MCCSMeasurementValue` records on `LiveMeasurement`.
-- `processor-*` — Quixstreams pipelines (one service per processor).
-- `postgres` — backing store for compacted Masterdata/Schema/Blobmeta.
+- `processor-*` — Quixstreams pipelines (one service per processor), including
+   the planned Measurement Session Exporter.
+- `postgres` — provisioned persistent, initially empty target for compacted
+   Masterdata/Schema/Blobmeta records.
 - `kafka-connect` — mirrors compacted topics to PostgreSQL.
 - `druid` — time-series store, Kafka ingest (or ClickHouse fallback).
-- `seaweedfs` — S3-compatible blob for raw/waveform + long-term events.
+- `seaweedfs` — S3-compatible blob for raw/waveform + long-term measurement
+   sessions.
 - `victoria-metrics` — single-node store for operational metrics.
 - `node-exporter` — host CPU, memory, filesystem, and network metrics.
 - `cadvisor` — Docker-container metrics.
@@ -43,8 +46,8 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `exporter` — IEC 104 real-time export + file export (xlsx/csv).
 - `forgejo` + `forgejo-runner` — Git + CI/CD + built-in registry.
 
-Topics: `LiveMeasurement`, `Event`, `Alarm`, `Export`; compacted `Masterdata`,
-`Schema`, `Blobmeta`.
+Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
+`Masterdata`, `Schema`, `Blobmeta`.
 
 ## Build order (phased)
 ### Phase 1 — Backbone + processor (proves the core)
@@ -55,42 +58,50 @@ Topics: `LiveMeasurement`, `Event`, `Alarm`, `Export`; compacted `Masterdata`,
    consume -> derive -> write-back to Kafka.
 
 ### Infrastructure monitoring (available now)
-- **VictoriaMetrics + node-exporter + cAdvisor + kafka-exporter + Grafana** —
-   directly scrape host, Docker-container, and Kafka health metadata; retain it
-   for one month; and provision infrastructure dashboards. This path is
-   operational telemetry only; it never receives raw Protobuf or other WAMA data
-   records.
+- **VictoriaMetrics + node-exporter + cAdvisor + Grafana** — directly scrape
+   host and Docker-container health metrics, retain them for one month, and
+   provision infrastructure dashboards. This path is operational telemetry only;
+   it never receives raw Protobuf or other WAMA data records.
+
+### Prepared persistence target (available now)
+- **PostgreSQL** — persistent empty `wama` database. Kafka remains the source
+   of truth; the database receives no records until Kafka Connect is added.
 
 ### Phase 2 — Storage + visualisation (makes data queryable)
-4. **Druid** with Kafka ingest on `LiveMeasurement` — query-on-arrival.
+4. **Measurement Session Exporter** — application-side Quixstreams workload
+   detects and bounds measurement sessions, publishes `MeasurementSession`, and
+   writes long-term session objects to SeaweedFS.
+5. **Druid** with Kafka ingest on `LiveMeasurement` — query-on-arrival.
    (ClickHouse as simpler fallback — open decision.)
-5. **SeaweedFS** — processors write raw/waveform + events to blob; publish only
-   a `Blobmeta` pointer to Kafka. Keep raw OFF Kafka.
-6. **PostgreSQL + Kafka Connect** — mirror compacted Masterdata/Schema/Blobmeta.
-7. **Grafana data dashboards** — dashboards over Druid; internal alerting to
+6. **SeaweedFS** — processors write raw/waveform + measurement sessions to
+   blob; publish only a `Blobmeta` pointer to Kafka. Keep raw OFF Kafka.
+7. **Kafka Connect -> PostgreSQL** — mirror compacted
+   Masterdata/Schema/Blobmeta into the prepared database.
+8. **Grafana data dashboards** — dashboards over Druid; internal alerting to
    start. This is separate from the already-provisioned VictoriaMetrics
    infrastructure dashboards.
 
 ### Phase 3 — Export (closes the data path)
-8. **Exporter service** — gateway on `Export` topic -> IEC 104; batch/file
-   export -> xlsx/csv on configured event or manual selection.
+9. **Exporter service** — gateway on `Export` topic -> IEC 104; batch/file
+   export -> xlsx/csv on a configured measurement session or manual selection.
 
 ### Phase 4 — Onboarding + config as data
-9. **Masterdata via Git** — masterdata = IP + location committed to Git;
+10. **Masterdata via Git** — masterdata = IP + location committed to Git;
    gateway provisioned from it into the `Masterdata` compacted topic.
-10. **Config & deploy flow** — config change -> Git -> CI tests -> deploy.
+11. **Config & deploy flow** — config change -> Git -> automated quality and
+   security tests -> Systemexperte decision -> auditable deployment.
 
 ### Phase 5 — CI/CD loop (automates deploy)
-11. **Forgejo + Actions runner + registry** — implemented for the Compose PoC:
-   pull requests validate the PMU gateway, template, and provisioned
-   `processor-*` services; `main` builds and pushes OCI images to Forgejo
-   Packages.
-12. **CD trigger** — implemented with a repository-scoped Forgejo Actions job
-   that synchronizes an approved checkout to a dedicated host deployment root
-   and runs `docker compose up -d`. Watchtower is not used.
+12. **Forgejo + Actions runner + registry** — infrastructure provisions an
+   empty application repository and app-scoped runner. The separate
+   `forgejo-repos/wama-applications/` seed owns CI: test + build image + push.
+13. **CD trigger** — an application-repository Forgejo Actions job synchronizes
+   only its checkout to an application deployment root and runs application
+   `docker compose up -d` on the external infrastructure network. It never
+   deploys or modifies the infrastructure Compose project.
 
 ### Phase 6 — End-to-end pilot
-13. Run one real source through the whole path:
+14. Run one real source through the whole path:
     onboarding -> config/CI -> live data -> Druid -> Grafana -> export.
 
 ## Consumer requirements
@@ -99,11 +110,13 @@ Topics: `LiveMeasurement`, `Event`, `Alarm`, `Export`; compacted `Masterdata`,
 - Value meaning resolved via Master Data config, not hard-coded; `uint_value`
   enums bound via ValueToAlias at engineering time.
 
-## Event & alarm path (Phase 2+)
-Processor detects event -> records start/end/measurements -> `Event` topic +
-blob (long-term) -> optional `Alarm` -> Grafana notification.
+## Measurement session & alarm path (Phase 2+)
+Processor detects a measurement session -> records start/end/measurements ->
+`MeasurementSession` topic + long-term blob -> optional `Alarm` -> Grafana
+notification.
 
 ## Open risks to validate early
 - Quixstreams throughput / heavy waveform at target load (unproven).
 - Whether a JVM engine (Flink/Beam) is needed for heavy signal processing.
 - Druid vs ClickHouse; alerting path (PagerDuty later?); when Trino lands.
+- Whether Apache Spark is needed for future batch or heavy workloads.
