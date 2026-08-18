@@ -1,0 +1,1 @@
+"""Idempotent Druid supervisor initialization for the WAMA Compose stack."""

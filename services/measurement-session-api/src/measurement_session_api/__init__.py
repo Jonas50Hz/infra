@@ -1,0 +1,1 @@
+"""Anonymous read-only catalog API for finalized WAMA measurement sessions."""

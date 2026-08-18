@@ -1,0 +1,208 @@
+{
+  "type": "kafka",
+  "spec": {
+    "dataSchema": {
+      "dataSource": "live_measurements",
+      "timestampSpec": {
+        "column": "kafka_timestamp",
+        "format": "millis"
+      },
+      "dimensionsSpec": {
+        "dimensions": [
+          {
+            "type": "string",
+            "name": "mrid"
+          },
+          {
+            "type": "string",
+            "name": "kafka_key"
+          },
+          {
+            "type": "string",
+            "name": "kafka_topic"
+          },
+          {
+            "type": "double",
+            "name": "double_value"
+          },
+          {
+            "type": "long",
+            "name": "int_value"
+          },
+          {
+            "type": "long",
+            "name": "uint_value"
+          },
+          {
+            "type": "string",
+            "name": "bool_value"
+          },
+          {
+            "type": "string",
+            "name": "string_value"
+          },
+          {
+            "type": "string",
+            "name": "timestamp_value"
+          },
+          {
+            "type": "string",
+            "name": "timestamp_field"
+          },
+          {
+            "type": "string",
+            "name": "timestamp_gateway"
+          },
+          {
+            "type": "string",
+            "name": "timestamp_mccs"
+          },
+          {
+            "type": "string",
+            "name": "quality_valid"
+          },
+          {
+            "type": "string",
+            "name": "quality_substituted"
+          },
+          {
+            "type": "string",
+            "name": "quality_operator_blocked"
+          },
+          {
+            "type": "string",
+            "name": "quality_overflow"
+          },
+          {
+            "type": "string",
+            "name": "quality_old_data"
+          }
+        ]
+      },
+      "granularitySpec": {
+        "type": "uniform",
+        "segmentGranularity": "HOUR",
+        "queryGranularity": "none",
+        "rollup": false
+      }
+    },
+    "tuningConfig": {
+      "type": "kafka",
+      "maxRowsPerSegment": 500000,
+      "maxParseExceptions": 0,
+      "maxSavedParseExceptions": 10
+    },
+    "ioConfig": {
+      "type": "kafka",
+      "topic": "LiveMeasurement",
+      "consumerProperties": {
+        "bootstrap.servers": "kafka:9092"
+      },
+      "useEarliestOffset": true,
+      "taskCount": 1,
+      "replicas": 1,
+      "taskDuration": "PT1H",
+      "inputFormat": {
+        "type": "kafka",
+        "timestampColumnName": "kafka_timestamp",
+        "topicColumnName": "kafka_topic",
+        "keyColumnName": "kafka_key",
+        "keyFormat": {
+          "type": "tsv",
+          "findColumnsFromHeader": false,
+          "columns": [
+            "key"
+          ]
+        },
+        "valueFormat": {
+          "type": "protobuf",
+          "protoBytesDecoder": {
+            "type": "file",
+            "descriptor": "file:///opt/wama/rtd_schema.desc",
+            "protoMessageType": "rtd_schema.v1.MCCSMeasurementValue"
+          },
+          "flattenSpec": {
+            "useFieldDiscovery": false,
+            "fields": [
+              {
+                "type": "path",
+                "name": "mrid",
+                "expr": "$.mrid"
+              },
+              {
+                "type": "path",
+                "name": "double_value",
+                "expr": "$.doubleValue"
+              },
+              {
+                "type": "path",
+                "name": "int_value",
+                "expr": "$.intValue"
+              },
+              {
+                "type": "path",
+                "name": "uint_value",
+                "expr": "$.uintValue"
+              },
+              {
+                "type": "path",
+                "name": "bool_value",
+                "expr": "$.boolValue"
+              },
+              {
+                "type": "path",
+                "name": "string_value",
+                "expr": "$.stringValue"
+              },
+              {
+                "type": "path",
+                "name": "timestamp_value",
+                "expr": "$.timestampValue"
+              },
+              {
+                "type": "path",
+                "name": "timestamp_field",
+                "expr": "$.timestampField"
+              },
+              {
+                "type": "path",
+                "name": "timestamp_gateway",
+                "expr": "$.timestampGateway"
+              },
+              {
+                "type": "path",
+                "name": "timestamp_mccs",
+                "expr": "$.timestampMccs"
+              },
+              {
+                "type": "path",
+                "name": "quality_valid",
+                "expr": "$.quality.valid"
+              },
+              {
+                "type": "path",
+                "name": "quality_substituted",
+                "expr": "$.quality.substituted"
+              },
+              {
+                "type": "path",
+                "name": "quality_operator_blocked",
+                "expr": "$.quality.operatorBlocked"
+              },
+              {
+                "type": "path",
+                "name": "quality_overflow",
+                "expr": "$.quality.overflow"
+              },
+              {
+                "type": "path",
+                "name": "quality_old_data",
+                "expr": "$.quality.oldData"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

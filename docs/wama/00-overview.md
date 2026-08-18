@@ -36,7 +36,16 @@ foundation matters once multiple use cases reuse and extend it.
 - Live data received from gateway → converted to **Common Format**
   (`MCCSMeasurementValue`).
 - Some data goes to the processing (Datenfluss) engine; all data is stored.
-- Raw data stored, then deleted after X weeks; live data aggregated + archived.
+- The Compose PoC's root-owned Druid service directly ingests raw-Protobuf
+  `LiveMeasurement` records into the no-rollup `live_measurements` datasource.
+  Its only host API is the Router on port 8888; Kafka remains a single KRaft
+  broker and has no ZooKeeper service.
+- Grafana's root-owned `WAMA Measurements` dashboard queries Druid directly to
+  show valid PMU voltage, current, frequency, and ROCOF values over time. It is
+  separate from VictoriaMetrics-backed infrastructure dashboards.
+- Raw data remains in SeaweedFS. Retention, deletion, aggregation, compaction,
+  and archival policy for both raw and live data remain explicit future decisions;
+  the current Druid datasource configures none of them.
 - Optional outbound control to external systems (e.g. IEC 104) or alarms.
 
 ### Measurement session & alarm

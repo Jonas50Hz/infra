@@ -1,4 +1,4 @@
-"""Tests for application deployment checkout synchronization."""
+"""Tests for processors deployment checkout synchronization."""
 
 from __future__ import annotations
 
@@ -7,11 +7,16 @@ from tempfile import TemporaryDirectory
 import subprocess
 import unittest
 
-from scripts.deploy_processors import DEPLOY_MARKER, DeploymentError, synchronize_application_checkout
+from scripts.deploy_processors import (
+    DEPLOY_MARKER,
+    DeploymentError,
+    _processor_services,
+    synchronize_processors_checkout,
+)
 
 
 class DeploymentSynchronizationTests(unittest.TestCase):
-    """Ensure application deployment cannot synchronize infrastructure files."""
+    """Ensure processors deployment cannot synchronize infrastructure files."""
 
     def test_synchronizes_tracked_app_files_and_preserves_local_environment(self) -> None:
         with TemporaryDirectory() as directory:
@@ -22,7 +27,7 @@ class DeploymentSynchronizationTests(unittest.TestCase):
             (deploy_root / DEPLOY_MARKER).touch()
             (deploy_root / ".env").write_text("LOCAL_SECRET=preserved\n", encoding="utf-8")
 
-            synchronize_application_checkout(workspace, deploy_root, "abc123")
+            synchronize_processors_checkout(workspace, deploy_root, "abc123")
 
             self.assertEqual((deploy_root / "compose.yaml").read_text(encoding="utf-8"), "services: {}\n")
             self.assertEqual(
@@ -41,7 +46,43 @@ class DeploymentSynchronizationTests(unittest.TestCase):
             (deploy_root / DEPLOY_MARKER).touch()
 
             with self.assertRaises(DeploymentError):
-                synchronize_application_checkout(workspace, deploy_root, "abc123")
+                synchronize_processors_checkout(workspace, deploy_root, "abc123")
+
+    def test_rejects_unmanaged_file_collision(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = self._create_application_workspace(root / "workspace")
+            deploy_root = root / "deploy"
+            deploy_root.mkdir()
+            (deploy_root / DEPLOY_MARKER).touch()
+            (deploy_root / "compose.yaml").write_text(
+                "services: {unmanaged: {}}\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(DeploymentError, "unmanaged deployment file"):
+                synchronize_processors_checkout(workspace, deploy_root, "abc123")
+
+    def test_rejects_unmarked_nonempty_deploy_root(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = self._create_application_workspace(root / "workspace")
+            deploy_root = root / "deploy"
+            deploy_root.mkdir()
+            (deploy_root / "unmanaged.txt").write_text("retain\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(DeploymentError, "lacks"):
+                synchronize_processors_checkout(workspace, deploy_root, "abc123")
+
+    def test_rejects_non_processor_compose_service(self) -> None:
+        with self.assertRaisesRegex(DeploymentError, "non-processor"):
+            _processor_services(["processor-frequency-scale", "gateway-test"])
+
+    def test_accepts_processor_services_only(self) -> None:
+        self.assertEqual(
+            _processor_services(["processor-frequency-scale"]),
+            ["processor-frequency-scale"],
+        )
 
     def _create_application_workspace(self, workspace: Path) -> Path:
         workspace.mkdir()

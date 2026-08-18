@@ -14,6 +14,10 @@ services:
         condition: service_started
       pmu-gateway:
         condition: service_started
+      druid:
+        condition: service_healthy
+      druid-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       seaweedfs:
@@ -37,8 +41,13 @@ services:
     environment:
       FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_APPLICATION_REPOSITORY: "${FORGEJO_APPLICATION_REPOSITORY:-wama-applications}"
+      FORGEJO_PROCESSORS_REPOSITORY: "${FORGEJO_PROCESSORS_REPOSITORY:-wama-processors}"
       FORGEJO_URL: http://forgejo:3000
+      DRUID_DATASOURCE: live_measurements
+      DRUID_EXPECTED_DOUBLE_VALUE: "${DRUID_EXPECTED_DOUBLE_VALUE:-50.01}"
+      DRUID_EXPECTED_MRID: "${DRUID_EXPECTED_MRID:-urn:wama:poc:pmu:bay-01:frequency}"
+      DRUID_ROUTER_URL: http://druid:8888
+      DRUID_SUPERVISOR_ID: live_measurements
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUME_TIMEOUT_SECONDS: "${INFRA_READINESS_KAFKA_CONSUME_TIMEOUT_SECONDS:-12}"
       KAFKA_TOPIC: LiveMeasurement

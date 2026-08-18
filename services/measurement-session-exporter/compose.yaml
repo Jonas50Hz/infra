@@ -1,0 +1,25 @@
+services:
+  measurement-session-exporter:
+    profiles:
+      - measurement-session-export
+    build:
+      context: ../..
+      dockerfile: services/measurement-session-exporter/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: MeasurementSession
+      MEASUREMENT_SESSION_FIXTURE_PATH: /app/fixture/finalized-session.yaml
+      MEASUREMENT_SESSION_ID_OVERRIDE: "${MEASUREMENT_SESSION_ID_OVERRIDE:-}"
+      S3_ACCESS_KEY_ID: wama-s3-admin
+      S3_BUCKET: wama-measurement-sessions
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: wama-s3-admin-secret
+    restart: "no"

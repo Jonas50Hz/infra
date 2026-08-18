@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import os
 from collections.abc import Mapping
 
@@ -15,9 +16,14 @@ class ConfigurationError(ValueError):
 class Settings:
     """External endpoints and expectations for the current Compose topology."""
 
+    druid_datasource: str
+    druid_expected_double_value: float
+    druid_expected_mrid: str
+    druid_router_url: str
+    druid_supervisor_id: str
     forgejo_admin_password: str
     forgejo_admin_username: str
-    forgejo_application_repository: str
+    forgejo_processors_repository: str
     forgejo_url: str
     grafana_password: str
     grafana_url: str
@@ -44,6 +50,23 @@ class Settings:
 
         values = os.environ if environment is None else environment
         return cls(
+            druid_datasource=_identifier(values, "DRUID_DATASOURCE", "live_measurements"),
+            druid_expected_double_value=_finite_float(
+                values,
+                "DRUID_EXPECTED_DOUBLE_VALUE",
+                50.01,
+            ),
+            druid_expected_mrid=_required(
+                values,
+                "DRUID_EXPECTED_MRID",
+                "urn:wama:poc:pmu:bay-01:frequency",
+            ),
+            druid_router_url=_url(values, "DRUID_ROUTER_URL", "http://druid:8888"),
+            druid_supervisor_id=_identifier(
+                values,
+                "DRUID_SUPERVISOR_ID",
+                "live_measurements",
+            ),
             forgejo_admin_password=_required(
                 values,
                 "FORGEJO_ADMIN_PASSWORD",
@@ -54,10 +77,10 @@ class Settings:
                 "FORGEJO_ADMIN_USERNAME",
                 "wama-admin",
             ),
-            forgejo_application_repository=_required(
+            forgejo_processors_repository=_required(
                 values,
-                "FORGEJO_APPLICATION_REPOSITORY",
-                "wama-applications",
+                "FORGEJO_PROCESSORS_REPOSITORY",
+                "wama-processors",
             ),
             forgejo_url=_url(values, "FORGEJO_URL", "http://forgejo:3000"),
             grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
@@ -121,6 +144,24 @@ def _buckets(values: Mapping[str, str]) -> tuple[str, ...]:
     if not buckets:
         raise ConfigurationError("S3_BUCKETS must name at least one bucket")
     return buckets
+
+
+def _finite_float(values: Mapping[str, str], name: str, default: float) -> float:
+    raw_value = values.get(name, str(default)).strip()
+    try:
+        value = float(raw_value)
+    except ValueError as error:
+        raise ConfigurationError(f"{name} must be a number") from error
+    if not math.isfinite(value):
+        raise ConfigurationError(f"{name} must be finite")
+    return value
+
+
+def _identifier(values: Mapping[str, str], name: str, default: str) -> str:
+    value = _required(values, name, default)
+    if not value.replace("_", "").isalnum():
+        raise ConfigurationError(f"{name} must contain only letters, numbers, and underscores")
+    return value
 
 
 def _positive_integer(values: Mapping[str, str], name: str, default: int) -> int:

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WAMA Measurement Sessions</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-lockup">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow">WAMA</p>
+        <h1>Measurement Sessions</h1>
+      </div>
+    </div>
+    <p class="catalog-state" id="catalog-state" aria-live="polite">Catalog</p>
+  </header>
+
+  <main class="workspace">
+    <section class="session-list" aria-labelledby="session-list-title">
+      <div class="list-heading">
+        <div>
+          <p class="eyebrow">Finalized records</p>
+          <h2 id="session-list-title">Session Catalog</h2>
+        </div>
+        <label class="filter-field">
+          <span class="visually-hidden">Filter sessions</span>
+          <input id="session-filter" type="search" placeholder="Filter source or session ID" autocomplete="off">
+        </label>
+      </div>
+      <div class="table-wrap" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Finalized</th>
+              <th scope="col">Source</th>
+              <th scope="col">Measurements</th>
+              <th scope="col">Artifacts</th>
+            </tr>
+          </thead>
+          <tbody id="session-rows"></tbody>
+        </table>
+        <p class="table-state" id="table-state" aria-live="polite"></p>
+      </div>
+      <div class="list-footer">
+        <p id="result-count" aria-live="polite"></p>
+        <button class="command-button" id="load-more" type="button" hidden>Load more</button>
+      </div>
+    </section>
+
+    <aside class="detail-panel" aria-labelledby="detail-title">
+      <div class="detail-heading">
+        <p class="eyebrow">Selected record</p>
+        <h2 id="detail-title">No Session Selected</h2>
+      </div>
+      <div class="detail-content" id="detail-content" aria-live="polite"></div>
+    </aside>
+  </main>
+
+  <template id="empty-detail-template">
+    <p class="empty-detail">Select a finalized session from the catalog.</p>
+  </template>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

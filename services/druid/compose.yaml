@@ -1,0 +1,22 @@
+services:
+  druid:
+    build:
+      context: ../..
+      dockerfile: services/druid/Dockerfile
+    image: wama-druid:local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    ports:
+      - "8888:8888"
+    volumes:
+      - druid-data:/opt/druid/var
+    healthcheck:
+      test: ["CMD", "/opt/wama/healthcheck-druid.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 60s
+    restart: unless-stopped

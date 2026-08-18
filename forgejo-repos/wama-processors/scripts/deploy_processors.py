@@ -1,4 +1,4 @@
-"""Deploy only application-repository processor containers."""
+"""Deploy only processors-repository containers."""
 
 from __future__ import annotations
 
@@ -10,23 +10,25 @@ import shutil
 import subprocess
 import sys
 
-DEPLOY_MARKER = ".wama-forgejo-applications-root"
-DEPLOY_MANIFEST = ".wama-forgejo-applications-manifest.json"
+DEPLOY_MARKER = ".wama-forgejo-processors-root"
+DEPLOY_MANIFEST = ".wama-forgejo-processors-manifest.json"
 
 
 class DeploymentError(RuntimeError):
-    """Raised when an application deployment target is unsafe or invalid."""
+    """Raised when a processors deployment target is unsafe or invalid."""
 
 
-def synchronize_application_checkout(workspace: Path, deploy_root: Path, commit: str) -> None:
-    """Copy only tracked application files into the marked application deploy root."""
+def synchronize_processors_checkout(workspace: Path, deploy_root: Path, commit: str) -> None:
+    """Copy tracked processors files into the marked processors deploy root."""
 
     workspace = workspace.resolve()
     deploy_root = _validate_deploy_root(workspace, deploy_root)
-    _validate_application_root(workspace)
+    _validate_processors_root(workspace)
     tracked_files = _tracked_files(workspace)
     current_files = {path.as_posix() for path in tracked_files}
-    for stale_path in _previous_manifest_files(deploy_root).difference(current_files):
+    previous_files = _previous_manifest_files(deploy_root)
+    _validate_copy_destinations(deploy_root, tracked_files, previous_files)
+    for stale_path in previous_files.difference(current_files):
         _remove_managed_file(deploy_root, Path(stale_path))
     for relative_path in tracked_files:
         source = workspace / relative_path
@@ -52,41 +54,42 @@ def deploy_processors(
 
     subprocess.run(["docker", "network", "inspect", infra_network], check=True)
     environment = os.environ.copy()
-    environment["WAMA_APPLICATION_IMAGE_PREFIX"] = image_prefix
-    environment["WAMA_APPLICATION_IMAGE_TAG"] = "main"
-    environment["WAMA_APPS_COMPOSE_PROJECT_NAME"] = project_name
+    environment["WAMA_PROCESSORS_IMAGE_PREFIX"] = image_prefix
+    environment["WAMA_PROCESSORS_IMAGE_TAG"] = "main"
+    environment["WAMA_PROCESSORS_COMPOSE_PROJECT_NAME"] = project_name
     environment["WAMA_INFRA_NETWORK"] = infra_network
     compose_command = ["docker", "compose", "--project-name", project_name, "-f", "compose.yaml"]
     _run_compose(compose_command, deploy_root, environment, "config", "--quiet")
-    processors = [
-        service
-        for service in _compose_services(compose_command, deploy_root, environment)
-        if service.startswith("processor-")
-    ]
-    if not processors:
-        raise DeploymentError("No application processor services were found")
+    processors = _processor_services(
+        _compose_services(compose_command, deploy_root, environment)
+    )
     _run_compose(compose_command, deploy_root, environment, "pull", *processors)
     _run_compose(compose_command, deploy_root, environment, "up", "-d", "--remove-orphans", *processors)
     _verify_revisions(compose_command, deploy_root, environment, processors, commit)
 
 
-def _validate_application_root(workspace: Path) -> None:
+def _validate_processors_root(workspace: Path) -> None:
     if not (workspace / "compose.yaml").is_file() or not (workspace / "processors").is_dir():
-        raise DeploymentError("Forgejo checkout is not a WAMA application repository")
+        raise DeploymentError("Forgejo checkout is not a WAMA processors repository")
     if (workspace / "docker-compose.yml").exists():
-        raise DeploymentError("Application deployment must not use an infrastructure checkout")
+        raise DeploymentError("Processors deployment must not use an infrastructure checkout")
 
 
 def _validate_deploy_root(workspace: Path, deploy_root: Path) -> Path:
     if not deploy_root.is_absolute():
-        raise DeploymentError("WAMA_APPS_DEPLOY_ROOT must be an absolute path")
+        raise DeploymentError("WAMA_PROCESSORS_DEPLOY_ROOT must be an absolute path")
+    if deploy_root.is_symlink():
+        raise DeploymentError("WAMA_PROCESSORS_DEPLOY_ROOT must not be a symbolic link")
     deploy_root = deploy_root.resolve()
     if deploy_root == Path("/"):
-        raise DeploymentError("WAMA_APPS_DEPLOY_ROOT must not be /")
+        raise DeploymentError("WAMA_PROCESSORS_DEPLOY_ROOT must not be /")
     if deploy_root == workspace or deploy_root.is_relative_to(workspace):
-        raise DeploymentError("WAMA_APPS_DEPLOY_ROOT must not be inside the Forgejo workspace")
-    if not (deploy_root / DEPLOY_MARKER).is_file():
-        raise DeploymentError(f"Application deploy root lacks {DEPLOY_MARKER}")
+        raise DeploymentError(
+            "WAMA_PROCESSORS_DEPLOY_ROOT must not be inside the Forgejo workspace"
+        )
+    marker = deploy_root / DEPLOY_MARKER
+    if marker.is_symlink() or not marker.is_file():
+        raise DeploymentError(f"Processors deploy root lacks {DEPLOY_MARKER}")
     return deploy_root
 
 
@@ -106,15 +109,49 @@ def _previous_manifest_files(deploy_root: Path) -> set[str]:
     try:
         contents = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
-        raise DeploymentError(f"Invalid application deployment manifest: {manifest_path}") from error
+        raise DeploymentError(f"Invalid processors deployment manifest: {manifest_path}") from error
     files = contents.get("files")
     if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
-        raise DeploymentError(f"Invalid application deployment manifest: {manifest_path}")
-    return set(files)
+        raise DeploymentError(f"Invalid processors deployment manifest: {manifest_path}")
+    return {_validated_relative_path(item) for item in files}
+
+
+def _validate_copy_destinations(
+    deploy_root: Path,
+    tracked_files: list[Path],
+    previous_files: set[str],
+) -> None:
+    for relative_path in tracked_files:
+        relative_name = _validated_relative_path(relative_path.as_posix())
+        destination = _destination_path(deploy_root, Path(relative_name))
+        if (destination.exists() or destination.is_symlink()) and relative_name not in previous_files:
+            raise DeploymentError(
+                f"Refusing to overwrite unmanaged deployment file: {relative_name}"
+            )
+
+
+def _validated_relative_path(value: str) -> str:
+    path = Path(value)
+    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+        raise DeploymentError(f"Invalid managed deployment path: {value}")
+    return path.as_posix()
+
+
+def _destination_path(deploy_root: Path, relative_path: Path) -> Path:
+    relative_name = _validated_relative_path(relative_path.as_posix())
+    destination = deploy_root / relative_name
+    parent = deploy_root
+    for part in relative_path.parts[:-1]:
+        parent = parent / part
+        if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+            raise DeploymentError(
+                f"Unsafe deployment destination parent: {parent.relative_to(deploy_root)}"
+            )
+    return destination
 
 
 def _remove_managed_file(deploy_root: Path, relative_path: Path) -> None:
-    target = deploy_root / relative_path
+    target = _destination_path(deploy_root, relative_path)
     if target.is_file() or target.is_symlink():
         target.unlink()
 
@@ -142,6 +179,18 @@ def _compose_services(
         text=True,
     )
     return [service for service in result.stdout.splitlines() if service]
+
+
+def _processor_services(services: list[str]) -> list[str]:
+    """Require the isolated deployment project to contain processor services only."""
+
+    non_processors = [service for service in services if not service.startswith("processor-")]
+    if non_processors:
+        names = ", ".join(sorted(non_processors))
+        raise DeploymentError(f"Processors deployment contains non-processor service(s): {names}")
+    if not services:
+        raise DeploymentError("No processors services were found")
+    return services
 
 
 def _verify_revisions(
@@ -173,24 +222,30 @@ def _verify_revisions(
 
 
 def main() -> int:
-    """Synchronize the Forgejo application checkout and deploy processors only."""
+    """Synchronize the Forgejo processors checkout and deploy processors only."""
 
-    parser = argparse.ArgumentParser(description="Deploy WAMA application processors")
+    parser = argparse.ArgumentParser(description="Deploy WAMA processors")
     parser.add_argument("--commit", required=True)
     parser.add_argument("--image-prefix", required=True)
     parser.add_argument(
         "--project-name",
-        default=os.environ.get("WAMA_APPS_COMPOSE_PROJECT_NAME", "wama-applications"),
+        default=os.environ.get(
+            "WAMA_PROCESSORS_COMPOSE_PROJECT_NAME",
+            "wama-processors",
+        ),
     )
     arguments = parser.parse_args()
-    deploy_root_value = os.environ.get("WAMA_APPS_DEPLOY_ROOT")
+    deploy_root_value = os.environ.get("WAMA_PROCESSORS_DEPLOY_ROOT")
     if not deploy_root_value:
-        print("Deployment failed: WAMA_APPS_DEPLOY_ROOT must be configured", file=sys.stderr)
+        print(
+            "Deployment failed: WAMA_PROCESSORS_DEPLOY_ROOT must be configured",
+            file=sys.stderr,
+        )
         return 1
     try:
         workspace = Path(os.environ.get("FORGEJO_WORKSPACE", Path.cwd()))
         deploy_root = Path(deploy_root_value)
-        synchronize_application_checkout(workspace, deploy_root, arguments.commit)
+        synchronize_processors_checkout(workspace, deploy_root, arguments.commit)
         deploy_processors(
             deploy_root,
             arguments.image_prefix,

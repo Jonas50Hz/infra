@@ -11,6 +11,6 @@ internal calls without crossing the reverse proxy. Package registry support is
 explicitly enabled and repositories are forced private for this trusted PoC.
 
 The one-shot [`../forgejo-init/`](../forgejo-init/) service creates the initial
-administrator, an empty private application repository, and an
-application-repository-scoped runner registration. The parent infrastructure
-repository is never pushed to this Forgejo instance.
+administrator, a private seeded `wama-processors` repository, and separate CI
+and deployment runner connections scoped to that repository. The parent
+infrastructure repository is never pushed to this Forgejo instance.

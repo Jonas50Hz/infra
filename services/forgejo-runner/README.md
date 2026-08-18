@@ -3,17 +3,20 @@
 `forgejo-runner` builds `wama-forgejo-runner:local`, which contains Forgejo
 Runner plus Git, Node, Python 3.12, Protocol Buffer tooling, Docker CLI,
 Docker Compose, and rsync. The image is also the default container for the
-`wama-app-ci` Actions label.
+`wama-processors-ci` Actions label.
 
-The bootstrap service registers two labels on the same repository-scoped runner:
+The bootstrap service registers two repository-scoped connections on the same
+capacity-one runner daemon:
 
-- `wama-app-ci` runs application-repository workflow jobs in
+- `wama-processors-ci` runs processors-repository workflow jobs in
   `wama-forgejo-runner:local`.
-- `wama-app-deploy` runs the serialized application deployment job in the
-  runner container so the absolute application deployment root remains visible
+- `wama-processors-deploy` runs the serialized processors deployment job in the
+  runner container so the absolute processors deployment root remains visible
   to the host Docker daemon.
 
-The service mounts `/var/run/docker.sock` and `WAMA_APPS_DEPLOY_ROOT`. This
-grants application workflow code broad control of the Docker host. Limit the
-separate `wama-applications` repository to trusted users and do not reuse this
-configuration outside the local PoC.
+The service mounts `/var/run/docker.sock` and `WAMA_PROCESSORS_DEPLOY_ROOT`.
+This grants processors workflow code broad control of the Docker host. Limit
+the separate `wama-processors` repository to trusted users and do not reuse
+this configuration outside the local PoC. Bootstrap also injects a dedicated
+`write:package` token into these trusted jobs so they can publish and pull the
+private Forgejo processor images.

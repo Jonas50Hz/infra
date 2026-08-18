@@ -1,14 +1,20 @@
 services:
   grafana:
-    image: grafana/grafana:12.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wama-grafana:local
     depends_on:
       victoria-metrics:
+        condition: service_healthy
+      druid:
         condition: service_healthy
     env_file:
       - ./grafana.env
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_METRICS_ENABLED: "true"
+      GF_PATHS_PLUGINS: /opt/grafana/plugins
       GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3001/}"
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
@@ -18,6 +24,7 @@ services:
       - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./dashboards:/var/lib/grafana/dashboards:ro
+      - ./measurement-dashboards:/var/lib/grafana/measurement-dashboards:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health"]
       interval: 10s

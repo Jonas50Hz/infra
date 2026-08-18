@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 import logging
+import math
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
@@ -19,6 +20,7 @@ import psycopg
 import requests
 
 from infra_readiness.config import Settings
+from infra_readiness.druid import DruidReadinessError, check_druid
 from infra_readiness.generated import rtd_schema_pb2
 
 LOGGER = logging.getLogger(__name__)
@@ -37,6 +39,13 @@ MONITORING_JOBS = (
     "cadvisor",
     "kafka-exporter",
 )
+GRAFANA_VICTORIA_METRICS_DATASOURCE_UID = "victoriametrics"
+GRAFANA_VICTORIA_METRICS_DATASOURCE_TYPE = "prometheus"
+GRAFANA_DRUID_DATASOURCE_UID = "druid"
+GRAFANA_DRUID_DATASOURCE_TYPE = "grafadruid-druid-datasource"
+GRAFANA_DRUID_DATASOURCE_URL = "http://druid:8888"
+GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID = "wama-kafka-operations"
+GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID = "wama-pmu-live-measurements"
 
 
 class ReadinessError(RuntimeError):
@@ -48,6 +57,10 @@ def check_all(settings: Settings) -> None:
 
     check_kafka_topics(settings)
     check_live_measurement(settings)
+    try:
+        check_druid(settings)
+    except DruidReadinessError as error:
+        raise ReadinessError(str(error)) from error
     check_postgres(settings)
     check_s3(settings)
     check_forgejo(settings)
@@ -224,21 +237,13 @@ def _timestamp_nanoseconds(timestamp: Any) -> int:
 
 
 def check_postgres(settings: Settings) -> None:
-    """Verify the prepared PostgreSQL target is reachable and still application-empty."""
+    """Verify the prepared PostgreSQL target is reachable with its expected identity."""
 
     try:
         with psycopg.connect(settings.postgres_dsn, connect_timeout=5) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT current_database(), current_user;")
                 identity = cursor.fetchone()
-                cursor.execute(
-                    "SELECT table_schema, table_name "
-                    "FROM information_schema.tables "
-                    "WHERE table_type = 'BASE TABLE' "
-                    "AND table_schema NOT IN ('pg_catalog', 'information_schema') "
-                    "ORDER BY table_schema, table_name;"
-                )
-                application_tables = cursor.fetchall()
     except (OSError, psycopg.Error) as error:
         raise ReadinessError(f"PostgreSQL probe failed: {error}") from error
 
@@ -246,10 +251,6 @@ def check_postgres(settings: Settings) -> None:
         raise ReadinessError(
             "PostgreSQL identity does not match the prepared WAMA target: "
             f"{identity!r}"
-        )
-    if application_tables:
-        raise ReadinessError(
-            f"PostgreSQL must remain application-empty; found {application_tables!r}"
         )
 
 
@@ -307,19 +308,18 @@ def check_forgejo(settings: Settings) -> None:
     try:
         _request_json(session, "Forgejo health", _url(settings.forgejo_url, "/api/healthz"))
         encoded_owner = quote(settings.forgejo_admin_username, safe="")
-        encoded_repository = quote(settings.forgejo_application_repository, safe="")
+        encoded_repository = quote(settings.forgejo_processors_repository, safe="")
         auth = (settings.forgejo_admin_username, settings.forgejo_admin_password)
         repository = _request_json(
             session,
-            "Forgejo application repository",
+            "Forgejo processors repository",
             _url(settings.forgejo_url, f"/api/v1/repos/{encoded_owner}/{encoded_repository}"),
             auth=auth,
         )
-        if not isinstance(repository, Mapping) or not repository.get("private"):
-            raise ReadinessError("Forgejo application repository must exist and be private")
+        validate_forgejo_repository(repository)
         runners = _request_json(
             session,
-            "Forgejo application runner",
+            "Forgejo processors runners",
             _url(
                 settings.forgejo_url,
                 f"/api/v1/repos/{encoded_owner}/{encoded_repository}/actions/runners",
@@ -329,37 +329,52 @@ def check_forgejo(settings: Settings) -> None:
     finally:
         session.close()
 
-    validate_forgejo_runners(runners, settings.forgejo_application_repository)
+    validate_forgejo_runners(runners)
 
 
-def validate_forgejo_runners(payload: Any, expected_name: str) -> None:
-    """Require a usable repository-scoped Actions runner with both WAMA labels."""
+def validate_forgejo_repository(payload: Any) -> None:
+    """Require the processors repository to be private and seeded on main."""
+
+    if (
+        not isinstance(payload, Mapping)
+        or not payload.get("private")
+        or payload.get("empty") is not False
+        or payload.get("default_branch") != "main"
+    ):
+        raise ReadinessError("Forgejo processors repository must be private and seeded on main")
+
+
+def validate_forgejo_runners(payload: Any) -> None:
+    """Require usable, separately scoped CI and deployment runner connections."""
 
     if not isinstance(payload, list):
         raise ReadinessError("Forgejo runner endpoint did not return a list")
-    matching_runners = [
-        runner
-        for runner in payload
-        if isinstance(runner, Mapping) and runner.get("name") == expected_name
-    ]
-    if not matching_runners:
-        raise ReadinessError(f"Forgejo runner {expected_name!r} is not registered")
-    runner = matching_runners[0]
-    if runner.get("status") not in {"active", "idle", "online"}:
-        raise ReadinessError(
-            f"Forgejo runner {expected_name!r} is not online: {runner.get('status')!r}"
-        )
-    labels = {
-        label.split(":", 1)[0]
-        for label in runner.get("labels", [])
-        if isinstance(label, str)
+    expected_connections = {
+        "wama-processors-ci": "wama-processors-ci",
+        "wama-processors-deploy": "wama-processors-deploy",
     }
-    required_labels = {"wama-app-ci", "wama-app-deploy"}
-    missing_labels = required_labels - labels
-    if missing_labels:
-        raise ReadinessError(
-            f"Forgejo runner {expected_name!r} is missing labels {sorted(missing_labels)!r}"
-        )
+    runners_by_name = {
+        runner.get("name"): runner
+        for runner in payload
+        if isinstance(runner, Mapping) and isinstance(runner.get("name"), str)
+    }
+    for runner_name, required_label in expected_connections.items():
+        runner = runners_by_name.get(runner_name)
+        if runner is None:
+            raise ReadinessError(f"Forgejo runner {runner_name!r} is not registered")
+        if runner.get("status") not in {"active", "idle", "online"}:
+            raise ReadinessError(
+                f"Forgejo runner {runner_name!r} is not online: {runner.get('status')!r}"
+            )
+        labels = {
+            label.split(":", 1)[0]
+            for label in runner.get("labels", [])
+            if isinstance(label, str)
+        }
+        if required_label not in labels:
+            raise ReadinessError(
+                f"Forgejo runner {runner_name!r} is missing label {required_label!r}"
+            )
 
 
 def check_kafka_ui(settings: Settings) -> None:
@@ -379,7 +394,7 @@ def check_kafka_ui(settings: Settings) -> None:
 
 
 def check_grafana(settings: Settings) -> None:
-    """Require Grafana health, its VictoriaMetrics datasource, and Kafka dashboard."""
+    """Require Grafana health plus provisioned infrastructure and PMU views."""
 
     session = requests.Session()
     auth = (settings.grafana_username, settings.grafana_password)
@@ -388,33 +403,256 @@ def check_grafana(settings: Settings) -> None:
         datasource = _request_json(
             session,
             "Grafana VictoriaMetrics datasource",
-            _url(settings.grafana_url, "/api/datasources/uid/victoriametrics"),
+            _url(
+                settings.grafana_url,
+                f"/api/datasources/uid/{GRAFANA_VICTORIA_METRICS_DATASOURCE_UID}",
+            ),
+            auth=auth,
+        )
+        druid_datasource = _request_json(
+            session,
+            "Grafana Druid datasource",
+            _url(settings.grafana_url, f"/api/datasources/uid/{GRAFANA_DRUID_DATASOURCE_UID}"),
             auth=auth,
         )
         dashboard = _request_json(
             session,
             "Grafana Kafka Operations dashboard",
-            _url(settings.grafana_url, "/api/dashboards/uid/wama-kafka-operations"),
+            _url(
+                settings.grafana_url,
+                f"/api/dashboards/uid/{GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID}",
+            ),
+            auth=auth,
+        )
+        pmu_dashboard = _request_json(
+            session,
+            "Grafana PMU Live Measurements dashboard",
+            _url(
+                settings.grafana_url,
+                f"/api/dashboards/uid/{GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID}",
+            ),
+            auth=auth,
+        )
+        pmu_query = _post_json(
+            session,
+            "Grafana Druid PMU query",
+            _url(settings.grafana_url, "/api/ds/query"),
+            _grafana_pmu_query(settings),
             auth=auth,
         )
     finally:
         session.close()
 
-    if not isinstance(datasource, Mapping):
-        raise ReadinessError("Grafana VictoriaMetrics datasource response is invalid")
-    if datasource.get("uid") != "victoriametrics" or datasource.get("type") != "prometheus":
-        raise ReadinessError("Grafana VictoriaMetrics datasource is not provisioned correctly")
-    if not isinstance(dashboard, Mapping):
-        raise ReadinessError("Grafana Kafka Operations dashboard response is invalid")
-    metadata = dashboard.get("meta")
-    dashboard_body = dashboard.get("dashboard")
+    validate_grafana_datasource(
+        datasource,
+        GRAFANA_VICTORIA_METRICS_DATASOURCE_UID,
+        GRAFANA_VICTORIA_METRICS_DATASOURCE_TYPE,
+        "VictoriaMetrics",
+    )
+    validate_grafana_druid_datasource(druid_datasource)
+    validate_grafana_dashboard(
+        dashboard,
+        GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID,
+        "WAMA Infrastructure",
+        "Kafka Operations",
+    )
+    validate_grafana_dashboard(
+        pmu_dashboard,
+        GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID,
+        "WAMA Measurements",
+        "PMU Live Measurements",
+    )
+    validate_grafana_pmu_dashboard(pmu_dashboard)
+    validate_grafana_pmu_query(
+        pmu_query,
+        settings.druid_expected_mrid,
+        settings.druid_expected_double_value,
+    )
+
+
+def validate_grafana_druid_datasource(payload: Any) -> None:
+    """Require the Druid plugin datasource to use the internal Router URL."""
+
+    validate_grafana_datasource(
+        payload,
+        GRAFANA_DRUID_DATASOURCE_UID,
+        GRAFANA_DRUID_DATASOURCE_TYPE,
+        "Druid",
+    )
+    json_data = payload.get("jsonData")
+    if not isinstance(json_data, Mapping) or json_data.get("connection.url") != GRAFANA_DRUID_DATASOURCE_URL:
+        raise ReadinessError("Grafana Druid datasource does not use the internal Router URL")
+
+
+def _grafana_pmu_query(settings: Settings) -> dict[str, Any]:
+    escaped_mrid = settings.druid_expected_mrid.replace("'", "''")
+    return {
+        "from": "now-15m",
+        "to": "now",
+        "queries": [
+            {
+                "refId": "A",
+                "datasource": {
+                    "uid": GRAFANA_DRUID_DATASOURCE_UID,
+                    "type": GRAFANA_DRUID_DATASOURCE_TYPE,
+                },
+                "builder": {
+                    "queryType": "sql",
+                    "query": (
+                        'SELECT "__time", "mrid", "double_value" '
+                        f'FROM "{settings.druid_datasource}" '
+                        f"WHERE \"mrid\" = '{escaped_mrid}' "
+                        "AND \"quality_valid\" = 'true' "
+                        'AND "double_value" IS NOT NULL '
+                        'ORDER BY "__time" DESC LIMIT 1'
+                    ),
+                },
+                "settings": {
+                    "contextParameters": [],
+                    "format": "long",
+                },
+                "intervalMs": 1_000,
+                "maxDataPoints": 1_000,
+            }
+        ],
+    }
+
+
+def validate_grafana_pmu_query(
+    payload: Any,
+    expected_mrid: str,
+    expected_double_value: float,
+) -> None:
+    """Require Grafana's Druid datasource to return the expected PMU frame."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError("Grafana Druid PMU query did not return an object")
+    results = payload.get("results")
+    if not isinstance(results, Mapping):
+        raise ReadinessError("Grafana Druid PMU query has no results")
+    result = results.get("A")
+    if not isinstance(result, Mapping) or result.get("status") != 200:
+        raise ReadinessError("Grafana Druid PMU query did not succeed")
+    frames = result.get("frames")
+    if not isinstance(frames, list) or not frames or not isinstance(frames[0], Mapping):
+        raise ReadinessError("Grafana Druid PMU query returned no data frames")
+    frame = frames[0]
+    schema = frame.get("schema")
+    data = frame.get("data")
+    if not isinstance(schema, Mapping) or not isinstance(data, Mapping):
+        raise ReadinessError("Grafana Druid PMU frame is invalid")
+    fields = schema.get("fields")
+    values = data.get("values")
+    if not isinstance(fields, list) or not isinstance(values, list) or len(fields) != len(values):
+        raise ReadinessError("Grafana Druid PMU frame has invalid fields")
+    field_names = [field.get("name") if isinstance(field, Mapping) else None for field in fields]
+    try:
+        time_index = field_names.index("__time")
+        mrid_index = field_names.index("mrid")
+        value_index = field_names.index("double_value")
+    except ValueError as error:
+        raise ReadinessError("Grafana Druid PMU frame is missing required columns") from error
+    time_values = values[time_index]
+    mrid_values = values[mrid_index]
+    measurement_values = values[value_index]
+    if (
+        not isinstance(time_values, list)
+        or not isinstance(mrid_values, list)
+        or not isinstance(measurement_values, list)
+        or not time_values
+        or len(time_values) != len(mrid_values)
+        or len(time_values) != len(measurement_values)
+    ):
+        raise ReadinessError("Grafana Druid PMU frame has invalid row values")
+    for timestamp, mrid, value in zip(time_values, mrid_values, measurement_values, strict=True):
+        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+            raise ReadinessError("Grafana Druid PMU frame has no numeric timestamp")
+        if mrid != expected_mrid:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ReadinessError("Grafana Druid PMU frame has no numeric double_value")
+        if math.isclose(float(value), expected_double_value, abs_tol=1e-9):
+            return
+        raise ReadinessError("Grafana Druid PMU double_value does not match the PMU fixture")
+    raise ReadinessError("Grafana Druid PMU frame did not return the expected MRID")
+
+
+def validate_grafana_datasource(
+    payload: Any,
+    expected_uid: str,
+    expected_type: str,
+    name: str,
+) -> None:
+    """Require a Grafana datasource with the expected stable identity."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError(f"Grafana {name} datasource response is invalid")
+    if payload.get("uid") != expected_uid or payload.get("type") != expected_type:
+        raise ReadinessError(f"Grafana {name} datasource is not provisioned correctly")
+
+
+def validate_grafana_dashboard(
+    payload: Any,
+    expected_uid: str,
+    expected_folder: str,
+    name: str,
+) -> None:
+    """Require a provisioned dashboard in its intended Grafana folder."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError(f"Grafana {name} dashboard response is invalid")
+    metadata = payload.get("meta")
+    dashboard_body = payload.get("dashboard")
     if (
         not isinstance(metadata, Mapping)
         or not metadata.get("provisioned")
         or not isinstance(dashboard_body, Mapping)
-        or dashboard_body.get("uid") != "wama-kafka-operations"
+        or dashboard_body.get("uid") != expected_uid
+        or metadata.get("folderTitle") != expected_folder
     ):
-        raise ReadinessError("Grafana Kafka Operations dashboard is not provisioned correctly")
+        raise ReadinessError(f"Grafana {name} dashboard is not provisioned correctly")
+
+
+def validate_grafana_pmu_dashboard(payload: Any) -> None:
+    """Require unit-safe Druid panels for the configured PMU measurement groups."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError("Grafana PMU dashboard response is invalid")
+    dashboard = payload.get("dashboard")
+    if not isinstance(dashboard, Mapping):
+        raise ReadinessError("Grafana PMU dashboard has no body")
+    panels = dashboard.get("panels")
+    if not isinstance(panels, list):
+        raise ReadinessError("Grafana PMU dashboard has no panels")
+    expected_panels = {
+        "Phase Voltages": ("timeseries", "volt"),
+        "Phase Currents": ("timeseries", "amp"),
+        "Frequency": ("timeseries", "hertz"),
+        "ROCOF (Hz/s)": ("timeseries", "suffix:Hz/s"),
+        "Latest Valid PMU Records": ("table", None),
+    }
+    by_title = {
+        panel.get("title"): panel
+        for panel in panels
+        if isinstance(panel, Mapping) and isinstance(panel.get("title"), str)
+    }
+    for title, (expected_type, expected_unit) in expected_panels.items():
+        panel = by_title.get(title)
+        if not isinstance(panel, Mapping) or panel.get("type") != expected_type:
+            raise ReadinessError(f"Grafana PMU dashboard is missing the {title!r} panel")
+        datasource = panel.get("datasource")
+        if (
+            not isinstance(datasource, Mapping)
+            or datasource.get("uid") != GRAFANA_DRUID_DATASOURCE_UID
+            or datasource.get("type") != GRAFANA_DRUID_DATASOURCE_TYPE
+        ):
+            raise ReadinessError(f"Grafana PMU dashboard {title!r} does not use Druid")
+        if expected_unit is None:
+            continue
+        field_config = panel.get("fieldConfig")
+        defaults = field_config.get("defaults") if isinstance(field_config, Mapping) else None
+        if not isinstance(defaults, Mapping) or defaults.get("unit") != expected_unit:
+            raise ReadinessError(f"Grafana PMU dashboard {title!r} has an unexpected unit")
 
 
 def check_victoria_metrics(settings: Settings) -> None:
@@ -506,6 +744,25 @@ def _request_json(
 ) -> Any:
     try:
         response = session.get(url, auth=auth, params=params, timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise ReadinessError(f"{label} request failed: {error}") from error
+    try:
+        return response.json()
+    except ValueError as error:
+        raise ReadinessError(f"{label} did not return JSON") from error
+
+
+def _post_json(
+    session: requests.Session,
+    label: str,
+    url: str,
+    payload: Mapping[str, Any],
+    *,
+    auth: tuple[str, str] | None = None,
+) -> Any:
+    try:
+        response = session.post(url, json=payload, auth=auth, timeout=10)
         response.raise_for_status()
     except requests.RequestException as error:
         raise ReadinessError(f"{label} request failed: {error}") from error

@@ -1,8 +1,10 @@
-name: ${WAMA_APPS_COMPOSE_PROJECT_NAME:-wama-applications}
+name: ${WAMA_PROCESSORS_COMPOSE_PROJECT_NAME:-wama-processors}
 
 include:
   # provisioned-processor-includes:start
-  # provisioned-processor-includes:end
+  - ./processors/processor-apparent-power/compose.yaml
+  - ./processors/processor-frequency-scale/compose.yaml
+# provisioned-processor-includes:end
 
 services: {}
 

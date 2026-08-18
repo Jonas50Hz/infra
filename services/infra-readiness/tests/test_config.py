@@ -13,6 +13,10 @@ class SettingsTests(unittest.TestCase):
     def test_uses_local_poc_defaults(self) -> None:
         settings = Settings.from_environment({})
 
+        self.assertEqual(settings.druid_router_url, "http://druid:8888")
+        self.assertEqual(settings.druid_datasource, "live_measurements")
+        self.assertEqual(settings.druid_expected_double_value, 50.01)
+        self.assertEqual(settings.forgejo_processors_repository, "wama-processors")
         self.assertEqual(settings.kafka_bootstrap_servers, "kafka:9092")
         self.assertEqual(settings.s3_buckets, ("wama-raw", "wama-measurement-sessions"))
         self.assertEqual(settings.readiness_timeout_seconds, 180)
@@ -28,3 +32,7 @@ class SettingsTests(unittest.TestCase):
     def test_rejects_non_http_service_url(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "FORGEJO_URL"):
             Settings.from_environment({"FORGEJO_URL": "forgejo:3000"})
+
+    def test_rejects_non_finite_druid_expected_value(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "DRUID_EXPECTED_DOUBLE_VALUE"):
+            Settings.from_environment({"DRUID_EXPECTED_DOUBLE_VALUE": "nan"})

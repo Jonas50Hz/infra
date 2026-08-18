@@ -2,7 +2,8 @@
 
 ## What this repo is
 Local **docker-compose** PoC of the WAMA data platform. Goal: test Quixstreams
-processors against a Kafka backbone, then wire a Forgejo-based CI/CD loop.
+processors against a Kafka backbone, then use Forgejo only for internal
+processor deployment and explicitly scoped gateway-deployment tests.
 This is NOT the production target (production is Kubernetes-based).
 
 ## Domain Vocabulary
@@ -23,11 +24,16 @@ This is NOT the production target (production is Kubernetes-based).
 - **Kafka = plain Apache Kafka in KRaft mode** (single broker, no ZooKeeper).
   Non-Confluent stack. No Confluent Schema Registry — use JSON or raw Protobuf;
   add Apicurio only if a registry is explicitly needed.
-- **CD replacement:** ArgoCD is K8s-only. For this PoC deploy via a Forgejo
-  Actions job running `docker compose up -d`, or Watchtower on new image tags.
-- The root `docker-compose.yml` runs infrastructure services only. Application
-  processors belong to separately initialized Forgejo repositories under
-  `forgejo-repos/`, never to this root Compose assembly.
+- **CD replacement:** ArgoCD is K8s-only. For this PoC, Forgejo Actions may
+  deploy internal `processor-*` services, or a gateway only when explicitly
+  testing Forgejo-based gateway deployment, using application-local
+  `docker compose up -d` or Watchtower on new application image tags. Forgejo
+  must never deploy, modify, or trigger deployment of the root infrastructure
+  Compose project.
+- The root `docker-compose.yml` runs and deploys infrastructure services. The
+  current `pmu-gateway`, all infrastructure gateways, and every asset outside
+  the explicit Forgejo deployment scope belong in this repository, never in an
+  application Compose assembly.
 - **Infrastructure metrics = VictoriaMetrics.** Use its single-node direct
   scrape configuration for this PoC; do not add a separate Prometheus server or
   `vmagent` unless the topology changes.
@@ -46,38 +52,53 @@ This is NOT the production target (production is Kubernetes-based).
   the root README, and these instructions in the same change.
 - The current Phase 1 source gateway is `pmu-gateway`; it publishes configured
   fake PMU scalar measurements as raw `MCCSMeasurementValue` Protobuf records.
+- Druid owns `services/druid/` and persists its single-server state in
+  `druid-data`; `druid-init` owns `services/druid-init/` and must idempotently
+  initialize the raw-Protobuf `LiveMeasurement` supervisor. Druid's Router is
+  the only Druid API with a host mapping. Its in-container coordination does not
+  add a ZooKeeper Compose service or alter Kafka KRaft.
 - `infra-readiness` owns `services/infra-readiness/` and is the root stack's
   one-shot behavioral readiness gate. It must remain infrastructure-only and
   must not deploy or validate application processors.
 - PostgreSQL owns `services/postgres/` and provides a persistent, initially
   empty target for a future Kafka Connect mirror of compacted `Masterdata`,
-  `Schema`, and `Blobmeta` records. Kafka remains the source of truth.
+  `Schema`, and `Blobmeta` records. `measurement-session-api` may create only
+  its immutable `measurement_session_catalog` schema; Kafka remains the source
+  of truth.
 - SeaweedFS owns `services/seaweedfs/` and provides the PoC's authenticated
   S3-compatible raw/waveform and long-term measurement-session storage.
+- Finalized-session services own `services/measurement-session-exporter/`,
+  `services/measurement-session-api/`, `services/measurement-session-browser/`,
+  and `services/measurement-session-e2e/`. They are root-owned, not Forgejo
+  deployment targets. The browser is credential-free; only the API may access
+  SeaweedFS and it must proxy every artifact download.
 - Forgejo services own `services/forgejo/`, `services/forgejo-init/`, and
   `services/forgejo-runner/`.
 - This repository is never pushed to Forgejo. The seed at
-  `forgejo-repos/wama-applications/` is the only Forgejo-pushable surface; it
-  owns application workflows, processor code, app Compose fragments, and app
-  deployment scripts. It connects to infra only through the external
-  `wama-infra` Docker network.
+  `forgejo-repos/wama-processors/` is the only Forgejo-pushable surface; it
+  owns workflows, code, app Compose fragments, and deployment scripts only for
+  internal `processor-*` services and explicitly declared gateway-deployment
+  tests. All other assets remain in this repository. The seed connects to
+  infrastructure only through the external `wama-infra` Docker network.
 - Infrastructure monitoring services own `services/victoria-metrics/`,
   `services/node-exporter/`, `services/cadvisor/`, `services/kafka-exporter/`,
   and `services/grafana/`. VictoriaMetrics holds infrastructure telemetry only;
-  Common Format records remain on Kafka and measurement dashboards remain a
-  future Druid concern.
+  Common Format records remain out of VictoriaMetrics. Druid owns the live
+  measurement store; Grafana owns the pinned Druid datasource plugin and the
+  `WAMA Measurements` PMU dashboard. Keep measurement queries on Druid and
+  infrastructure telemetry on VictoriaMetrics.
 
 ## Stack (PoC mapping vs. production)
 | Layer | Production (target) | This PoC |
 |-------|--------------------|----------|
 | Transport | Kafka via Strimzi operator | Kafka KRaft, plain container |
-| Config/CD | Git + Forgejo + ArgoCD (GitOps) | Forgejo Actions + `docker compose up -d` |
-| Stream proc | Quixstreams + Measurement Session Exporter | Quixstreams (Python); session exporter later |
-| Time-series | Druid | skip early; add if needed |
+| Config/CD | Git + Forgejo + ArgoCD (GitOps) | Root repository for infrastructure; Forgejo Actions + app-local `docker compose up -d` only for internal processors and explicit gateway-deployment tests |
+| Stream proc | Quixstreams + Measurement Session Exporter | Quixstreams (Python) plus a root-owned final-only fixture exporter |
+| Time-series | Druid | persistent single-server direct raw-Protobuf Kafka ingest |
 | Config metadata | PostgreSQL via Kafka Connect | PostgreSQL prepared; Kafka Connect later |
 | Infrastructure metrics | Grafana + metrics backend | VictoriaMetrics + node-exporter + cAdvisor + Grafana |
 | Raw/blob | SeaweedFS | SeaweedFS `weed mini`, S3-compatible single-node service |
-| Viz | Grafana | VictoriaMetrics for infrastructure; Druid later for measurement dashboards |
+| Viz | Grafana | VictoriaMetrics for infrastructure; Druid-backed PMU measurement dashboard; anonymous static browser for finalized sessions |
 | Export | IEC 104 + file export | out of PoC scope |
 
 ## Coding conventions

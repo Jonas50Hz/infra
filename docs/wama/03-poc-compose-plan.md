@@ -30,19 +30,26 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `kafka-ui` — topic/message inspection.
 - `pmu-gateway` — fake PMU gateway: reads a startup YAML fixture and continuously
    emits raw-Protobuf `MCCSMeasurementValue` records on `LiveMeasurement`.
-- `processor-*` — Quixstreams pipelines (one service per processor), including
-   the planned Measurement Session Exporter.
-- `postgres` — provisioned persistent, initially empty target for compacted
-   Masterdata/Schema/Blobmeta records.
+- `processor-*` — Quixstreams pipelines (one service per processor).
+- `measurement-session-exporter` — profile-gated static final-only fixture
+   exporter for immutable MeasurementSession records and SeaweedFS manifests.
+- `measurement-session-api` — Kafka-to-PostgreSQL immutable catalog and
+   anonymous read-only artifact proxy.
+- `measurement-session-browser` — disposable static browser with same-origin
+   API proxy.
+- `postgres` — persistent immutable MeasurementSession catalog plus a prepared
+   future target for compacted Masterdata/Schema/Blobmeta records.
 - `kafka-connect` — mirrors compacted topics to PostgreSQL.
-- `druid` — time-series store, Kafka ingest (or ClickHouse fallback).
+- `druid` — persistent single-server time-series store with direct raw-Protobuf
+   Kafka ingest from `LiveMeasurement`.
+- `druid-init` — idempotent Druid Kafka supervisor initializer.
 - `seaweedfs` — S3-compatible blob for raw/waveform + long-term measurement
    sessions.
 - `victoria-metrics` — single-node store for operational metrics.
 - `node-exporter` — host CPU, memory, filesystem, and network metrics.
 - `cadvisor` — Docker-container metrics.
-- `grafana` — infrastructure dashboards over VictoriaMetrics; Druid-backed
-   Common Format dashboards arrive with the measurement store.
+- `grafana` — infrastructure dashboards over VictoriaMetrics and the
+   Druid-backed `WAMA Measurements` PMU dashboard.
 - `exporter` — IEC 104 real-time export + file export (xlsx/csv).
 - `forgejo` + `forgejo-runner` — Git + CI/CD + built-in registry.
 
@@ -63,45 +70,76 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    provision infrastructure dashboards. This path is operational telemetry only;
    it never receives raw Protobuf or other WAMA data records.
 
+### Finalized measurement session delivery (available now)
+4. **Measurement Session Exporter** — root-owned one-shot fixture service writes
+   immutable artifacts plus a digest-addressed manifest to SeaweedFS, then
+   publishes raw-Protobuf final records to `MeasurementSession`.
+5. **Catalog API + browser** — the API materializes Kafka records idempotently
+   into PostgreSQL and verifies manifests/object metadata before proxying
+   downloads; the browser is anonymous, read-only, and credential-free.
+6. **Contract-to-download test** — a profile-gated verifier independently
+   decodes Kafka evidence and proves the browser download path.
+
 ### Prepared persistence target (available now)
-- **PostgreSQL** — persistent empty `wama` database. Kafka remains the source
-   of truth; the database receives no records until Kafka Connect is added.
+- **PostgreSQL** — Kafka remains the source of truth. The session API owns its
+  immutable catalog schema; a future Kafka Connect mirror of compacted records
+  remains separate and unimplemented.
+
+### Live measurement storage (available now)
+- **Druid + druid-init** — root-owned persistent single-server store and
+  idempotent Kafka supervisor. The image compiles a descriptor from the
+  canonical Common Format schema and ingests raw `LiveMeasurement` Protobuf
+  directly; there is no Schema Registry or JSON translation path.
+- **Router-only access** — only the Druid Router is host-exposed on port 8888.
+  Druid's internal coordination remains inside its one container, so Kafka
+  remains the single plain KRaft broker with no ZooKeeper Compose service.
+- **No-rollup query slice** — `live_measurements` uses Kafka record time as
+  `__time`, preserves typed scalar values plus quality and source timestamps,
+  and explicitly disables rollup. Root readiness and targeted CI query the PMU
+  frequency fixture through the Router.
+- **Deferred policy** — Druid retention, deletion, compaction, aggregation, and
+   alerting are intentionally not configured. The provisioned Grafana PMU
+   dashboard reads valid raw values directly from Druid without changing those
+   storage policies.
 
 ### Phase 2 — Storage + visualisation (makes data queryable)
-4. **Measurement Session Exporter** — application-side Quixstreams workload
-   detects and bounds measurement sessions, publishes `MeasurementSession`, and
-   writes long-term session objects to SeaweedFS.
-5. **Druid** with Kafka ingest on `LiveMeasurement` — query-on-arrival.
-   (ClickHouse as simpler fallback — open decision.)
-6. **SeaweedFS** — processors write raw/waveform + measurement sessions to
+7. **SeaweedFS** — processors write raw/waveform + measurement sessions to
    blob; publish only a `Blobmeta` pointer to Kafka. Keep raw OFF Kafka.
-7. **Kafka Connect -> PostgreSQL** — mirror compacted
+8. **Kafka Connect -> PostgreSQL** — mirror compacted
    Masterdata/Schema/Blobmeta into the prepared database.
-8. **Grafana data dashboards** — dashboards over Druid; internal alerting to
-   start. This is separate from the already-provisioned VictoriaMetrics
-   infrastructure dashboards.
+9. **Grafana data dashboards** — the PMU live dashboard over Druid is available
+   now. Additional measurement dashboards and internal alerting remain deferred.
+   This is separate from the already-provisioned VictoriaMetrics infrastructure
+   dashboards.
 
 ### Phase 3 — Export (closes the data path)
-9. **Exporter service** — gateway on `Export` topic -> IEC 104; batch/file
+10. **Exporter service** — gateway on `Export` topic -> IEC 104; batch/file
    export -> xlsx/csv on a configured measurement session or manual selection.
 
 ### Phase 4 — Onboarding + config as data
-10. **Masterdata via Git** — masterdata = IP + location committed to Git;
+11. **Masterdata via Git** — masterdata = IP + location committed to Git;
    gateway provisioned from it into the `Masterdata` compacted topic.
-11. **Config & deploy flow** — config change -> Git -> automated quality and
+12. **Config & deploy flow** — config change -> Git -> automated quality and
    security tests -> Systemexperte decision -> auditable deployment.
 
 ### Phase 5 — CI/CD loop (automates deploy)
-12. **Forgejo + Actions runner + registry** — infrastructure provisions an
-   empty application repository and app-scoped runner. The separate
-   `forgejo-repos/wama-applications/` seed owns CI: test + build image + push.
-13. **CD trigger** — an application-repository Forgejo Actions job synchronizes
-   only its checkout to an application deployment root and runs application
-   `docker compose up -d` on the external infrastructure network. It never
-   deploys or modifies the infrastructure Compose project.
+13. **Forgejo + Actions runner + registry** — infrastructure provisions a
+   private seeded `wama-processors` repository and two processors-scoped runner
+   connections on one daemon. The separate `forgejo-repos/wama-processors/`
+   seed owns CI: test + build image + push.
+14. **CD trigger** — a processors-repository Forgejo Actions job synchronizes
+   only its checkout to an isolated processors deployment root and runs
+   processors `docker compose up -d` on the external infrastructure network. It
+   never deploys or modifies the infrastructure Compose project.
+15. **Root validation CI** — the infrastructure workflow renders the root
+   Compose assembly, validates the Druid descriptor and helper tests, proves
+   PMU-to-Druid query ingestion and the Grafana PMU dashboard path, runs
+   finalized-session image tests, and executes the contract-to-download flow on
+   an ephemeral Docker runner. It neither publishes images nor deploys the root
+   stack.
 
 ### Phase 6 — End-to-end pilot
-14. Run one real source through the whole path:
+16. Run one real source through the whole path:
     onboarding -> config/CI -> live data -> Druid -> Grafana -> export.
 
 ## Consumer requirements
@@ -111,12 +149,14 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
   enums bound via ValueToAlias at engineering time.
 
 ## Measurement session & alarm path (Phase 2+)
-Processor detects a measurement session -> records start/end/measurements ->
-`MeasurementSession` topic + long-term blob -> optional `Alarm` -> Grafana
-notification.
+Static fixture exporter finalizes a session -> immutable artifact objects +
+manifest -> raw-Protobuf `MeasurementSession` topic -> PostgreSQL catalog ->
+anonymous read-only browser/API download. Live lifecycle updates, alarm
+integration, and analytics dashboards remain excluded from this slice.
 
 ## Open risks to validate early
 - Quixstreams throughput / heavy waveform at target load (unproven).
 - Whether a JVM engine (Flink/Beam) is needed for heavy signal processing.
-- Druid vs ClickHouse; alerting path (PagerDuty later?); when Trino lands.
+- Druid single-server throughput, production topology, and retention/aggregation
+   policy; alerting path (PagerDuty later?); when Trino lands.
 - Whether Apache Spark is needed for future batch or heavy workloads.

@@ -30,19 +30,24 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 - **Kafka** is the backbone. Stream topics: `LiveMeasurement`,
   `MeasurementSession`, `Alarm`, `Export`. Compacted topics: `Masterdata`,
   `Schema`, `Blobmeta` (single source of truth).
-- **PostgreSQL** is provisioned as an empty persistent target. A future Kafka
-  Connector mirrors the compacted topics into it.
-- **Quixstreams** block: Measurement Session Exporter + Processor 1..N read the
-  stream, write derived values back to Kafka, and emit measurement-session,
-  alarm, and export records.
-- **Druid** ingests from Kafka for live + historical query.
+- **PostgreSQL** holds the immutable `measurement_session_catalog` projection;
+  Kafka remains the source of truth. A future Kafka Connector may mirror the
+  compacted topics into it.
+- **Quixstreams** processors read the stream, write derived values back to
+  Kafka, and emit their configured records.
+- **Finalized-session services** export a static final-only fixture, materialize
+  the raw-Protobuf topic into PostgreSQL, and serve a credential-free browser
+  through an anonymous read-only API.
+- **Druid** directly ingests raw-Protobuf `LiveMeasurement` records from Kafka
+  for live query through its Router API.
 - **SeaweedFS** holds raw measurements and long-term measurement sessions (off
   Kafka).
 - **VictoriaMetrics** directly collects host, Docker-container, Kafka
   broker/topic metadata, and monitoring-service telemetry for operational
   health.
-- **Grafana** uses VictoriaMetrics for operational dashboards now, then Druid
-  (+ **Trino** later for federated query) for Common Format data dashboards.
+- **Grafana** uses VictoriaMetrics for operational dashboards and its provisioned
+  Druid datasource for live PMU measurement trends; **Trino** remains later for
+  federated query.
 - **Export:** IEC 104 exporter (real-time) + File Export (xlsx/csv). MQTT
   exporter for OT/EAS targets.
 - **CI/CD target:** Git → CI/CD → infrastructure Git → ArgoCD (GitOps deploy).
@@ -73,30 +78,54 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 ### Compose PoC delivery
 - The infrastructure repository provisions Forgejo, Kafka, and the external
   `wama-infra` Docker network. It is never pushed to Forgejo.
-- `forgejo-repos/wama-applications/` is a separate application repository seed.
-  `forgejo-init` creates its empty Forgejo repository and scopes a runner to it.
-- Application pull requests validate only processor code and app-local tooling.
-  Trusted application `main` pushes publish only processor OCI images and deploy
-  only app Compose services from an application deployment root.
-- Processor authors edit Python/Quixstreams code in the application repository;
+- `forgejo-repos/wama-processors/` is a separate processors repository seed.
+  `forgejo-init` creates its private Forgejo repository, seeds `main` only when
+  it is empty, and registers separate CI and deployment runner connections.
+- Processors pull requests validate only processor code and processors-local
+  tooling. Trusted processors `main` pushes publish only processor OCI images
+  and deploy only processors Compose services from an isolated deployment root.
+- Processor authors edit Python/Quixstreams code in the processors repository;
   YAML is optional service configuration, not a substitute for the pipeline.
-- The planned Measurement Session Exporter belongs to this application boundary,
-  not the infrastructure Compose assembly.
-- The application deployment runner has host Docker access by design for this
+- The finalized-session exporter, catalog API, browser, and contract-to-download
+  verifier are root infrastructure services because they are outside the narrow
+  Forgejo processor deployment scope. Forgejo does not deploy or modify them.
+- `druid` and its one-shot `druid-init` supervisor helper are likewise
+  root-owned. Root Compose builds and deploys the local Druid image; the
+  processor-only Forgejo workflow neither publishes nor deploys it.
+- Root CI renders Compose, runs the finalized-session service test images, and
+  proves the contract-to-download path, Druid descriptor generation, PMU query
+  ingestion, and Grafana dashboard datasource path without publishing or
+  deploying root services.
+- The processors deployment runner has host Docker access by design for this
   local PoC. It is not a production isolation model.
 
 ### Quixstreams
 - Power Users (electrical engineers) write processing/detection pipelines in Python.
 - Runs on the measurement stream; derived values are written back to Kafka.
-- Detects and bounds `MeasurementSession` records (start, end, and measurement
-  context) → `MeasurementSession` topic + long-term blob.
+- Processor detection and lifecycle updates remain future work. This PoC uses a
+  static final-only exporter that writes an immutable `MeasurementSession`
+  record and long-term blob manifest.
 - Commit → CI tests → auto-deploy if it passes.
 - **Open risk:** throughput / heavy waveform at target load unproven — benchmark
   early. Heavy signal-processing may need a JVM engine (Flink/Beam).
 
 ### Druid (time-series)
-- Native Kafka supervisor = query-on-arrival. Auto-aggregation after ~6 weeks.
-- Open decision: Druid vs ClickHouse (ClickHouse = simpler fallback).
+- The root-owned single-server PoC service uses Druid's Kafka and Protobuf
+  extensions to decode raw `MCCSMeasurementValue` records directly from
+  `LiveMeasurement`. Its image builds the descriptor from the canonical schema;
+  no Schema Registry is used.
+- `druid-init` creates or updates the `live_measurements` supervisor without
+  resetting offsets. Kafka record time becomes `__time`, matching the Common
+  Format `timestamp_mccs` contract, and individual scalar `oneof` fields remain
+  queryable.
+- `live_measurements` explicitly disables rollup. Druid metadata and segments
+  persist in the root `druid-data` volume. Only the Router is host-exposed on
+  port 8888; no Kafka ZooKeeper service or additional Druid Compose service is
+  introduced.
+- Retention, deletion, compaction, and aggregation policy are deliberately
+  unset. Grafana provisions a pinned Druid datasource plugin and the
+  `WAMA Measurements / WAMA PMU Live Measurements` dashboard for valid PMU
+  voltage, current, frequency, and ROCOF trends; alerting remains deferred.
 
 ### VictoriaMetrics + Grafana (operational observability)
 - VictoriaMetrics scrapes host and Docker-container metrics directly in the
@@ -105,8 +134,9 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 - This is operational telemetry only. `MCCSMeasurementValue` records, raw
   waveforms, measurement sessions, alarms, and Kafka message payloads do not enter
   VictoriaMetrics.
-- Grafana adds Druid (and later Trino) separately when measurement data becomes
-  queryable.
+- Druid data is queryable through the Router and Grafana's PMU dashboard now.
+  Grafana adds further measurement dashboards, alerting, and later Trino
+  separately.
 
 ### SeaweedFS (raw/blob)
 - S3-compatible object store for raw/waveform (PMU samples now; COMTRADE/WMU later)
@@ -114,7 +144,8 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
   `wama-measurement-sessions` buckets. Cheap, good small-file performance.
 
 ## Open decisions (from this plan)
-- Druid vs ClickHouse for time-series.
+- Druid single-server throughput and its production-scale topology.
+- Druid retention, deletion, compaction, and aggregation policy.
 - Alerting path: internal to start; PagerDuty possible later.
 - When Trino / federated query lands.
 - Stream-processing engine for heavy jobs (Quixstreams vs Beam/Flink).

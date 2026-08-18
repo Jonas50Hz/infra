@@ -1,4 +1,4 @@
-"""Validate the application repository without reading infrastructure files."""
+"""Validate the processors repository without reading infrastructure files."""
 
 from __future__ import annotations
 
@@ -9,19 +9,22 @@ import sys
 
 PROCESSOR_PATTERN = re.compile(r"processor-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 INCLUDE_PATTERN = re.compile(r"^\s*-\s+\./processors/([^/]+)/compose\.yaml\s*$", re.MULTILINE)
+REQUIRED_PROCESSOR = "processor-frequency-scale"
 
 
 def validate_structure(application_root: Path) -> list[str]:
-    """Return application layout failures without requiring a Docker daemon."""
+    """Return processors-repository layout failures without a Docker daemon."""
 
     errors: list[str] = []
     compose_path = application_root / "compose.yaml"
     if not compose_path.is_file():
-        return ["Application compose.yaml is missing"]
+        return ["Processors compose.yaml is missing"]
 
     compose_contents = compose_path.read_text(encoding="utf-8")
     if "external: true" not in compose_contents or "wama-infra" not in compose_contents:
-        errors.append("Application compose.yaml must declare the external wama-infra network")
+        errors.append("Processors compose.yaml must declare the external wama-infra network")
+    if not (application_root / "processors" / REQUIRED_PROCESSOR).is_dir():
+        errors.append(f"Required processor is missing: {REQUIRED_PROCESSOR}")
     included_processors = set(INCLUDE_PATTERN.findall(compose_contents))
     for processor_directory in sorted((application_root / "processors").iterdir()):
         if not processor_directory.is_dir() or not processor_directory.name.startswith("processor-"):
@@ -37,7 +40,7 @@ def _validate_processor(processor_directory: Path, included_processors: set[str]
     if not PROCESSOR_PATTERN.fullmatch(service_name):
         return [f"Invalid processor name: {service_name}"]
     if service_name not in included_processors:
-        errors.append(f"{service_name} is missing from application compose includes")
+        errors.append(f"{service_name} is missing from processors compose includes")
 
     required_paths = (
         "compose.yaml",
@@ -68,14 +71,14 @@ def _validate_processor(processor_directory: Path, included_processors: set[str]
         errors.append(f"{service_name} must not use cross-project depends_on")
     if "wama-infra" not in compose_contents or "external: true" not in compose_contents:
         errors.append(f"{service_name} must attach to the external wama-infra network")
-    if f"/{service_name}:${{WAMA_APPLICATION_IMAGE_TAG:-main}}" not in compose_contents:
-        errors.append(f"{service_name} must use the application main image tag")
+    if f"/{service_name}:${{WAMA_PROCESSORS_IMAGE_TAG:-main}}" not in compose_contents:
+        errors.append(f"{service_name} must use the processors main image tag")
     if f"processors/{service_name}/" not in dockerfile_contents:
-        errors.append(f"{service_name} Dockerfile must own only application source paths")
+        errors.append(f"{service_name} Dockerfile must own only processors source paths")
     if "templates/quixstreams-processor" in dockerfile_contents or "processor_template" in dockerfile_contents:
         errors.append(f"{service_name} Dockerfile still references the template")
     if "COPY contracts/rtd_schema.proto" not in dockerfile_contents:
-        errors.append(f"{service_name} Dockerfile must use the application contract copy")
+        errors.append(f"{service_name} Dockerfile must use the processors contract copy")
     if f"consumer_group: {service_name}" not in config_contents:
         errors.append(f"{service_name} must use a distinct matching consumer group")
     if not (processor_directory / "src" / package_name).is_dir():
@@ -84,7 +87,7 @@ def _validate_processor(processor_directory: Path, included_processors: set[str]
 
 
 def validate_compose(application_root: Path) -> int:
-    """Render only application Compose files after structural validation."""
+    """Render only processors Compose files after structural validation."""
 
     return subprocess.run(
         ["docker", "compose", "-f", "compose.yaml", "config", "--quiet"],
@@ -94,13 +97,13 @@ def validate_compose(application_root: Path) -> int:
 
 
 def main() -> int:
-    """Print application validation failures and render its Compose assembly."""
+    """Print processors validation failures and render its Compose assembly."""
 
     application_root = Path(__file__).resolve().parents[1]
     errors = validate_structure(application_root)
     if errors:
         for error in errors:
-            print(f"Application validation failed: {error}", file=sys.stderr)
+            print(f"Processors validation failed: {error}", file=sys.stderr)
         return 1
     return validate_compose(application_root)
 

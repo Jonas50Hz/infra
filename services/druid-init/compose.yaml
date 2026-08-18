@@ -1,0 +1,19 @@
+services:
+  druid-init:
+    build:
+      context: ../..
+      dockerfile: services/druid-init/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      druid:
+        condition: service_healthy
+    environment:
+      DRUID_INIT_RETRY_INTERVAL_SECONDS: "${DRUID_INIT_RETRY_INTERVAL_SECONDS:-2}"
+      DRUID_INIT_TIMEOUT_SECONDS: "${DRUID_INIT_TIMEOUT_SECONDS:-240}"
+      DRUID_ROUTER_URL: http://druid:8888
+      DRUID_SUPERVISOR_ID: live_measurements
+      DRUID_SUPERVISOR_SPEC_PATH: /etc/wama/supervisors/live-measurements.json
+    restart: "no"

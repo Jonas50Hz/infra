@@ -1,4 +1,4 @@
-"""Create an application-owned processor from the local Quixstreams template."""
+"""Create a processors-repository-owned processor from the local template."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ README_END = "<!-- provisioned-processors:end -->"
 
 
 class ProvisioningError(ValueError):
-    """Raised when an application processor cannot be provisioned safely."""
+    """Raised when a processors repository processor cannot be provisioned safely."""
 
 
 def provision_processor(application_root: Path, slug: str) -> str:
-    """Copy the local template and update only application-repository files."""
+    """Copy the local template and update only processors-repository files."""
 
     _validate_slug(slug)
     service_name = f"processor-{slug}"
@@ -124,7 +124,7 @@ def _replace_marked_block(
     start = contents.find(start_marker)
     end = contents.find(end_marker)
     if start == -1 or end == -1 or end < start:
-        raise ProvisioningError(f"Missing application marker in {path}")
+        raise ProvisioningError(f"Missing processors marker in {path}")
     marker_end = start + len(start_marker)
     path.write_text(
         f"{contents[:marker_end]}\n{replacement}\n{contents[end:]}",
@@ -133,9 +133,9 @@ def _replace_marked_block(
 
 
 def main() -> int:
-    """Run the provisioner from inside the application repository."""
+    """Run the provisioner from inside the processors repository."""
 
-    parser = argparse.ArgumentParser(description="Create an application processor")
+    parser = argparse.ArgumentParser(description="Create a WAMA processor")
     parser.add_argument("name", help="Lowercase processor name without processor- prefix")
     arguments = parser.parse_args()
     application_root = Path(__file__).resolve().parents[1]

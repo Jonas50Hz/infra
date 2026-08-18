@@ -1,6 +1,6 @@
 services:
   processor-template:
-    image: "${WAMA_APPLICATION_IMAGE_PREFIX:-wama.local/wama-applications}/processor-template:${WAMA_APPLICATION_IMAGE_TAG:-main}"
+    image: "${WAMA_PROCESSORS_IMAGE_PREFIX:-wama.local/wama-processors}/processor-template:${WAMA_PROCESSORS_IMAGE_TAG:-main}"
     build:
       context: ../..
       dockerfile: templates/quixstreams-processor/Dockerfile

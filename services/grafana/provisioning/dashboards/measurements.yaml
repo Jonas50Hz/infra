@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: WAMA measurements
+    orgId: 1
+    folder: WAMA Measurements
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/measurement-dashboards

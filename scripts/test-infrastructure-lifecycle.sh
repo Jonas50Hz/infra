@@ -16,6 +16,8 @@ show_failure_diagnostics() {
     kafka-init \
     kafka-exporter \
     pmu-gateway \
+    druid \
+    druid-init \
     postgres \
     seaweedfs \
     forgejo \
@@ -53,13 +55,20 @@ wait_for_readiness() {
   return 1
 }
 
+verify_druid_live_measurement() {
+  docker compose run --rm --no-deps infra-readiness \
+    python -c 'from infra_readiness.config import Settings; from infra_readiness.druid import check_druid; check_druid(Settings.from_environment())'
+}
+
 start_and_verify() {
   local phase="$1"
 
   docker compose up -d
   wait_for_readiness "$phase"
+  verify_druid_live_measurement
 }
 
+sh services/forgejo-init/tests/test_bootstrap.sh
 docker compose config --quiet
 docker compose down -v --remove-orphans
 

@@ -1,0 +1,24 @@
+services:
+  measurement-session-e2e:
+    profiles:
+      - measurement-session-test
+    build:
+      context: ../..
+      dockerfile: services/measurement-session-e2e/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      measurement-session-api:
+        condition: service_healthy
+      measurement-session-browser:
+        condition: service_healthy
+    environment:
+      HTTP_TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_E2E_HTTP_TIMEOUT_SECONDS:-45}"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUME_TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_E2E_KAFKA_TIMEOUT_SECONDS:-30}"
+      KAFKA_TOPIC: MeasurementSession
+      MEASUREMENT_SESSION_BROWSER_URL: http://measurement-session-browser:8080
+      MEASUREMENT_SESSION_ID: "${MEASUREMENT_SESSION_ID_OVERRIDE:-}"
+    restart: "no"

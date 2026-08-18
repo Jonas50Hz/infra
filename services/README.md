@@ -10,7 +10,7 @@ fragment assembly and shared top-level resources.
 
 This directory is infrastructure-only. Do not add application `processor-*`
 services here. The separate
-[`../forgejo-repos/wama-applications/`](../forgejo-repos/wama-applications/)
+[`../forgejo-repos/wama-processors/`](../forgejo-repos/wama-processors/)
 seed owns processor services and joins this stack through the external
 `wama-infra` network.
 
@@ -22,13 +22,19 @@ seed owns processor services and joins this stack through the external
 | [`kafka-exporter/`](kafka-exporter/) | `kafka-exporter` |
 | [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
 | [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` |
+| [`druid/`](druid/) | `druid` |
+| [`druid-init/`](druid-init/) | `druid-init` |
 | [`postgres/`](postgres/) | `postgres` |
 | [`seaweedfs/`](seaweedfs/) | `seaweedfs` |
+| [`measurement-session-exporter/`](measurement-session-exporter/) | `measurement-session-exporter` |
+| [`measurement-session-api/`](measurement-session-api/) | `measurement-session-api` |
+| [`measurement-session-browser/`](measurement-session-browser/) | `measurement-session-browser` |
+| [`measurement-session-e2e/`](measurement-session-e2e/) | `measurement-session-e2e` |
 | [`forgejo/`](forgejo/) | `forgejo` |
 | [`forgejo-init/`](forgejo-init/) | `forgejo-init` |
 | [`forgejo-runner/`](forgejo-runner/) | `forgejo-runner` |
 | [`victoria-metrics/`](victoria-metrics/) | `victoria-metrics` |
 | [`node-exporter/`](node-exporter/) | `node-exporter` |
 | [`cadvisor/`](cadvisor/) | `cadvisor` |
-| [`grafana/`](grafana/) | `grafana` |
+| [`grafana/`](grafana/) | `grafana` (VictoriaMetrics infrastructure and Druid PMU dashboards) |
 | [`infra-readiness/`](infra-readiness/) | `infra-readiness` |

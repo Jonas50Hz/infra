@@ -4,17 +4,31 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+from unittest.mock import MagicMock, patch
 
 from infra_readiness.checks import (
     REQUIRED_TOPICS,
     ReadinessError,
     TOPIC_CLEANUP_POLICIES,
+    check_postgres,
     topic_configurations_from_responses,
+    validate_grafana_dashboard,
+    validate_grafana_datasource,
+    validate_grafana_pmu_dashboard,
+    validate_grafana_pmu_query,
+    validate_forgejo_repository,
     validate_forgejo_runners,
     validate_live_measurement,
     validate_prometheus_up,
     validate_topic_configurations,
     validate_topic_descriptions,
+)
+from infra_readiness.druid import (
+    DruidReadinessError,
+    validate_measurement_rows,
+    validate_router_health,
+    validate_supervisor_health,
+    validate_supervisor_status,
 )
 from infra_readiness.generated import rtd_schema_pb2
 
@@ -104,26 +118,258 @@ class KafkaContractTests(unittest.TestCase):
 class ControlPlaneTests(unittest.TestCase):
     """Validate the REST and metrics response expectations."""
 
-    def test_accepts_registered_idle_runner_with_required_labels(self) -> None:
+    def test_accepts_druid_router_and_supervisor_health(self) -> None:
+        validate_router_health(True)
+        validate_supervisor_health({"healthy": True})
+        validate_supervisor_status(
+            {
+                "id": "live_measurements",
+                "detailedState": "RUNNING",
+                "recentErrors": [],
+            },
+            "live_measurements",
+        )
+
+    def test_accepts_provisioned_grafana_druid_measurement_views(self) -> None:
+        validate_grafana_datasource(
+            {
+                "uid": "druid",
+                "type": "grafadruid-druid-datasource",
+            },
+            "druid",
+            "grafadruid-druid-datasource",
+            "Druid",
+        )
+        validate_grafana_dashboard(
+            {
+                "meta": {
+                    "provisioned": True,
+                    "folderTitle": "WAMA Measurements",
+                },
+                "dashboard": {
+                    "uid": "wama-pmu-live-measurements",
+                },
+            },
+            "wama-pmu-live-measurements",
+            "WAMA Measurements",
+            "PMU Live Measurements",
+        )
+
+    def test_rejects_grafana_druid_dashboard_in_wrong_folder(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "PMU Live Measurements"):
+            validate_grafana_dashboard(
+                {
+                    "meta": {
+                        "provisioned": True,
+                        "folderTitle": "WAMA Infrastructure",
+                    },
+                    "dashboard": {
+                        "uid": "wama-pmu-live-measurements",
+                    },
+                },
+                "wama-pmu-live-measurements",
+                "WAMA Measurements",
+                "PMU Live Measurements",
+            )
+
+    def test_accepts_unit_safe_grafana_pmu_dashboard(self) -> None:
+        validate_grafana_pmu_dashboard(
+            {"dashboard": {"panels": self._pmu_dashboard_panels()}}
+        )
+
+    def test_rejects_grafana_pmu_dashboard_with_wrong_rocof_unit(self) -> None:
+        panels = self._pmu_dashboard_panels()
+        panels[3]["fieldConfig"]["defaults"]["unit"] = "hertz"
+        with self.assertRaisesRegex(ReadinessError, "ROCOF"):
+            validate_grafana_pmu_dashboard({"dashboard": {"panels": panels}})
+
+    @staticmethod
+    def _pmu_dashboard_panels() -> list[dict[str, object]]:
+        panels: list[dict[str, object]] = []
+        for title, panel_type, unit in (
+            ("Phase Voltages", "timeseries", "volt"),
+            ("Phase Currents", "timeseries", "amp"),
+            ("Frequency", "timeseries", "hertz"),
+            ("ROCOF (Hz/s)", "timeseries", "suffix:Hz/s"),
+            ("Latest Valid PMU Records", "table", None),
+        ):
+            defaults = {} if unit is None else {"unit": unit}
+            panels.append(
+                {
+                    "title": title,
+                    "type": panel_type,
+                    "datasource": {
+                        "uid": "druid",
+                        "type": "grafadruid-druid-datasource",
+                    },
+                    "fieldConfig": {"defaults": defaults},
+                }
+            )
+        return panels
+
+    def test_accepts_grafana_druid_pmu_query_frame(self) -> None:
+        validate_grafana_pmu_query(
+            {
+                "results": {
+                    "A": {
+                        "status": 200,
+                        "frames": [
+                            {
+                                "schema": {
+                                    "fields": [
+                                        {"name": "__time"},
+                                        {"name": "mrid"},
+                                        {"name": "double_value"},
+                                    ]
+                                },
+                                "data": {
+                                    "values": [
+                                        [1_787_054_665_443],
+                                        ["urn:wama:poc:pmu:bay-01:frequency"],
+                                        [50.01],
+                                    ]
+                                },
+                            }
+                        ],
+                    }
+                }
+            },
+            "urn:wama:poc:pmu:bay-01:frequency",
+            50.01,
+        )
+
+    def test_rejects_grafana_druid_pmu_query_with_wrong_value(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "double_value"):
+            validate_grafana_pmu_query(
+                {
+                    "results": {
+                        "A": {
+                            "status": 200,
+                            "frames": [
+                                {
+                                    "schema": {
+                                        "fields": [
+                                            {"name": "__time"},
+                                            {"name": "mrid"},
+                                            {"name": "double_value"},
+                                        ]
+                                    },
+                                    "data": {
+                                        "values": [
+                                            [1_787_054_665_443],
+                                            ["urn:wama:poc:pmu:bay-01:frequency"],
+                                            [49.99],
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                },
+                "urn:wama:poc:pmu:bay-01:frequency",
+                50.01,
+            )
+
+    def test_accepts_druid_supervisor_status_payload_envelope(self) -> None:
+        validate_supervisor_status(
+            {
+                "id": "live_measurements",
+                "payload": {
+                    "id": "live_measurements",
+                    "detailedState": "RUNNING",
+                    "recentErrors": [],
+                },
+            },
+            "live_measurements",
+        )
+
+    def test_accepts_queryable_druid_pmu_frequency_row(self) -> None:
+        validate_measurement_rows(
+            [
+                {
+                    "__time": "2026-08-18T12:00:00.000Z",
+                    "mrid": "urn:wama:poc:pmu:bay-01:frequency",
+                    "double_value": 50.01,
+                    "quality_valid": "true",
+                    "timestamp_mccs": "2026-08-18T12:00:00.000Z",
+                }
+            ],
+            "urn:wama:poc:pmu:bay-01:frequency",
+            50.01,
+        )
+
+    def test_rejects_druid_row_with_mismatched_mccs_timestamp(self) -> None:
+        with self.assertRaisesRegex(DruidReadinessError, "timestamp_mccs"):
+            validate_measurement_rows(
+                [
+                    {
+                        "__time": "2026-08-18T12:00:00.000Z",
+                        "mrid": "urn:wama:poc:pmu:bay-01:frequency",
+                        "double_value": 50.01,
+                        "quality_valid": True,
+                        "timestamp_mccs": "2026-08-18T12:00:01.000Z",
+                    }
+                ],
+                "urn:wama:poc:pmu:bay-01:frequency",
+                50.01,
+            )
+
+    def test_rejects_druid_supervisor_parse_errors(self) -> None:
+        with self.assertRaisesRegex(DruidReadinessError, "errors"):
+            validate_supervisor_status(
+                {
+                    "id": "live_measurements",
+                    "detailedState": "RUNNING",
+                    "recentErrors": ["parse error"],
+                },
+                "live_measurements",
+            )
+
+    def test_accepts_private_seeded_processors_repository(self) -> None:
+        validate_forgejo_repository(
+            {
+                "private": True,
+                "empty": False,
+                "default_branch": "main",
+            }
+        )
+
+    def test_rejects_unseeded_processors_repository(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "private and seeded"):
+            validate_forgejo_repository(
+                {
+                    "private": True,
+                    "empty": True,
+                    "default_branch": "main",
+                }
+            )
+
+    def test_accepts_registered_idle_runner_connections(self) -> None:
         validate_forgejo_runners(
             [
                 {
-                    "name": "wama-applications",
+                    "name": "wama-processors-ci",
                     "status": "idle",
-                    "labels": [
-                        "wama-app-ci:docker://wama-forgejo-runner:local",
-                        "wama-app-deploy:host",
-                    ],
-                }
+                    "labels": ["wama-processors-ci:docker://wama-forgejo-runner:local"],
+                },
+                {
+                    "name": "wama-processors-deploy",
+                    "status": "idle",
+                    "labels": ["wama-processors-deploy:host"],
+                },
             ],
-            "wama-applications",
         )
 
-    def test_rejects_runner_missing_deployment_label(self) -> None:
-        with self.assertRaisesRegex(ReadinessError, "wama-app-deploy"):
+    def test_rejects_missing_deployment_runner_connection(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "wama-processors-deploy"):
             validate_forgejo_runners(
-                [{"name": "wama-applications", "status": "idle", "labels": ["wama-app-ci"]}],
-                "wama-applications",
+                [
+                    {
+                        "name": "wama-processors-ci",
+                        "status": "idle",
+                        "labels": ["wama-processors-ci"],
+                    }
+                ],
             )
 
     def test_accepts_up_metrics(self) -> None:
@@ -150,3 +396,23 @@ class ControlPlaneTests(unittest.TestCase):
                 },
                 "kafka-exporter",
             )
+
+
+class PostgreSQLReadinessTests(unittest.TestCase):
+    """Keep the infrastructure gate independent from app-owned catalog tables."""
+
+    def test_accepts_expected_identity_without_querying_application_tables(self) -> None:
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = ("wama", "wama")
+        settings = SimpleNamespace(
+            postgres_dsn="postgresql://wama:wama-postgres-password@postgres:5432/wama",
+            postgres_database="wama",
+            postgres_user="wama",
+        )
+
+        with patch("infra_readiness.checks.psycopg.connect", return_value=connection):
+            check_postgres(settings)
+
+        cursor.execute.assert_called_once_with("SELECT current_database(), current_user;")

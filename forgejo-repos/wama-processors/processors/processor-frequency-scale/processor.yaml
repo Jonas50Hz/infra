@@ -1,0 +1,4 @@
+kafka_bootstrap_servers: kafka:9092
+consumer_group: processor-frequency-scale
+input_topic: LiveMeasurement
+output_topic: LiveMeasurement
