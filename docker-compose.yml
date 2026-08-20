@@ -10,9 +10,8 @@ include:
   - ./services/iec104-browser/compose.yaml
   - ./services/postgres/compose.yaml
   - ./services/seaweedfs/compose.yaml
-  - ./services/measurement-session-exporter/compose.yaml
-  - ./services/measurement-session-api/compose.yaml
-  - ./services/measurement-session-browser/compose.yaml
+  - ./services/measurement-session-processor/compose.yaml
+  - ./services/blobmeta-catalog/compose.yaml
   - ./services/measurement-session-e2e/compose.yaml
   - ./services/forgejo/compose.yaml
   - ./services/forgejo-init/compose.yaml

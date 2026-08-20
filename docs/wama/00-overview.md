@@ -49,10 +49,14 @@ foundation matters once multiple use cases reuse and extend it.
 - Optional outbound control to external systems (e.g. IEC 104) or alarms.
 
 ### Measurement session & alarm
-- A `MeasurementSession` is recognised (or a Störschrieb is processed) and
-  recorded with start point, end point, and measurements.
-- The session is stored for long-term access, can be viewed in-system and
-  exported as CSV, and may result in an optional alarm notification.
+- A bounded `MeasurementSession` request identifies start point, end point, and
+  sorted measurement MRIDs. The root-owned worker queries the historical Druid
+  interval and records the resulting samples as an immutable Parquet artifact.
+- Compacted `Blobmeta` captures the artifact pointer, SHA-256, row counts, and
+  complete/partial/rejected status. PostgreSQL materializes that metadata for
+  queries; measurements remain in Druid and SeaweedFS.
+- The session is retained for long-term access and may result in an optional
+  alarm notification. Browser/file-export presentation remains future work.
 - Long-term measurement-session storage has no six-week deletion policy, unlike
   raw data.
 
@@ -63,6 +67,13 @@ foundation matters once multiple use cases reuse and extend it.
   derived-value publication, common data contract, topic/schema governance,
   observability, export interfaces, historical access.
 - **Individual use cases:** use-case-specific processors and logic (PQ, IKN, CoMo).
+
+## Planned C37.118 source simulation
+
+The current `pmu-gateway` is a fast Common-Format fixture, not a C37.118
+endpoint. The planned memory-bounded C37.118 TCP simulator is specified in
+[05-c37-118-simulator.md](05-c37-118-simulator.md). It will exercise a future
+source-protocol gateway before that gateway publishes `LiveMeasurement` records.
 
 ## Governance (from the WAMA Platform deck)
 - Architecture owner + ADR process; technology-decision backlog.

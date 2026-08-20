@@ -15,8 +15,9 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
    Common Format (`MCCSMeasurementValue`).
 2. **Gateway → Kafka.** Normalised measurements published to `LiveMeasurement`.
 3. **Processing.** Quixstreams processors consume `LiveMeasurement`, compute
-  derived values, and write them back to Kafka. They also emit
-  `MeasurementSession`, `Alarm`, and `Export` records. The planned
+  derived values, and write them back to Kafka. Producers may submit bounded
+  `MeasurementSession` requests, and processors may emit `Alarm` and `Export`
+  records. The planned
   [LFR per-second frequency provision](04-lfr-frequency-provision.md) processor
   begins at this Kafka boundary; source-protocol and PDC ingestion are outside
   that use-case specification.
@@ -46,17 +47,17 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 | Topic | Type | Contents |
 |-------|------|----------|
 | `LiveMeasurement` | stream | `MCCSMeasurementValue` (Common Format) + derived values |
-| `MeasurementSession` | stream | Bounded measurement sessions (start/end/measurement context) |
+| `MeasurementSession` | stream | Raw-Protobuf bounded historical extraction requests |
 | `Alarm` | stream | Alarm records raised from measurement sessions |
 | `Export` | stream | Typed raw-Protobuf `ExportRecord` values for one-way IEC 104 export; file/MQTT payloads remain future work |
 | `Masterdata` | compacted | Source masterdata (IP + location, capabilities) |
 | `Schema` | compacted | Common-Format schema definitions |
-| `Blobmeta` | compacted | Pointers/metadata for blobs in SeaweedFS |
+| `Blobmeta` | compacted | Raw-Protobuf immutable Parquet pointers, status, and MRID coverage |
 
-PostgreSQL receives the immutable `measurement_session_catalog` projection from
-the `MeasurementSession` topic. Kafka remains the source of truth. A future
-Kafka Connector may also mirror the compacted topics into PostgreSQL; it is not
-part of this PoC.
+PostgreSQL receives the immutable `blobmeta_catalog` projection from the
+compacted `Blobmeta` topic. Kafka remains the source of truth. A future Kafka
+Connector may mirror `Masterdata` and `Schema` separately; it is not part of
+this PoC.
 
 ## Common Format — the contract
 **`MCCSMeasurementValue`**, proto3, package `rtd_schema.v1`. Canonical file:
@@ -138,44 +139,43 @@ run concurrently. No export-producing processor exists yet; a future processor
 owns its own deliberate copy of this canonical contract in its Forgejo
 repository.
 
-## Finalized MeasurementSession contract
-**`MeasurementSession`**, proto3, package `wama.measurement_session.v1`.
-Canonical file: [`schema/measurement_session.proto`](schema/measurement_session.proto).
-Serialization is **raw Protobuf** on the existing `MeasurementSession` topic.
-It is a final-only immutable record, not a live lifecycle-update protocol.
+## MeasurementSession request and Blobmeta result contracts
+**`MeasurementSessionRequest`**, proto3, package
+`wama.measurement_session.v1`. Canonical file:
+[`schema/measurement_session.proto`](schema/measurement_session.proto).
+Serialization is raw Protobuf on `MeasurementSession`, keyed by canonical
+`session_id`; the Kafka record timestamp equals `requested_at` rounded down to
+milliseconds.
 
-The bounded record contains a canonical UUID session ID, source MRID, ordered
-start/end/finalization timestamps, aggregate measurement/artifact counts, and
-at most 32 sorted metadata entries. It contains no waveform or raw samples.
+The request contains a canonical UUID, requested/start/end timestamps, sorted
+unique MRIDs, and at most 32 sorted metadata entries. It represents the
+half-open interval $[started\_at, ended\_at)$ and is bounded by environment
+defaults of 32 MRIDs and 24 hours. It contains no raw samples.
 
-Its `ManifestReference` identifies a canonical JSON manifest in
-`wama-measurement-sessions` by safe object key, byte length, media type, and a
-32-byte SHA-256 digest. The manifest lists immutable artifact IDs, object keys,
-media types, byte lengths, and digests. The exporter uploads the objects and
-manifest before publishing Kafka; replay accepts only digest-identical content.
+The root-owned worker validates the request, streams Druid rows in timestamp and
+MRID order into a typed long-form Parquet artifact, stores it under
+`sessions/<session-id>/measurements.parquet`, and writes a raw-Protobuf receipt
+for idempotent replay. It then publishes **`Blobmeta`**, proto3 package
+`wama.blobmeta.v1`, from
+[`schema/blobmeta.proto`](schema/blobmeta.proto) to the compacted `Blobmeta`
+topic keyed by immutable `blob_id`.
 
-The catalog API revalidates the Protobuf payload and Kafka key, commits its
-immutable PostgreSQL projection before its Kafka offset, and accepts only
-identical replays for a session ID. It refetches and hashes the manifest for
-detail/download requests, verifies SeaweedFS object length and `sha256`
-metadata, then streams the selected artifact. It never returns a direct object
-store URL, presigned URL, or S3 credential.
-
-For this PoC, the `waveform` artifact is a `text/csv` series. Before export and
-before browser exposure, its rows must equal `measurement_count`, have strictly
-increasing timezone-aware timestamps, and span the exact session start and end.
-An immutable legacy record that fails this completeness check remains retained
-as evidence but is neither listed nor downloadable through the browser/API.
+`Blobmeta` records the request digest, session interval, copied context,
+per-MRID row counts, total count, Parquet object identity, media type, length,
+and SHA-256. `COMPLETE` requires every requested MRID to have rows; `PARTIAL`
+preserves zero counts for missing MRIDs; bounded request validation failures
+publish auditable `REJECTED` evidence without a Parquet object. The
+`blobmeta-catalog` validates raw bytes and Kafka key, commits immutable
+PostgreSQL metadata and coverage rows before its Kafka offset, and accepts only
+digest-identical replays for a `blob_id`.
 
 ## Measurement session & alarm flow
-- A `MeasurementSession` is recognised (or a Störschrieb is processed) and
-  finalized with start/end context and aggregate counts → written as raw
-  Protobuf to `MeasurementSession` + immutable long-term blobs and manifest.
+- A producer submits a bounded `MeasurementSession` request with start/end
+  context and MRIDs → the root-owned worker queries Druid, writes immutable
+  Parquet to SeaweedFS, then publishes compacted `Blobmeta` evidence.
 - Decision: should an alarm be sent? If yes → `Alarm` + Power-User notification.
-- Measurement-session data is viewable and downloadable through the anonymous
-  read-only browser/API path in this trusted PoC.
-- The PoC fixture exporter emits final records only. Live lifecycle updates,
-  measurement analytics dashboards, and Kubernetes delivery remain excluded.
+- PostgreSQL provides direct metadata/coverage queries; browser/file-export
+  presentation, live lifecycle updates, and Kubernetes delivery remain excluded.
 
 ## Live-data retention
 - The target policy is medium-term live storage followed by aggregation and
@@ -188,6 +188,6 @@ as evidence but is neither listed nor downloadable through the browser/API.
 
 ## Consumer guidance (PoC)
 - Kafka delivery is at-least-once → make processors **idempotent**.
-- Keep raw/waveform data off Kafka; a `MeasurementSession` carries only the
-  integrity-checked manifest reference.
+- Keep raw/waveform data off Kafka; `MeasurementSession` carries only a bounded
+  extraction command and `Blobmeta` carries integrity-checked object metadata.
 - Always set `timestamp_mccs`; carry through field/gateway timestamps if present.

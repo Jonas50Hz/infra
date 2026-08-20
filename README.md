@@ -5,9 +5,10 @@ Apache Kafka broker in KRaft combined mode, initializes the WAMA topic
 contract, provides Kafka UI to inspect brokers, topics, consumer groups, and
 messages, runs a configurable fake PMU gateway, provides Forgejo with one
 Actions runner, includes SeaweedFS as authenticated S3-compatible blob storage,
-and materializes finalized measurement sessions into an immutable PostgreSQL
-catalog. A static browser exposes those sessions anonymously through an API
-that proxies integrity-checked artifacts from SeaweedFS. Grafana dashboards
+and materializes bounded measurement-session requests from Druid into
+integrity-checked Parquet artifacts. Compacted raw-Protobuf `Blobmeta` results
+are projected into PostgreSQL for session, artifact, status, and MRID-coverage
+queries; individual samples remain in Druid and SeaweedFS. Grafana dashboards
 backed by VictoriaMetrics provide host and Docker container infrastructure
 telemetry plus Kafka broker and topic operations metrics, while a Druid-backed
 dashboard displays live PMU measurements over time. A persistent single-server
@@ -33,19 +34,25 @@ and every asset outside the narrow Forgejo deployment scope; in particular, the
 current `pmu-gateway` remains an infrastructure service here. This checkout is
 never added as a Forgejo remote and is never pushed to Forgejo.
 
-[`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/)
-and
-[`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/)
+[`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
+[`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),
+[`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/), and
+[`forgejo-repos/processor-lfr-frequency-provision/`](forgejo-repos/processor-lfr-frequency-provision/)
 are separate processor-repository seeds. `forgejo-init` automatically creates
 one private Forgejo repository per seed and seeds each `main` branch only when
 its remote has no refs. An existing nonempty private repository is left
 unchanged. Each repository contains one internal processor, its one-service
-Compose fragment, deployment tooling, and a Forgejo Actions workflow. A future
-gateway may use its own repository only as an explicit gateway-deployment test;
-it does not move the current `pmu-gateway` or any other infrastructure service
-out of this checkout. Processor containers connect through the external
-`wama-infra` Docker network; they do not include, modify, or redeploy this
-Compose project.
+Compose fragment, deployment tooling, and a Forgejo Actions workflow. The IEC
+104 seed maps the fake-PMU frequency directly to a configured `M_ME_NC_1`
+`ExportRecord`; it does not implement the full LFR preferred-frequency
+algorithm. The LFR seed evaluates configured multi-PMU frequency and voltage
+inputs per UTC second and writes its preferred frequency to `LiveMeasurement`;
+it does not yet produce IEC 104 export requests. A future gateway may use its
+own repository only as an explicit
+gateway-deployment test; it does not move the current `pmu-gateway` or any other
+infrastructure service out of this checkout. Processor containers connect
+through the external `wama-infra` Docker network; they do not include, modify,
+or redeploy this Compose project.
 
 ## Repository layout
 
@@ -69,10 +76,9 @@ service owns its fragment, configuration, and scripts beneath
 | [services/druid-init/](services/druid-init/) | `druid-init` | Idempotent `LiveMeasurement` Kafka supervisor initializer and tests |
 | [services/postgres/](services/postgres/) | `postgres` | Compose fragment, trusted local credentials, and persistent prepared database |
 | [services/seaweedfs/](services/seaweedfs/) | `seaweedfs` | Compose fragment and SeaweedFS S3/admin configuration |
-| [services/measurement-session-exporter/](services/measurement-session-exporter/) | `measurement-session-exporter` | Profile-gated one-shot finalized-session fixture exporter |
-| [services/measurement-session-api/](services/measurement-session-api/) | `measurement-session-api` | Raw-Protobuf catalog materializer and anonymous read-only artifact proxy |
-| [services/measurement-session-browser/](services/measurement-session-browser/) | `measurement-session-browser` | Disposable static browser and same-origin API proxy |
-| [services/measurement-session-e2e/](services/measurement-session-e2e/) | `measurement-session-e2e` | Profile-gated contract-to-download verification service |
+| [services/measurement-session-processor/](services/measurement-session-processor/) | `measurement-session-processor` | Root-owned Druid-to-Parquet Kafka worker for bounded session requests |
+| [services/blobmeta-catalog/](services/blobmeta-catalog/) | `blobmeta-catalog` | Compacted Blobmeta-to-PostgreSQL immutable metadata materializer |
+| [services/measurement-session-e2e/](services/measurement-session-e2e/) | `measurement-session-e2e` | Profile-gated complete/partial request-to-Blobmeta verifier |
 | [services/forgejo/](services/forgejo/) | `forgejo` | Compose fragment and Forgejo server configuration |
 | [services/forgejo-init/](services/forgejo-init/) | `forgejo-init` | Compose fragment and empty-instance bootstrap script |
 | [services/forgejo-runner/](services/forgejo-runner/) | `forgejo-runner` | Compose fragment for the single Forgejo Actions runner |
@@ -94,7 +100,7 @@ directory. Provision each in its own separate processor repository seed.
 
 - Docker Engine with Docker Compose v2 or newer
 - Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8333`, `23646`,
-  `3000`, `3001`, `3002`, `3003`, `5432`, `8888`, `2222`, and `127.0.0.1:2404` available
+  `3000`, `3001`, `3003`, `5432`, `8888`, `2222`, and `127.0.0.1:2404` available
 
 ## Start and stop
 
@@ -137,15 +143,16 @@ docker compose logs infra-readiness
 ```
 
 `kafka`, `druid`, `postgres`, `seaweedfs`, `victoria-metrics`, `grafana`,
-`measurement-session-api`, `iec104-exporter`, and `iec104-browser` should be `healthy`;
-`kafka-init` and `druid-init` should have exited with status `0`; and
-`kafka-ui`, `kafka-exporter`, `pmu-gateway`, `measurement-session-browser`,
-`node-exporter`, `cadvisor`, `forgejo`, and `forgejo-runner` should be running.
+`iec104-exporter`, and `iec104-browser` should be `healthy`; `kafka-init` and
+`druid-init` should have exited with status `0`; and `kafka-ui`,
+`kafka-exporter`, `pmu-gateway`, `measurement-session-processor`,
+`blobmeta-catalog`, `node-exporter`, `cadvisor`, `forgejo`, and
+`forgejo-runner` should be running.
 `forgejo-init` and `infra-readiness` should have exited with status `0`; the
 latter verifies the Kafka contract and PMU traffic, Druid supervisor and SQL
 query, PostgreSQL, SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener.
-The profile-gated measurement-session exporter, contract-to-download verifier,
-and IEC 104 test receiver run only when explicitly invoked.
+The profile-gated measurement-session request-flow verifier and IEC 104 test
+receiver run only when explicitly invoked.
 
 Stop the stack while preserving Kafka, Druid, PostgreSQL, SeaweedFS, Forgejo,
 runner, Grafana, and VictoriaMetrics data:
@@ -233,8 +240,10 @@ at the same time because the exporter permits one control center.
 ## Forgejo Actions
 
 `forgejo-init` creates the configured administrator, private
-`<owner>/processor-frequency-scale` and `<owner>/processor-apparent-power`
-repositories, their initial `main` commits, and a
+`<owner>/processor-frequency-scale`, `<owner>/processor-apparent-power`, and
+`<owner>/processor-frequency-iec104-export`, and
+`<owner>/processor-lfr-frequency-provision` repositories, their initial `main`
+commits, and a
 `.wama-forgejo-processor-root` marker in each isolated deployment root. It
 skips seeding without modifying any existing repository that already has refs,
 and it fails without mutation if an existing repository is not private. Its
@@ -265,8 +274,10 @@ workloads.
 
 Create or adapt processors only from the instructions in the individual
 [frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
-[apparent-power README](forgejo-repos/processor-apparent-power/README.md). Each
-repository owns its Python code, test suite, and app-local Compose fragment.
+[apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
+[frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
+[LFR frequency provision README](forgejo-repos/processor-lfr-frequency-provision/README.md).
+Each repository owns its Python code, test suite, and app-local Compose fragment.
 
 ## Fake PMU messages
 
@@ -318,7 +329,6 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 | Forgejo Git over SSH | `ssh://git@<host-ip>:2222/<owner>/<repository>.git` |
 | Grafana | `http://<host-ip>:3001` |
 | PMU live dashboard | `http://<host-ip>:3001/d/wama-pmu-live-measurements/wama-pmu-live-measurements` |
-| Measurement session browser | `http://<host-ip>:3002` |
 | Druid Router API and web console | `http://<host-ip>:8888` |
 | VictoriaMetrics API and VMUI | `http://127.0.0.1:8428` |
 | IEC 104 controlled station | `tcp://127.0.0.1:2404` |
@@ -435,12 +445,11 @@ aws --endpoint-url http://127.0.0.1:8333 s3 ls
 ## PostgreSQL
 
 `postgres` initializes an empty `wama` database and role on its first start and
-persists them in the `postgres-data` Compose volume. Once
-`measurement-session-api` starts, it creates the immutable
-`measurement_session_catalog` schema from the `MeasurementSession` Kafka topic.
-Kafka remains the source of truth. PostgreSQL is also prepared for a future
-Kafka Connect mirror of compacted `Masterdata`, `Schema`, and `Blobmeta`;
-that connector is not part of this PoC.
+persists them in the `postgres-data` Compose volume. `blobmeta-catalog` owns the
+immutable `blobmeta_catalog` schema and materializes compacted `Blobmeta`
+records after validating their raw-Protobuf evidence. Kafka remains the source
+of truth. A future Kafka Connect mirror for `Masterdata` and `Schema` remains
+separate from this session path.
 
 | Setting | Value |
 | --- | --- |
@@ -458,53 +467,56 @@ docker compose exec -T postgres \
   psql -U wama -d wama -c 'SELECT current_database(), current_user;'
 ```
 
-## Finalized measurement sessions
+## Measurement sessions
 
-The final-only raw-Protobuf contract is
-[`measurement_session.proto`](docs/wama/schema/measurement_session.proto).
-The profile-gated exporter uploads immutable artifacts and a canonical,
-SHA-256-addressed manifest to `wama-measurement-sessions`, then publishes one
-Kafka record keyed by its session ID. It does not infer live windows or emit
-lifecycle updates.
+[`measurement_session.proto`](docs/wama/schema/measurement_session.proto)
+defines a raw-Protobuf `MeasurementSessionRequest` keyed by its canonical UUID.
+It contains a requested timestamp, a bounded half-open `[started_at, ended_at)`
+interval, sorted unique MRIDs, and bounded context metadata. The root-owned
+processor validates the request, queries Druid, writes one long-form typed
+Parquet artifact to `wama-measurement-sessions`, stores an immutable replay
+receipt, then publishes keyed raw-Protobuf
+[`Blobmeta`](docs/wama/schema/blobmeta.proto).
 
-`measurement-session-api` materializes that Kafka evidence idempotently into
-PostgreSQL and verifies the manifest plus SeaweedFS object metadata before it
-lists or streams any artifact. The browser is anonymous, read-only, and has no
-Kafka, PostgreSQL, or S3 credentials; it can access artifacts only through the
-API proxy. This access model is limited to the trusted local PoC.
+`Blobmeta` identifies the artifact, SHA-256, byte size, request digest,
+completion status, and per-MRID row coverage. `COMPLETE` means each requested
+MRID has data; `PARTIAL` records missing MRIDs; bounded validation failures
+produce `REJECTED` evidence. `blobmeta-catalog` projects only this metadata to
+PostgreSQL; it never copies individual measurements there.
 
-Run the complete contract-to-download check after the normal stack is ready:
+Run the complete request-to-Blobmeta check after the normal stack is ready:
 
 ```sh
 scripts/test-measurement-session-flow.sh
 ```
 
-The script uses a unique final session ID, invokes the exporter, independently
-decodes the raw Kafka record, waits for catalog materialization through the
-browser's same-origin API path, and verifies the proxied artifact bytes.
+The script submits unique complete and partial requests, independently validates
+their raw Kafka Blobmeta records, waits for PostgreSQL materialization, and
+verifies SeaweedFS hashes plus Parquet row coverage.
 
 ## Initialized topic contract
 
 | Topic | Type | Cleanup policy | Purpose |
 | --- | --- | --- | --- |
 | `LiveMeasurement` | stream | `delete` | `MCCSMeasurementValue` Common Format measurements and derived values |
-| `MeasurementSession` | stream | `delete` | Bounded measurement sessions with start, end, and measurement context |
+| `MeasurementSession` | stream | `delete` | Raw-Protobuf bounded historical session requests |
 | `Alarm` | stream | `delete` | Alarm records |
 | `Export` | stream | `delete` | Records for real-time and file export |
 | `Masterdata` | compacted | `compact` | Source masterdata and capabilities |
 | `Schema` | compacted | `compact` | Common Format schema definitions |
-| `Blobmeta` | compacted | `compact` | SeaweedFS blob pointers and metadata |
+| `Blobmeta` | compacted | `compact` | Raw-Protobuf immutable Parquet pointers, status, and MRID coverage |
 
-All topics have one partition and replication factor one because this is a
-single-broker PoC. Automatic topic creation is disabled. No retention period
-is set beyond Kafka's broker default because the data-retention decision remains
-open.
+`MeasurementSession` and `Blobmeta` default to 12 partitions so their root
+worker pools can scale; override them with `MEASUREMENT_SESSION_TOPIC_PARTITIONS`
+and `BLOBMETA_TOPIC_PARTITIONS`. All other topics have one partition, and every
+topic has one replica because this is a single-broker PoC. Automatic topic
+creation is disabled. No retention period is set beyond Kafka's broker default
+because the data-retention decision remains open.
 
-The `Event` -> `MeasurementSession` topic rename and
-`wama-events` -> `wama-measurement-sessions` bucket rename are intentional
-clean PoC breaks. A local stack initialized with the old names must be reset
-with `docker compose down -v` before it is started again; no dual-publish,
-topic bridge, or data migration is provided.
+The request/Blobmeta contracts and 12-partition worker topics replace the old
+finalized-session exporter, catalog API, browser, manifest, and CSV flow. This
+is an intentional clean PoC break: run `docker compose down -v` before starting
+an existing local stack. No dual-publish, bridge, or migration is provided.
 
 `LiveMeasurement` uses raw Protobuf. `pmu-gateway` serializes
 `MCCSMeasurementValue` records directly from
@@ -512,10 +524,11 @@ topic bridge, or data migration is provided.
 [the Common Format contract](docs/wama/02-dataflow-contracts.md). Do not use
 JSON console messages as application data on that topic.
 
-`MeasurementSession` also uses raw Protobuf, serialized from
-[the finalized-session schema](docs/wama/schema/measurement_session.proto).
-Its Kafka payload contains bounded metadata and an integrity-checked manifest
-reference only; artifacts remain in SeaweedFS.
+`MeasurementSession` uses raw Protobuf, serialized from
+[the request schema](docs/wama/schema/measurement_session.proto). Its Kafka
+payload carries only the bounded extraction command. `Blobmeta` uses raw
+Protobuf, serialized from [the result schema](docs/wama/schema/blobmeta.proto),
+and is keyed by immutable `blob_id`; Parquet bytes remain in SeaweedFS.
 
 `Export` uses raw Protobuf, serialized from
 [the IEC 104 export schema](docs/wama/schema/iec104_export.proto). The current
@@ -613,11 +626,6 @@ SQL, native-query, supervisor, and web-console access. Druid's Coordinator,
 Overlord, Broker, Historical, task runner, and in-container coordination ports
 remain Compose-internal. Do not expose this Router outside the trusted PoC
 network without adding authentication, TLS, and appropriate authorization.
-
-The measurement-session browser is exposed on port 3002 without authentication
-for this trusted PoC. Its catalog API has no host port, and it is the sole path
-that can retrieve a SeaweedFS artifact for the browser. Do not expose either
-service outside the trusted local network.
 
 The sole Actions runner mounts the host Docker socket and uses Docker socket
 automount for workflow job containers. A workflow can therefore control the

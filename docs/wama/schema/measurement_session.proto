@@ -4,41 +4,27 @@ package wama.measurement_session.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// A finalized MeasurementSession. This contract intentionally has no mutable
-// lifecycle status and never carries raw or waveform bytes.
-message MeasurementSession {
-    // Canonical UUID for this immutable finalized session.
+// A request to materialize a bounded historical measurement session. The
+// completed artifact is described separately on the compacted Blobmeta topic.
+message MeasurementSessionRequest {
+    // Canonical UUID supplied by the request producer.
     string session_id = 1;
 
-    // The source or measurement context associated with the session.
-    string source_mrid = 2;
+    // The timestamp at which this immutable request was produced.
+    google.protobuf.Timestamp requested_at = 2;
 
-    // The bounded measurement interval and the time at which it was finalized.
+    // The requested UTC half-open measurement interval [started_at, ended_at).
     google.protobuf.Timestamp started_at = 3;
     google.protobuf.Timestamp ended_at = 4;
-    google.protobuf.Timestamp finalized_at = 5;
 
-    // Bounded, sorted context entries. Producers and consumers enforce the
-    // cardinality, size, and uniqueness limits outside the wire schema.
+    // Bounded, sorted, unique MRIDs requested for the session artifact.
+    repeated string mrids = 5;
+
+    // Bounded, sorted context entries.
     repeated MetadataEntry metadata = 6;
-
-    // Aggregate evidence only; individual measurements remain off this topic.
-    uint64 measurement_count = 7;
-    uint32 artifact_count = 8;
-
-    // Integrity-checked reference to the canonical SeaweedFS manifest.
-    ManifestReference manifest = 9;
 }
 
 message MetadataEntry {
     string key = 1;
     string value = 2;
-}
-
-message ManifestReference {
-    string bucket = 1;
-    string object_key = 2;
-    uint64 byte_length = 3;
-    string media_type = 4;
-    bytes sha256 = 5;
 }

@@ -1,15 +1,13 @@
-# Measurement Session Contract-to-Download Test
+# Measurement Session Request-Flow Test
 
-`measurement-session-e2e` is a profile-gated one-shot test service. It has no
-S3 or PostgreSQL credentials. The accompanying root script starts the catalog
-API and browser, runs the static exporter with a unique session ID, then runs
-this service.
+`measurement-session-e2e` is a profile-gated one-shot verifier for the
+root-owned request processor. It finds a known queryable Druid row, publishes
+one complete and one partial raw-Protobuf `MeasurementSessionRequest`, validates
+their keyed `Blobmeta` outputs, waits for PostgreSQL metadata materialization,
+and verifies SeaweedFS SHA-256 metadata plus Parquet row coverage.
 
-The test independently decodes the raw-Protobuf Kafka record, waits for the
-catalog through the browser's same-origin API path, verifies the download bytes
-against the exporter fixture, verifies every declared CSV measurement from start
-through end plus the source/date attachment name, and rejects redirects,
-mutations, and leaked object-store details.
+It receives the trusted local PostgreSQL and S3 credentials only for this
+integration test; the persistent `blobmeta-catalog` never receives S3 access.
 
 Run the complete flow with:
 

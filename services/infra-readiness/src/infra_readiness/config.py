@@ -10,6 +10,8 @@ from collections.abc import Mapping
 DEFAULT_FORGEJO_PROCESSOR_REPOSITORIES = (
     "processor-frequency-scale",
     "processor-apparent-power",
+    "processor-frequency-iec104-export",
+    "processor-lfr-frequency-provision",
 )
 
 
@@ -35,9 +37,11 @@ class Settings:
     grafana_password: str
     grafana_url: str
     grafana_username: str
+    blobmeta_topic_partitions: int
     kafka_bootstrap_servers: str
     kafka_consume_timeout_seconds: int
     kafka_topic: str
+    measurement_session_topic_partitions: int
     pmu_expected_mrid_prefix: str
     postgres_database: str
     postgres_dsn: str
@@ -99,6 +103,11 @@ class Settings:
             grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
             grafana_url=_url(values, "GRAFANA_URL", "http://grafana:3000"),
             grafana_username=_required(values, "GF_SECURITY_ADMIN_USER", "wama-admin"),
+            blobmeta_topic_partitions=_positive_integer(
+                values,
+                "BLOBMETA_TOPIC_PARTITIONS",
+                12,
+            ),
             kafka_bootstrap_servers=_required(
                 values,
                 "KAFKA_BOOTSTRAP_SERVERS",
@@ -110,6 +119,11 @@ class Settings:
                 12,
             ),
             kafka_topic=_required(values, "KAFKA_TOPIC", "LiveMeasurement"),
+            measurement_session_topic_partitions=_positive_integer(
+                values,
+                "MEASUREMENT_SESSION_TOPIC_PARTITIONS",
+                12,
+            ),
             pmu_expected_mrid_prefix=values.get(
                 "PMU_EXPECTED_MRID_PREFIX",
                 "urn:wama:poc:pmu:",

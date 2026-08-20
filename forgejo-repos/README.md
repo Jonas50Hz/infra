@@ -13,6 +13,10 @@ Each active processor has its own seed and private Forgejo repository:
 	`processor-frequency-scale`.
 - [`processor-apparent-power/`](processor-apparent-power/) owns only
 	`processor-apparent-power`.
+- [`processor-frequency-iec104-export/`](processor-frequency-iec104-export/)
+  owns only `processor-frequency-iec104-export`.
+- [`processor-lfr-frequency-provision/`](processor-lfr-frequency-provision/)
+	owns only `processor-lfr-frequency-provision`.
 
 `forgejo-init` seeds each repository only when its remote has no refs; an
 existing nonempty private repository is left unchanged. Each workflow deploys
@@ -21,8 +25,13 @@ repository may contain a gateway only for an explicit gateway-deployment test.
 The parent `infra` repository retains all other assets, including the current
 `pmu-gateway` and every infrastructure service.
 
-No seed currently produces `Export` records. When an export-producing processor
-is created, it must copy the canonical
+`processor-frequency-iec104-export` deliberately copies the canonical
 [`../docs/wama/schema/iec104_export.proto`](../docs/wama/schema/iec104_export.proto)
-into that new processor repository deliberately; it must not take ownership of
-the root-owned IEC 104 exporter or receiver.
+and writes direct configured PMU-frequency `M_ME_NC_1` requests to `Export`.
+It is not the full LFR preferred-frequency algorithm. It must not take ownership
+of the root-owned IEC 104 exporter, receiver, or browser.
+
+`processor-lfr-frequency-provision` is the separate multi-PMU per-second LFR
+core. It publishes a configured preferred-frequency Common Format value back to
+`LiveMeasurement`; it does not yet create `Export` records or replace the
+direct-export demonstration.

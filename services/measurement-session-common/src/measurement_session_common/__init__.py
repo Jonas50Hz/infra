@@ -1,1 +1,1 @@
-"""Shared finalized MeasurementSession contract helpers."""
+"""Shared MeasurementSession request and Blobmeta contract helpers."""

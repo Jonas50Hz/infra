@@ -7,7 +7,7 @@ runner_dir="${FORGEJO_RUNNER_DIRECTORY:-/runner}"
 runner_config_file="$runner_dir/config.yaml"
 runner_layout_file="$runner_dir/forgejo-processor-repositories.layout"
 runner_scope_file="$runner_dir/forgejo-processor-repositories.scope"
-runner_layout=four-connections-v2
+runner_layout=eight-connections-v4
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
 seed_root="${FORGEJO_PROCESSOR_SEED_ROOT:-/opt/wama/seeds}"
@@ -16,8 +16,12 @@ admin_email="${FORGEJO_BOOTSTRAP_ADMIN_EMAIL:-wama-admin@local}"
 admin_password="${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
 frequency_repository="${FORGEJO_FREQUENCY_SCALE_REPOSITORY:-processor-frequency-scale}"
 apparent_repository="${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
+frequency_iec104_export_repository="${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
+lfr_frequency_provision_repository="${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
 frequency_deploy_root="${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
 apparent_deploy_root="${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
+frequency_iec104_export_deploy_root="${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
+lfr_frequency_provision_deploy_root="${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
 infra_network="${WAMA_INFRA_NETWORK:-wama-infra}"
 runner_url="${FORGEJO_RUNNER_URL:-}"
 api_url="${FORGEJO_API_URL:-http://forgejo:3000/api/v1}"
@@ -203,11 +207,17 @@ require_value FORGEJO_BOOTSTRAP_ADMIN_PASSWORD "$admin_password"
 require_value FORGEJO_RUNNER_URL "$runner_url"
 require_value WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 require_value WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
+require_value WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
+require_value WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT "$lfr_frequency_provision_deploy_root"
 validate_identifier FORGEJO_BOOTSTRAP_ADMIN_USERNAME "$admin_username"
 validate_identifier FORGEJO_FREQUENCY_SCALE_REPOSITORY "$frequency_repository"
 validate_identifier FORGEJO_APPARENT_POWER_REPOSITORY "$apparent_repository"
+validate_identifier FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY "$frequency_iec104_export_repository"
+validate_identifier FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY "$lfr_frequency_provision_repository"
 validate_deploy_root WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 validate_deploy_root WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
+validate_deploy_root WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
+validate_deploy_root WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT "$lfr_frequency_provision_deploy_root"
 
 if ! forgejo_as_git admin user list | awk -v username="$admin_username" '$2 == username { found = 1 } END { exit !found }'; then
   forgejo_as_git admin user create \
@@ -224,14 +234,20 @@ temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
 initialize_deploy_root "$frequency_repository" "$frequency_deploy_root"
 initialize_deploy_root "$apparent_repository" "$apparent_deploy_root"
+initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root"
+initialize_deploy_root "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_root"
 api_auth_header="$(printf '%s:%s' "$admin_username" "$admin_password" | base64 | tr -d '\n')"
 ensure_repository "$frequency_repository"
 ensure_repository "$apparent_repository"
+ensure_repository "$frequency_iec104_export_repository"
+ensure_repository "$lfr_frequency_provision_repository"
 seed_repository_if_empty "$frequency_repository" "$seed_root/processor-frequency-scale"
 seed_repository_if_empty "$apparent_repository" "$seed_root/processor-apparent-power"
+seed_repository_if_empty "$frequency_iec104_export_repository" "$seed_root/processor-frequency-iec104-export"
+seed_repository_if_empty "$lfr_frequency_provision_repository" "$seed_root/processor-lfr-frequency-provision"
 ensure_package_token
 
-scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository"
+scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$lfr_frequency_provision_repository"
 if [ ! -f "$runner_layout_file" ] || [ "$(cat "$runner_layout_file")" != "$runner_layout" ]; then
   reset_runner_state
 fi
@@ -243,10 +259,18 @@ frequency_ci_name=wama-processor-frequency-scale-ci
 frequency_deploy_name=wama-processor-frequency-scale-deploy
 apparent_ci_name=wama-processor-apparent-power-ci
 apparent_deploy_name=wama-processor-apparent-power-deploy
+frequency_iec104_export_ci_name=wama-processor-frequency-iec104-export-ci
+frequency_iec104_export_deploy_name=wama-processor-frequency-iec104-export-deploy
+lfr_frequency_provision_ci_name=wama-processor-lfr-frequency-provision-ci
+lfr_frequency_provision_deploy_name=wama-processor-lfr-frequency-provision-deploy
 register_runner "$frequency_repository" "$frequency_ci_name" "$runner_ci_label"
 register_runner "$frequency_repository" "$frequency_deploy_name" "$runner_deploy_label"
 register_runner "$apparent_repository" "$apparent_ci_name" "$runner_ci_label"
 register_runner "$apparent_repository" "$apparent_deploy_name" "$runner_deploy_label"
+register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_ci_name" "$runner_ci_label"
+register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_name" "$runner_deploy_label"
+register_runner "$lfr_frequency_provision_repository" "$lfr_frequency_provision_ci_name" "$runner_ci_label"
+register_runner "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_name" "$runner_deploy_label"
 
 printf '%s\n' "$runner_layout" > "$runner_layout_file"
 printf '%s\n' "$scope_manifest" > "$runner_scope_file"
@@ -270,6 +294,8 @@ container:
   valid_volumes:
     - "$frequency_deploy_root"
     - "$apparent_deploy_root"
+    - "$frequency_iec104_export_deploy_root"
+    - "$lfr_frequency_provision_deploy_root"
   options: "--add-host=host.docker.internal:host-gateway --cpus=2 --memory=2g"
 server:
   connections:
@@ -289,4 +315,20 @@ server:
       url: $runner_url
       uuid: $(cat "$runner_dir/$apparent_deploy_name.uuid")
       token: $(cat "$runner_dir/$apparent_deploy_name.secret")
+    $frequency_iec104_export_ci_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$frequency_iec104_export_ci_name.uuid")
+      token: $(cat "$runner_dir/$frequency_iec104_export_ci_name.secret")
+    $frequency_iec104_export_deploy_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$frequency_iec104_export_deploy_name.uuid")
+      token: $(cat "$runner_dir/$frequency_iec104_export_deploy_name.secret")
+    $lfr_frequency_provision_ci_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$lfr_frequency_provision_ci_name.uuid")
+      token: $(cat "$runner_dir/$lfr_frequency_provision_ci_name.secret")
+    $lfr_frequency_provision_deploy_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$lfr_frequency_provision_deploy_name.uuid")
+      token: $(cat "$runner_dir/$lfr_frequency_provision_deploy_name.secret")
 EOF

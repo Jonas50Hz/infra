@@ -1,1 +1,1 @@
-"""Contract-to-download verification for finalized WAMA measurement sessions."""
+"""Request-to-Blobmeta verification for WAMA measurement sessions."""

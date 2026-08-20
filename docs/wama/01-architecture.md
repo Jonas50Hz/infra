@@ -17,11 +17,11 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 |-------|--------|------|
 | Transport & format | Kafka (Strimzi) + Common Format | Stream backbone; one schema for all sources |
 | Config & delivery | Git + Forgejo + ArgoCD | Versioned config/logic; CI tests; GitOps deploy |
-| Stream processing | Quixstreams + Measurement Session Exporter | Power-User pipelines, sessions, and derived values |
+| Stream processing | Quixstreams + Measurement Session Worker | Power-User pipelines, sessions, and derived values |
 | Time-series store | Druid | Live + historical query on Common Format |
 | Operational observability | Grafana + VictoriaMetrics | Host and container health metrics and dashboards |
 | Raw / waveform store | SeaweedFS | Blob for raw samples, waveforms, and measurement sessions |
-| Config store | PostgreSQL (Kafka Connector planned) | Future Masterdata / Schema / Blobmeta mirror |
+| Config store | PostgreSQL | Root-owned compacted Blobmeta projection; Masterdata/Schema mirror later |
 | Visualisation | Grafana (+ Trino later) | Dashboards; federated query later |
 | Export | IEC 104 + file export service | Real-time and batch/file export |
 
@@ -30,14 +30,15 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 - **Kafka** is the backbone. Stream topics: `LiveMeasurement`,
   `MeasurementSession`, `Alarm`, `Export`. Compacted topics: `Masterdata`,
   `Schema`, `Blobmeta` (single source of truth).
-- **PostgreSQL** holds the immutable `measurement_session_catalog` projection;
-  Kafka remains the source of truth. A future Kafka Connector may mirror the
-  compacted topics into it.
+- **PostgreSQL** holds the immutable `blobmeta_catalog` projection. Kafka
+  remains the source of truth; a future connector may mirror compacted
+  `Masterdata` and `Schema` records separately.
 - **Quixstreams** processors read the stream, write derived values back to
   Kafka, and emit their configured records.
-- **Finalized-session services** export a static final-only fixture, materialize
-  the raw-Protobuf topic into PostgreSQL, and serve a credential-free browser
-  through an anonymous read-only API.
+- **Measurement-session services** consume bounded raw-Protobuf requests,
+  query Druid, create immutable Parquet artifacts in SeaweedFS, publish
+  compacted raw-Protobuf `Blobmeta`, and materialize metadata-only PostgreSQL
+  rows.
 - **Druid** directly ingests raw-Protobuf `LiveMeasurement` records from Kafka
   for live query through its Router API.
 - **SeaweedFS** holds raw measurements and long-term measurement sessions (off
@@ -79,11 +80,13 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 ### Compose PoC delivery
 - The infrastructure repository provisions Forgejo, Kafka, and the external
   `wama-infra` Docker network. It is never pushed to Forgejo.
-- `forgejo-repos/processor-frequency-scale/` and
-  `forgejo-repos/processor-apparent-power/` are separate processor repository
-  seeds. `forgejo-init` creates their private Forgejo repositories, seeds each
-  `main` only when it is empty, and registers separate CI and deployment runner
-  connections for each.
+- `forgejo-repos/processor-frequency-scale/`,
+  `forgejo-repos/processor-apparent-power/`,
+  `forgejo-repos/processor-frequency-iec104-export/`, and
+  `forgejo-repos/processor-lfr-frequency-provision/` are separate processor
+  repository seeds. `forgejo-init` creates their private Forgejo repositories,
+  seeds each `main` only when it is empty, and registers separate CI and
+  deployment runner connections for each.
 - Processor pull requests validate only their own code and local tooling. A
   trusted processor `main` push publishes only that processor OCI image and
   deploys only its one Compose service from an isolated deployment root.
@@ -92,20 +95,24 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 - `iec104-exporter` and its profile-gated `iec104-receiver` control-center test
   are root-owned infrastructure services. A future processor may produce typed
   `Export` records but must not deploy or take ownership of either service.
-- The finalized-session exporter, catalog API, browser, and contract-to-download
-  Forgejo processor deployment scope. Forgejo does not deploy or modify them.
-  root-owned. Root Compose builds and deploys the local Druid image; the
-  processor-only Forgejo workflow neither publishes nor deploys it.
-  local PoC. It is not a production isolation model.
+- `measurement-session-processor`, `blobmeta-catalog`, and the profile-gated
+  request-flow verifier are root-owned. Forgejo does not deploy or modify them.
+  Root Compose also builds and deploys the local Druid image; the processor-only
+  Forgejo workflow neither publishes nor deploys root infrastructure. This is a
+  local PoC and not a production isolation model.
 
 ### Quixstreams
 - Runs on the measurement stream; derived values are written back to Kafka.
-- Processor detection and lifecycle updates remain future work. This PoC uses a
-  static final-only exporter that writes an immutable `MeasurementSession`
-  record and long-term blob manifest.
-- The planned [LFR per-second frequency provision](04-lfr-frequency-provision.md)
-  is a separate Kafka-first processor specification. It does not extend the
-  current Hz-to-mHz `processor-frequency-scale` example.
+- The root-owned measurement-session worker consumes `MeasurementSession`
+  extraction requests, reads Druid's no-rollup historical values, and writes
+  typed Parquet plus immutable `Blobmeta` evidence. It scales as a Kafka
+  consumer group across the 12 request-topic partitions; Compose does not spawn
+  a privileged container per request.
+- The [LFR per-second frequency provision](04-lfr-frequency-provision.md) now
+  has a separate Kafka-first processor seed. Its current core publishes a
+  configured preferred-frequency value to `LiveMeasurement`; IEC 104 export,
+  complete PMU status evidence, and durable audit storage remain separate work.
+  It does not extend the current Hz-to-mHz `processor-frequency-scale` example.
 - Commit → CI tests → auto-deploy if it passes.
 - **Open risk:** throughput / heavy waveform at target load unproven — benchmark
   early. Heavy signal-processing may need a JVM engine (Flink/Beam).

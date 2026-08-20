@@ -1,115 +1,239 @@
-"""Validation rules that make finalized MeasurementSession records immutable."""
+"""Validation rules for immutable session requests and Blobmeta results."""
 
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import timedelta, timezone
+from hashlib import sha256
 import re
 from uuid import UUID
 
-from measurement_session_common.generated.measurement_session_pb2 import MeasurementSession
+from measurement_session_common.generated.blobmeta_pb2 import Blobmeta
+from measurement_session_common.generated.measurement_session_pb2 import MeasurementSessionRequest
 
 DEFAULT_SESSION_BUCKET = "wama-measurement-sessions"
-MANIFEST_MEDIA_TYPE = "application/vnd.wama.measurement-session-manifest+json;version=1"
-MAX_ARTIFACTS = 64
-MAX_ARTIFACT_BYTES = 4 * 1024 * 1024 * 1024
-MAX_MANIFEST_BYTES = 1024 * 1024
+PARQUET_MEDIA_TYPE = "application/vnd.apache.parquet"
+BLOBMETA_MEDIA_TYPE = "application/vnd.wama.blobmeta+protobuf;version=1"
 MAX_METADATA_ENTRIES = 32
-MAX_METADATA_KEY_BYTES = 64
 MAX_METADATA_VALUE_BYTES = 256
-MAX_SERIALIZED_SESSION_BYTES = 16 * 1024
-MAX_SOURCE_MRID_BYTES = 256
+MAX_MRID_BYTES = 256
+MAX_REQUEST_SERIALIZED_BYTES = 32 * 1024
+MAX_BLOBMETA_SERIALIZED_BYTES = 32 * 1024
+MAX_OBJECT_BYTES = 4 * 1024 * 1024 * 1024
+MAX_REJECTION_REASON_BYTES = 1024
+DEFAULT_MAX_MRIDS = 32
+DEFAULT_MAX_INTERVAL_HOURS = 24
 
 METADATA_KEY_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,63}\Z")
 OBJECT_KEY_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,511}\Z")
 
 
 class ContractValidationError(ValueError):
-    """Raised when a session violates the immutable finalized-session contract."""
+    """Raised when a session request or Blobmeta result violates its contract."""
 
 
-def validate_measurement_session(session: MeasurementSession) -> None:
-    """Validate a raw-Protobuf final session before storage or cataloging."""
+def validate_measurement_session_request(
+    request: MeasurementSessionRequest,
+    max_mrids: int = DEFAULT_MAX_MRIDS,
+    max_interval_hours: int = DEFAULT_MAX_INTERVAL_HOURS,
+) -> None:
+    """Validate one bounded raw-Protobuf request before historical extraction."""
 
-    _canonical_uuid(session.session_id, "session_id")
-    _bounded_text(session.source_mrid, "source_mrid", MAX_SOURCE_MRID_BYTES)
+    if max_mrids < 1:
+        raise ContractValidationError("max_mrids must be at least one")
+    if max_interval_hours < 1:
+        raise ContractValidationError("max_interval_hours must be at least one")
+    _canonical_uuid(request.session_id, "session_id")
+    requested_at = _timestamp(request, "requested_at")
+    started_at = _timestamp(request, "started_at")
+    ended_at = _timestamp(request, "ended_at")
+    del requested_at
+    if started_at >= ended_at:
+        raise ContractValidationError("started_at must be before ended_at")
+    if ended_at - started_at > timedelta(hours=max_interval_hours):
+        raise ContractValidationError("measurement interval exceeds configured maximum")
+    _validate_mrids(request.mrids, max_mrids)
+    _validate_metadata(request.metadata)
+    if request.ByteSize() > MAX_REQUEST_SERIALIZED_BYTES:
+        raise ContractValidationError(
+            f"serialized request must not exceed {MAX_REQUEST_SERIALIZED_BYTES} bytes"
+        )
 
-    timestamps = []
-    for field_name in ("started_at", "ended_at", "finalized_at"):
-        if not session.HasField(field_name):
-            raise ContractValidationError(f"{field_name} is required")
-        timestamp = getattr(session, field_name)
-        try:
-            timestamp.ToDatetime(tzinfo=timezone.utc)
-        except ValueError as error:
-            raise ContractValidationError(f"{field_name} is outside the Protobuf timestamp range") from error
-        timestamps.append(timestamp.seconds * 1_000_000_000 + timestamp.nanos)
-    if timestamps[0] > timestamps[1] or timestamps[1] > timestamps[2]:
-        raise ContractValidationError("started_at must be <= ended_at <= finalized_at")
 
-    if len(session.metadata) > MAX_METADATA_ENTRIES:
+def validate_blobmeta(result: Blobmeta) -> None:
+    """Validate an immutable compacted output before publication or cataloging."""
+
+    _canonical_uuid(result.session_id, "session_id")
+    _bounded_text(result.blob_id, "blob_id", 512)
+    _safe_object_key(result.blob_id, "blob_id")
+    if len(result.request_sha256) != 32:
+        raise ContractValidationError("request_sha256 must contain exactly 32 bytes")
+
+    requested_at = _timestamp(result, "requested_at")
+    started_at = _timestamp(result, "started_at")
+    ended_at = _timestamp(result, "ended_at")
+    finalized_at = _timestamp(result, "finalized_at")
+    if started_at >= ended_at:
+        raise ContractValidationError("started_at must be before ended_at")
+    if finalized_at < requested_at:
+        raise ContractValidationError("finalized_at must not precede requested_at")
+
+    status = result.status
+    if status not in {Blobmeta.COMPLETE, Blobmeta.PARTIAL, Blobmeta.REJECTED}:
+        raise ContractValidationError("status must be COMPLETE, PARTIAL, or REJECTED")
+    _validate_metadata(result.metadata)
+
+    if status == Blobmeta.REJECTED:
+        _validate_rejection(result)
+    else:
+        _validate_completed_result(result, status)
+
+    if result.ByteSize() > MAX_BLOBMETA_SERIALIZED_BYTES:
+        raise ContractValidationError(
+            f"serialized Blobmeta must not exceed {MAX_BLOBMETA_SERIALIZED_BYTES} bytes"
+        )
+
+
+def request_sha256(request: MeasurementSessionRequest) -> bytes:
+    """Return immutable evidence for a request's validated wire representation."""
+
+    return sha256(request.SerializeToString(deterministic=True)).digest()
+
+
+def successful_blob_id(session_id: str) -> str:
+    """Return the one canonical blob identity for a materialized session."""
+
+    _canonical_uuid(session_id, "session_id")
+    return f"sessions/{session_id}/measurements"
+
+
+def rejected_blob_id(session_id: str, request_digest: bytes) -> str:
+    """Return a deterministic compacted identity for one rejected request."""
+
+    _canonical_uuid(session_id, "session_id")
+    if len(request_digest) != 32:
+        raise ContractValidationError("request_digest must contain exactly 32 bytes")
+    return f"rejections/{session_id}/{request_digest.hex()}"
+
+
+def session_parquet_key(session_id: str) -> str:
+    """Return the canonical immutable Parquet object key for one session."""
+
+    _canonical_uuid(session_id, "session_id")
+    return f"sessions/{session_id}/measurements.parquet"
+
+
+def successful_receipt_key(session_id: str) -> str:
+    """Return the immutable Blobmeta receipt key for a completed session."""
+
+    _canonical_uuid(session_id, "session_id")
+    return f"sessions/{session_id}/blobmeta.pb"
+
+
+def rejected_receipt_key(session_id: str, request_digest: bytes) -> str:
+    """Return the immutable Blobmeta receipt key for a rejected request."""
+
+    return f"{rejected_blob_id(session_id, request_digest)}.pb"
+
+
+def validate_kafka_key(key: bytes | None, expected: str, field_name: str) -> None:
+    """Require a UTF-8 Kafka key to exactly match the Protobuf identity field."""
+
+    if key != expected.encode("utf-8"):
+        raise ContractValidationError(f"Kafka key does not match {field_name}")
+
+
+def _validate_completed_result(result: Blobmeta, status: int) -> None:
+    _validate_mrids(result.mrids, DEFAULT_MAX_MRIDS)
+    if len(result.mrid_coverage) != len(result.mrids):
+        raise ContractValidationError("mrid_coverage must contain exactly one entry for every MRID")
+    coverage_total = 0
+    missing_mrids = 0
+    for mrid, coverage in zip(result.mrids, result.mrid_coverage, strict=True):
+        if coverage.mrid != mrid:
+            raise ContractValidationError("mrid_coverage entries must be ordered by requested MRID")
+        coverage_total += coverage.measurement_count
+        if coverage.measurement_count == 0:
+            missing_mrids += 1
+    if result.measurement_count != coverage_total:
+        raise ContractValidationError("measurement_count must equal the sum of MRID coverage")
+    if result.rejection_reason:
+        raise ContractValidationError("completed Blobmeta must not contain rejection_reason")
+    if not result.HasField("object"):
+        raise ContractValidationError("completed Blobmeta requires an object reference")
+    _validate_object_reference(result)
+    if result.blob_id != successful_blob_id(result.session_id):
+        raise ContractValidationError("completed Blobmeta uses an unexpected blob_id")
+    if status == Blobmeta.COMPLETE and missing_mrids:
+        raise ContractValidationError("COMPLETE Blobmeta cannot have missing MRIDs")
+    if status == Blobmeta.PARTIAL and not missing_mrids:
+        raise ContractValidationError("PARTIAL Blobmeta must identify at least one missing MRID")
+
+
+def _validate_rejection(result: Blobmeta) -> None:
+    if result.mrids or result.mrid_coverage or result.measurement_count:
+        raise ContractValidationError("REJECTED Blobmeta must not contain measurement coverage")
+    _bounded_text(result.rejection_reason, "rejection_reason", MAX_REJECTION_REASON_BYTES)
+    if result.HasField("object"):
+        raise ContractValidationError("REJECTED Blobmeta must not contain an object reference")
+    expected_blob_id = rejected_blob_id(result.session_id, bytes(result.request_sha256))
+    if result.blob_id != expected_blob_id:
+        raise ContractValidationError("REJECTED Blobmeta uses an unexpected blob_id")
+
+
+def _validate_object_reference(result: Blobmeta) -> None:
+    reference = result.object
+    if reference.bucket != DEFAULT_SESSION_BUCKET:
+        raise ContractValidationError(f"object.bucket must be {DEFAULT_SESSION_BUCKET!r}")
+    expected_key = session_parquet_key(result.session_id)
+    if reference.object_key != expected_key:
+        raise ContractValidationError("object.object_key must use the canonical session namespace")
+    _safe_object_key(reference.object_key, "object.object_key")
+    if reference.media_type != PARQUET_MEDIA_TYPE:
+        raise ContractValidationError("object.media_type must be the canonical Parquet media type")
+    if reference.byte_length == 0 or reference.byte_length > MAX_OBJECT_BYTES:
+        raise ContractValidationError("object.byte_length is outside the supported range")
+    if len(reference.sha256) != 32:
+        raise ContractValidationError("object.sha256 must contain exactly 32 bytes")
+
+
+def _validate_mrids(values: object, maximum: int) -> None:
+    mrids = tuple(values)
+    if not 1 <= len(mrids) <= maximum:
+        raise ContractValidationError(f"mrids must contain between 1 and {maximum} entries")
+    previous: str | None = None
+    for mrid in mrids:
+        _bounded_text(mrid, "mrid", MAX_MRID_BYTES)
+        if previous is not None and mrid <= previous:
+            raise ContractValidationError("mrids must be strictly sorted and unique")
+        previous = mrid
+
+
+def _validate_metadata(entries: object) -> None:
+    metadata = tuple(entries)
+    if len(metadata) > MAX_METADATA_ENTRIES:
         raise ContractValidationError(f"metadata must contain at most {MAX_METADATA_ENTRIES} entries")
     previous_key: str | None = None
-    for entry in session.metadata:
+    for entry in metadata:
         if not METADATA_KEY_PATTERN.fullmatch(entry.key):
-            raise ContractValidationError("metadata keys must use ASCII letters, digits, dots, underscores, or hyphens")
+            raise ContractValidationError(
+                "metadata keys must use ASCII letters, digits, dots, underscores, or hyphens"
+            )
         _bounded_text(entry.value, f"metadata.{entry.key}", MAX_METADATA_VALUE_BYTES)
         if previous_key is not None and entry.key <= previous_key:
             raise ContractValidationError("metadata entries must be strictly sorted by unique key")
         previous_key = entry.key
 
-    if session.artifact_count == 0 or session.artifact_count > MAX_ARTIFACTS:
-        raise ContractValidationError(f"artifact_count must be between 1 and {MAX_ARTIFACTS}")
-    if not session.HasField("manifest"):
-        raise ContractValidationError("manifest is required")
-    _validate_manifest_reference(session)
 
-    if session.ByteSize() > MAX_SERIALIZED_SESSION_BYTES:
+def _timestamp(message: object, field_name: str):
+    if not message.HasField(field_name):
+        raise ContractValidationError(f"{field_name} is required")
+    timestamp = getattr(message, field_name)
+    try:
+        return timestamp.ToDatetime(tzinfo=timezone.utc)
+    except ValueError as error:
         raise ContractValidationError(
-            f"serialized session must not exceed {MAX_SERIALIZED_SESSION_BYTES} bytes"
-        )
-
-
-def validate_artifact_descriptor(
-    session_id: str,
-    artifact_id: str,
-    object_key: str,
-    content_type: str,
-    size_bytes: int,
-    sha256_hex: str,
-) -> None:
-    """Validate one manifest artifact without trusting caller-supplied paths."""
-
-    _canonical_uuid(session_id, "session_id")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", artifact_id):
-        raise ContractValidationError("artifact ids must use lowercase letters, digits, and hyphens")
-    expected_prefix = f"sessions/{session_id}/artifacts/"
-    if not object_key.startswith(expected_prefix):
-        raise ContractValidationError("artifact object_key is outside its session namespace")
-    _safe_object_key(object_key, "artifact object_key")
-    if not _is_media_type(content_type):
-        raise ContractValidationError("artifact content_type must be a media type")
-    if not 0 < size_bytes <= MAX_ARTIFACT_BYTES:
-        raise ContractValidationError(f"artifact size_bytes must be between 1 and {MAX_ARTIFACT_BYTES}")
-    if not re.fullmatch(r"[0-9a-f]{64}", sha256_hex):
-        raise ContractValidationError("artifact sha256 must be lowercase hexadecimal SHA-256")
-
-
-def _validate_manifest_reference(session: MeasurementSession) -> None:
-    manifest = session.manifest
-    if manifest.bucket != DEFAULT_SESSION_BUCKET:
-        raise ContractValidationError(f"manifest.bucket must be {DEFAULT_SESSION_BUCKET!r}")
-    expected_key = f"sessions/{session.session_id}/manifest.json"
-    if manifest.object_key != expected_key:
-        raise ContractValidationError("manifest.object_key must use the canonical session namespace")
-    _safe_object_key(manifest.object_key, "manifest.object_key")
-    if manifest.byte_length == 0 or manifest.byte_length > MAX_MANIFEST_BYTES:
-        raise ContractValidationError(
-            f"manifest.byte_length must be between 1 and {MAX_MANIFEST_BYTES}"
-        )
-    if manifest.media_type != MANIFEST_MEDIA_TYPE:
-        raise ContractValidationError("manifest.media_type is not the canonical manifest media type")
-    if len(manifest.sha256) != 32:
-        raise ContractValidationError("manifest.sha256 must contain exactly 32 bytes")
+            f"{field_name} is outside the Protobuf timestamp range"
+        ) from error
 
 
 def _canonical_uuid(value: str, field_name: str) -> None:

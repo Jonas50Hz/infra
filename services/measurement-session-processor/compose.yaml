@@ -1,0 +1,36 @@
+services:
+  measurement-session-processor:
+    build:
+      context: ../..
+      dockerfile: services/measurement-session-processor/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      druid:
+        condition: service_healthy
+      druid-init:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      BLOBMETA_TOPIC: Blobmeta
+      DRUID_DATASOURCE: live_measurements
+      DRUID_QUERY_TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_DRUID_QUERY_TIMEOUT_SECONDS:-60}"
+      DRUID_ROUTER_URL: http://druid:8888
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUMER_GROUP: measurement-session-processor
+      KAFKA_RETRY_INTERVAL_SECONDS: "${MEASUREMENT_SESSION_KAFKA_RETRY_INTERVAL_SECONDS:-2}"
+      KAFKA_TOPIC: MeasurementSession
+      MEASUREMENT_SESSION_MAX_ARTIFACT_BYTES: "${MEASUREMENT_SESSION_MAX_ARTIFACT_BYTES:-4294967296}"
+      MEASUREMENT_SESSION_MAX_INTERVAL_HOURS: "${MEASUREMENT_SESSION_MAX_INTERVAL_HOURS:-24}"
+      MEASUREMENT_SESSION_MAX_MRIDS: "${MEASUREMENT_SESSION_MAX_MRIDS:-32}"
+      MEASUREMENT_SESSION_MAX_ROWS: "${MEASUREMENT_SESSION_MAX_ROWS:-5000000}"
+      MEASUREMENT_SESSION_PARQUET_BATCH_ROWS: "${MEASUREMENT_SESSION_PARQUET_BATCH_ROWS:-10000}"
+      S3_ACCESS_KEY_ID: wama-s3-admin
+      S3_BUCKET: wama-measurement-sessions
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: wama-s3-admin-secret
+    restart: unless-stopped

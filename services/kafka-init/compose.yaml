@@ -6,6 +6,9 @@ services:
         condition: service_healthy
     env_file:
       - ./kafka-init.env
+    environment:
+      BLOBMETA_TOPIC_PARTITIONS: "${BLOBMETA_TOPIC_PARTITIONS:-12}"
+      MEASUREMENT_SESSION_TOPIC_PARTITIONS: "${MEASUREMENT_SESSION_TOPIC_PARTITIONS:-12}"
     volumes:
       - ./create-topics.sh:/opt/wama/create-topics.sh:ro
     entrypoint: ["/bin/bash", "/opt/wama/create-topics.sh"]

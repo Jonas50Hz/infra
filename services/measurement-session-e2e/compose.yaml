@@ -10,15 +10,30 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
-      measurement-session-api:
+      measurement-session-processor:
+        condition: service_started
+      blobmeta-catalog:
+        condition: service_started
+      postgres:
         condition: service_healthy
-      measurement-session-browser:
+      seaweedfs:
         condition: service_healthy
     environment:
-      HTTP_TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_E2E_HTTP_TIMEOUT_SECONDS:-45}"
+      BLOBMETA_TOPIC: Blobmeta
+      DRUID_DATASOURCE: live_measurements
+      DRUID_ROUTER_URL: http://druid:8888
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUME_TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_E2E_KAFKA_TIMEOUT_SECONDS:-30}"
-      KAFKA_TOPIC: MeasurementSession
-      MEASUREMENT_SESSION_BROWSER_URL: http://measurement-session-browser:8080
-      MEASUREMENT_SESSION_ID: "${MEASUREMENT_SESSION_ID_OVERRIDE:-}"
+      MEASUREMENT_SESSION_COMPLETE_ID: "${MEASUREMENT_SESSION_COMPLETE_ID:-}"
+      MEASUREMENT_SESSION_PARTIAL_ID: "${MEASUREMENT_SESSION_PARTIAL_ID:-}"
+      MEASUREMENT_SESSION_TEST_MISSING_MRID: "${MEASUREMENT_SESSION_TEST_MISSING_MRID:-urn:wama:poc:missing}"
+      MEASUREMENT_SESSION_TEST_MRID: "${MEASUREMENT_SESSION_TEST_MRID:-urn:wama:poc:pmu:bay-01:frequency}"
+      MEASUREMENT_SESSION_TOPIC: MeasurementSession
+      POSTGRES_DSN: postgresql://wama:wama-postgres-password@postgres:5432/wama
+      S3_ACCESS_KEY_ID: wama-s3-admin
+      S3_BUCKET: wama-measurement-sessions
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: wama-s3-admin-secret
+      TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_E2E_TIMEOUT_SECONDS:-60}"
     restart: "no"

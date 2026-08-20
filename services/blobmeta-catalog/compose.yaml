@@ -1,0 +1,19 @@
+services:
+  blobmeta-catalog:
+    build:
+      context: ../..
+      dockerfile: services/blobmeta-catalog/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUMER_GROUP: blobmeta-catalog
+      KAFKA_RETRY_INTERVAL_SECONDS: "${BLOBMETA_CATALOG_KAFKA_RETRY_INTERVAL_SECONDS:-2}"
+      KAFKA_TOPIC: Blobmeta
+      POSTGRES_DSN: postgresql://wama:wama-postgres-password@postgres:5432/wama
+    restart: unless-stopped

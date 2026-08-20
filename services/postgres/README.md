@@ -1,9 +1,10 @@
 # PostgreSQL
 
-`postgres` provides a persistent, initially empty database target for the
-future Kafka Connect mirror of the compacted `Masterdata`, `Schema`, and
-`Blobmeta` topics. Kafka remains the source of truth until that connector is
-introduced.
+`postgres` provides a persistent database for the root-owned `blobmeta-catalog`
+projection of compacted `Blobmeta` records. The catalog creates only its
+immutable `blobmeta_catalog` schema, which stores session/artifact metadata,
+status, request integrity, and per-MRID row coverage. Kafka remains the source
+of truth; individual measurement rows stay in Druid and SeaweedFS.
 
 The service initializes the `wama` database and role on its first start, then
 persists them in the root `postgres-data` volume. It listens on port 5432 on all
@@ -16,8 +17,8 @@ host interfaces and at `postgres:5432` on the Compose network.
 | Password | `wama-postgres-password` |
 
 These intentionally public credentials are for this trusted local PoC only and
-must not be reused elsewhere. No application tables, schemas, Kafka Connect
-configuration, or data synchronization are created by this service.
+must not be reused elsewhere. A future Kafka Connect mirror of `Masterdata` and
+`Schema` remains separate from the implemented Blobmeta materializer.
 
 Check the initialized database:
 

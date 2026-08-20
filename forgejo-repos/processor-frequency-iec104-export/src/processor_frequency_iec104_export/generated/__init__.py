@@ -1,0 +1,1 @@
+"""Generated raw-Protobuf bindings are written here during image builds."""

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package rtd_schema.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message MCCSMeasurementValue {
+    string mrid = 1;
+
+    optional google.protobuf.Timestamp timestamp_field = 2;
+    optional google.protobuf.Timestamp timestamp_gateway = 3;
+    google.protobuf.Timestamp timestamp_mccs = 4;
+
+    oneof value {
+        double double_value = 10;
+        int64 int_value = 11;
+        uint32 uint_value = 12;
+        bool bool_value = 13;
+        string string_value = 14;
+        google.protobuf.Timestamp timestamp_value = 15;
+    }
+
+    message Quality {
+        optional bool valid = 1;
+        optional bool substituted = 2;
+        optional bool operator_blocked = 3;
+        optional bool overflow = 4;
+        optional bool old_data = 5;
+    }
+
+    Quality quality = 20;
+}

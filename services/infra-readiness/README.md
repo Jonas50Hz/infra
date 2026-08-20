@@ -10,8 +10,8 @@ checks the Druid Router and `live_measurements` supervisor, and queries the PMU
 frequency fixture through Druid SQL to require matching `__time` and
 `timestamp_mccs`. It also checks PostgreSQL connectivity and identity, and
 performs signed temporary S3 put/get/delete operations in both SeaweedFS
-buckets. It checks both private seeded Forgejo processor repositories and their
-separate CI/deployment Actions runner connections, Kafka UI, Grafana
+buckets. It checks every configured private seeded Forgejo processor repository
+and its separate CI/deployment Actions runner connections, Kafka UI, Grafana
 provisioning, and VictoriaMetrics scrape health including Kafka exporter metrics
 for all WAMA topics. Grafana readiness requires the VictoriaMetrics datasource,
 the internal Druid datasource, the **WAMA Measurements / WAMA PMU Live
@@ -20,8 +20,8 @@ PMU frequency value. It also checks the IEC 104 browser HTTP health and accepts
 its idle or viewer-owned status without opening an IEC control-center connection.
 
 The probe deliberately does not require PostgreSQL to have no application
-tables. The measurement-session catalog is an app-owned schema and is verified
-by its own contract-to-download test, not by this infrastructure-only gate.
+tables. The Blobmeta catalog is an app-owned schema and is verified by its own
+request-to-Blobmeta test, not by this infrastructure-only gate.
 
 The temporary S3 objects are deleted before a successful probe exits. The
 consumer group is unique and auto-commit is disabled, so the probe does not

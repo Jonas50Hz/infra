@@ -31,14 +31,12 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `pmu-gateway` — fake PMU gateway: reads a startup YAML fixture and continuously
    emits raw-Protobuf `MCCSMeasurementValue` records on `LiveMeasurement`.
 - `processor-*` — Quixstreams pipelines (one service per processor).
-- `measurement-session-exporter` — profile-gated static final-only fixture
-   exporter for immutable MeasurementSession records and SeaweedFS manifests.
-- `measurement-session-api` — Kafka-to-PostgreSQL immutable catalog and
-   anonymous read-only artifact proxy.
-- `measurement-session-browser` — disposable static browser with same-origin
-   API proxy.
-- `postgres` — persistent immutable MeasurementSession catalog plus a prepared
-   future target for compacted Masterdata/Schema/Blobmeta records.
+- `measurement-session-processor` — root-owned scalable Kafka worker that
+   queries Druid for bounded requests and writes immutable Parquet artifacts.
+- `blobmeta-catalog` — compacted Blobmeta-to-PostgreSQL immutable metadata and
+   per-MRID coverage materializer.
+- `postgres` — persistent Blobmeta catalog plus a prepared future target for
+   compacted Masterdata/Schema records.
 - `kafka-connect` — mirrors compacted topics to PostgreSQL.
 - `druid` — persistent single-server time-series store with direct raw-Protobuf
    Kafka ingest from `LiveMeasurement`.
@@ -74,20 +72,19 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    provision infrastructure dashboards. This path is operational telemetry only;
    it never receives raw Protobuf or other WAMA data records.
 
-### Finalized measurement session delivery (available now)
-4. **Measurement Session Exporter** — root-owned one-shot fixture service writes
-   immutable artifacts plus a digest-addressed manifest to SeaweedFS, then
-   publishes raw-Protobuf final records to `MeasurementSession`.
-5. **Catalog API + browser** — the API materializes Kafka records idempotently
-   into PostgreSQL and verifies manifests/object metadata before proxying
-   downloads; the browser is anonymous, read-only, and credential-free.
-6. **Contract-to-download test** — a profile-gated verifier independently
-   decodes Kafka evidence and proves the browser download path.
+### Measurement session materialization (available now)
+4. **Measurement Session Processor** — root-owned persistent workers consume
+   raw-Protobuf requests, query Druid's no-rollup history, write typed Parquet
+   artifacts and replay receipts to SeaweedFS, then publish compacted Blobmeta.
+5. **Blobmeta catalog** — commits immutable metadata and normalized MRID
+   coverage rows in PostgreSQL before each Kafka offset.
+6. **Request-flow test** — a profile-gated verifier submits complete and partial
+   requests, independently validates Kafka, PostgreSQL, SeaweedFS, and Parquet.
 
-### Prepared persistence target (available now)
-- **PostgreSQL** — Kafka remains the source of truth. The session API owns its
-  immutable catalog schema; a future Kafka Connect mirror of compacted records
-  remains separate and unimplemented.
+### Metadata persistence (available now)
+- **PostgreSQL** — Kafka remains the source of truth. `blobmeta-catalog` owns
+  its immutable catalog schema; a future Kafka Connect mirror of `Masterdata`
+  and `Schema` remains separate and unimplemented.
 
 ### Live measurement storage (available now)
 - **Druid + druid-init** — root-owned persistent single-server store and
@@ -107,10 +104,11 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    storage policies.
 
 ### Phase 2 — Storage + visualisation (makes data queryable)
-7. **SeaweedFS** — processors write raw/waveform + measurement sessions to
-   blob; publish only a `Blobmeta` pointer to Kafka. Keep raw OFF Kafka.
-8. **Kafka Connect -> PostgreSQL** — mirror compacted
-   Masterdata/Schema/Blobmeta into the prepared database.
+7. **SeaweedFS** — the measurement-session worker writes Parquet artifacts and
+   raw replay receipts to blob; `Blobmeta` publishes only integrity metadata.
+   Keep raw values off Kafka.
+8. **Kafka Connect -> PostgreSQL** — mirror compacted Masterdata/Schema later;
+   Blobmeta is materialized by the root-owned catalog now.
 9. **Grafana data dashboards** — the PMU live dashboard over Druid is available
    now. Additional measurement dashboards and internal alerting remain deferred.
    This is separate from the already-provisioned VictoriaMetrics infrastructure
@@ -123,8 +121,11 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    The on-demand browser is the read-only live control center while a page is
    open and discards messages when its final page closes. The profile-gated
    receiver proves the exclusive wire path using only `STARTDT` and unique
-   fixtures. An export-producing processor, file/xlsx/csv export, and MQTT
-   export remain future work.
+   fixtures. `processor-frequency-iec104-export` now provides the direct
+   configured fake-PMU frequency-to-`M_ME_NC_1` PoC producer through its own
+   Forgejo repository. `processor-lfr-frequency-provision` separately seeds the
+   first multi-PMU per-second selection core; complete PMU-status evidence, IEC
+   104 LFR export, file/xlsx/csv export, and MQTT export remain future work.
 
 ### Phase 4 — Onboarding + config as data
 11. **Masterdata via Git** — masterdata = IP + location committed to Git;
@@ -134,10 +135,14 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
 
 ### Phase 5 — CI/CD loop (automates deploy)
 13. **Forgejo + Actions runner + registry** — infrastructure provisions
-   private seeded `processor-frequency-scale` and `processor-apparent-power`
-   repositories and four repository-scoped runner connections on one daemon.
-   Each separate `forgejo-repos/processor-*/` seed owns CI: test + build image
-   + push for exactly one processor.
+   private seeded `processor-frequency-scale`, `processor-apparent-power`, and
+   `processor-frequency-iec104-export`, and
+   `processor-lfr-frequency-provision` repositories and eight
+   repository-scoped runner connections on one daemon. Each separate
+   `forgejo-repos/processor-*/` seed owns CI: test + build image + push for
+   exactly one processor. The LFR seed currently publishes its configured
+   preferred frequency to `LiveMeasurement`; its IEC 104 export stage remains
+   deferred.
 14. **CD trigger** — each processor's Forgejo Actions job synchronizes only its
    checkout to its isolated deployment root and runs that processor's
    `docker compose up -d` on the external infrastructure network. It never
@@ -154,10 +159,12 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
   enums bound via ValueToAlias at engineering time.
 
 ## Measurement session & alarm path (Phase 2+)
-Static fixture exporter finalizes a session -> immutable artifact objects +
-manifest -> raw-Protobuf `MeasurementSession` topic -> PostgreSQL catalog ->
-anonymous read-only browser/API download. Live lifecycle updates, alarm
-integration, and analytics dashboards remain excluded from this slice.
+Bounded raw-Protobuf `MeasurementSession` request -> Druid historical query ->
+immutable Parquet + receipt in SeaweedFS -> compacted raw-Protobuf `Blobmeta`
+-> immutable PostgreSQL metadata/coverage catalog. The worker pool scales over
+the 12 `MeasurementSession` partitions; `Blobmeta` also has 12 partitions.
+Live lifecycle updates, alarm integration, analytics dashboards, and browser
+presentation remain excluded from this slice.
 
 ## Open risks to validate early
 - Quixstreams throughput / heavy waveform at target load (unproven).

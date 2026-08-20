@@ -10,6 +10,7 @@ from infra_readiness.checks import (
     REQUIRED_TOPICS,
     ReadinessError,
     TOPIC_CLEANUP_POLICIES,
+    TOPIC_PARTITION_COUNTS,
     check_postgres,
     topic_configurations_from_responses,
     validate_grafana_dashboard,
@@ -42,7 +43,10 @@ class KafkaContractTests(unittest.TestCase):
             {
                 "topic": topic,
                 "error_code": 0,
-                "partitions": [{"replicas": [1], "isr": [1]}],
+                "partitions": [
+                    {"replicas": [1], "isr": [1]}
+                    for _ in range(TOPIC_PARTITION_COUNTS[topic])
+                ],
             }
             for topic in REQUIRED_TOPICS
         ]
@@ -380,6 +384,28 @@ class ControlPlaneTests(unittest.TestCase):
                     "name": "wama-processor-frequency-scale-deploy",
                     "status": "idle",
                     "labels": ["wama-processors-deploy:host"],
+                },
+            ],
+        )
+
+    def test_accepts_online_runner_when_stale_duplicate_is_offline(self) -> None:
+        validate_forgejo_runners(
+            "processor-frequency-iec104-export",
+            [
+                {
+                    "name": "wama-processor-frequency-iec104-export-ci",
+                    "status": "offline",
+                    "labels": ["wama-processors-ci"],
+                },
+                {
+                    "name": "wama-processor-frequency-iec104-export-ci",
+                    "status": "idle",
+                    "labels": ["wama-processors-ci"],
+                },
+                {
+                    "name": "wama-processor-frequency-iec104-export-deploy",
+                    "status": "idle",
+                    "labels": ["wama-processors-deploy"],
                 },
             ],
         )

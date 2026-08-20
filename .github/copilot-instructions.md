@@ -11,9 +11,11 @@ This is NOT the production target (production is Kubernetes-based).
   [docs/wama/User_Konfiguration_Nexus.bpmn](../docs/wama/User_Konfiguration_Nexus.bpmn),
   and [docs/wama/Livedaten_Prozess_WAMA.bpmn](../docs/wama/Livedaten_Prozess_WAMA.bpmn)
   are authoritative for target WAMA component and process vocabulary.
-- `MeasurementSession` is the bounded lifecycle record for start, end, and
-  measurement context. It replaces the overly broad `Event` contract; use the
-  `MeasurementSession` Kafka topic and `wama-measurement-sessions` bucket.
+- `MeasurementSession` is the bounded historical extraction request with start,
+  end, sorted MRIDs, and context. It replaces the overly broad `Event`
+  contract; use the `MeasurementSession` Kafka topic and
+  `wama-measurement-sessions` bucket. Completed immutable artifacts are
+  described on compacted `Blobmeta` records.
 - The diagram references do not alter the PoC data plane: retain Common Format
   `MCCSMeasurementValue`, raw Protobuf, and the plain Kafka KRaft topology.
 
@@ -60,25 +62,31 @@ This is NOT the production target (production is Kubernetes-based).
 - `infra-readiness` owns `services/infra-readiness/` and is the root stack's
   one-shot behavioral readiness gate. It must remain infrastructure-only and
   must not deploy or validate application processors.
-- PostgreSQL owns `services/postgres/` and provides a persistent, initially
-  empty target for a future Kafka Connect mirror of compacted `Masterdata`,
-  `Schema`, and `Blobmeta` records. `measurement-session-api` may create only
-  its immutable `measurement_session_catalog` schema; Kafka remains the source
-  of truth.
+- PostgreSQL owns `services/postgres/` and provides the persistent target for
+  root-owned `blobmeta-catalog` materialization of compacted `Blobmeta`
+  records. `blobmeta-catalog` may create only its immutable `blobmeta_catalog`
+  schema; Kafka remains the source of truth. A future Kafka Connect mirror of
+  `Masterdata` and `Schema` remains separate.
 - SeaweedFS owns `services/seaweedfs/` and provides the PoC's authenticated
   S3-compatible raw/waveform and long-term measurement-session storage.
-- Finalized-session services own `services/measurement-session-exporter/`,
-  `services/measurement-session-api/`, `services/measurement-session-browser/`,
-  and `services/measurement-session-e2e/`. They are root-owned, not Forgejo
-  deployment targets. The browser is credential-free; only the API may access
-  SeaweedFS and it must proxy every artifact download.
+- Measurement-session services own `services/measurement-session-processor/`,
+  `services/blobmeta-catalog/`, and `services/measurement-session-e2e/`. They
+  are root-owned, not Forgejo deployment targets. The processor alone accesses
+  Druid and SeaweedFS to create Parquet artifacts; the catalog holds no S3
+  credentials and projects only Blobmeta metadata to PostgreSQL.
 - IEC 104 services own `services/iec104-exporter/`,
   `services/iec104-receiver/`, and `services/iec104-browser/`. The exporter is
   a root-owned one-way controlled station that consumes typed raw-Protobuf
   `Export` records; the receiver is a profile-gated control-center test only;
   the browser is an on-demand, read-only control center that holds no values
-  after its final page closes. None is a Forgejo deployment target and no
-  export-producing processor exists yet.
+  after its final page closes. None is a Forgejo deployment target. The
+  independent `processor-frequency-iec104-export` seed is the direct configured
+  PMU-frequency-to-`M_ME_NC_1` producer; it is not the unresolved full LFR
+  preferred-frequency algorithm.
+- `processor-lfr-frequency-provision` is the separate Forgejo-owned per-second
+  LFR core. It publishes a configured preferred-frequency Common Format value
+  to `LiveMeasurement`; it does not deploy root IEC 104 services or produce
+  `Export` records until that later contract increment is explicitly scoped.
 - Forgejo services own `services/forgejo/`, `services/forgejo-init/`, and
   `services/forgejo-runner/`.
 - This repository is never pushed to Forgejo. Each tracked seed at
@@ -101,12 +109,12 @@ This is NOT the production target (production is Kubernetes-based).
 |-------|--------------------|----------|
 | Transport | Kafka via Strimzi operator | Kafka KRaft, plain container |
 | Config/CD | Git + Forgejo + ArgoCD (GitOps) | Root repository for infrastructure; Forgejo Actions + app-local `docker compose up -d` only for internal processors and explicit gateway-deployment tests |
-| Stream proc | Quixstreams + Measurement Session Exporter | Quixstreams (Python) plus a root-owned final-only fixture exporter |
+| Stream proc | Quixstreams + Measurement Session Exporter | Quixstreams (Python) plus a root-owned Druid-to-Parquet MeasurementSession worker |
 | Time-series | Druid | persistent single-server direct raw-Protobuf Kafka ingest |
-| Config metadata | PostgreSQL via Kafka Connect | PostgreSQL prepared; Kafka Connect later |
+| Config metadata | PostgreSQL via Kafka Connect | Root-owned Blobmeta materializer now; Kafka Connect later for Masterdata/Schema |
 | Infrastructure metrics | Grafana + metrics backend | VictoriaMetrics + node-exporter + cAdvisor + Grafana |
 | Raw/blob | SeaweedFS | SeaweedFS `weed mini`, S3-compatible single-node service |
-| Viz | Grafana | VictoriaMetrics for infrastructure; Druid-backed PMU measurement dashboard; anonymous static browser for finalized sessions |
+| Viz | Grafana | VictoriaMetrics for infrastructure; Druid-backed PMU measurement dashboard |
 | Export | IEC 104 + file export | root-owned one-way IEC 104 exporter; file export remains future work |
 
 ## Coding conventions

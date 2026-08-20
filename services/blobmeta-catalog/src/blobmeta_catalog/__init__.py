@@ -1,0 +1,1 @@
+"""Immutable PostgreSQL projection for compacted Blobmeta records."""

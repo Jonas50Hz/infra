@@ -12,6 +12,29 @@ Upstream normalization must already convert the C37.118 frequency deviation to a
 
 This document does not claim that the existing `processor-frequency-scale` sample implements the LFR algorithm. That seed only scales one fixture value from Hz to mHz. A real implementation must be a separately owned `processor-*` repository and must not deploy or modify the root-owned IEC 104 exporter.
 
+The checked-in `processor-frequency-iec104-export` seed is a separate direct
+PoC mapping: one explicitly valid fake-PMU frequency produces one configured
+`M_ME_NC_1` `ExportRecord`. It deliberately does not satisfy this document's
+per-second aggregation, status, voltage, preferred-frequency selection,
+timeout-hold, audit, or heartbeat requirements.
+
+## Current PoC Implementation
+
+`forgejo-repos/processor-lfr-frequency-provision/` is a separate private
+Forgejo seed for the first LFR core increment. It uses a configurable
+multi-PMU input map, evaluates closed UTC seconds $400$-$800$ ms after their
+boundary, calculates mean frequency and voltage per PMU, combines count and
+voltage classifications, and publishes a configured preferred-frequency
+`MCCSMeasurementValue` back to `LiveMeasurement`. Its state/outbox is durable
+across application restart; Kafka delivery remains at least once.
+
+This increment intentionally does not create `ExportRecord` values, alter the
+root-owned IEC 104 exporter, implement hold/resend, RoCoF, heartbeat, or the
+six-week audit store. Its temporary `generic_quality_provisional` mode uses
+existing Common Format Quality flags only to reject plainly unusable records.
+It does not claim complete C37.118 `STAT` or time-quality coverage; an actual
+data-frame-to-Common-Format mapping remains the gate before production use.
+
 ## Kafka Input Contract
 
 Master Data configuration must map the logical signals below to MRIDs, PMU identity, PMU type, and voltage level.

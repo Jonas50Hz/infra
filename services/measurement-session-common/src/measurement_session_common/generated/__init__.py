@@ -1,1 +1,1 @@
-"""Generated raw-Protobuf bindings for the finalized session contract."""
+"""Generated raw-Protobuf bindings for MeasurementSession and Blobmeta contracts."""

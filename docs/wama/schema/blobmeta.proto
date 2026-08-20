@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package wama.blobmeta.v1;
+
+import "google/protobuf/timestamp.proto";
+import "measurement_session.proto";
+
+// Immutable metadata for a materialized MeasurementSession artifact. Records
+// are keyed by blob_id on the compacted Blobmeta topic.
+message Blobmeta {
+    string blob_id = 1;
+    string session_id = 2;
+    bytes request_sha256 = 3;
+
+    google.protobuf.Timestamp requested_at = 4;
+    google.protobuf.Timestamp started_at = 5;
+    google.protobuf.Timestamp ended_at = 6;
+    google.protobuf.Timestamp finalized_at = 7;
+
+    repeated string mrids = 8;
+    repeated MridCoverage mrid_coverage = 9;
+    uint64 measurement_count = 10;
+    Status status = 11;
+    string rejection_reason = 12;
+    repeated wama.measurement_session.v1.MetadataEntry metadata = 13;
+    ObjectReference object = 14;
+
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        COMPLETE = 1;
+        PARTIAL = 2;
+        REJECTED = 3;
+    }
+}
+
+message MridCoverage {
+    string mrid = 1;
+    uint64 measurement_count = 2;
+}
+
+message ObjectReference {
+    string bucket = 1;
+    string object_key = 2;
+    string media_type = 3;
+    uint64 byte_length = 4;
+    bytes sha256 = 5;
+}

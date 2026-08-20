@@ -45,7 +45,7 @@ services:
     environment:
       FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_PROCESSOR_REPOSITORIES: "${FORGEJO_PROCESSOR_REPOSITORIES:-processor-frequency-scale,processor-apparent-power}"
+      FORGEJO_PROCESSOR_REPOSITORIES: "${FORGEJO_PROCESSOR_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-lfr-frequency-provision}"
       FORGEJO_URL: http://forgejo:3000
       DRUID_DATASOURCE: live_measurements
       DRUID_EXPECTED_DOUBLE_VALUE: "${DRUID_EXPECTED_DOUBLE_VALUE:-50.01}"
@@ -54,9 +54,11 @@ services:
       DRUID_ROUTER_URL: http://druid:8888
       DRUID_SUPERVISOR_ID: live_measurements
       IEC104_BROWSER_URL: http://iec104-browser:8080
+      BLOBMETA_TOPIC_PARTITIONS: "${BLOBMETA_TOPIC_PARTITIONS:-12}"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUME_TIMEOUT_SECONDS: "${INFRA_READINESS_KAFKA_CONSUME_TIMEOUT_SECONDS:-12}"
       KAFKA_TOPIC: LiveMeasurement
+      MEASUREMENT_SESSION_TOPIC_PARTITIONS: "${MEASUREMENT_SESSION_TOPIC_PARTITIONS:-12}"
       PMU_EXPECTED_MRID_PREFIX: "${PMU_GATEWAY_EXPECTED_MRID_PREFIX:-urn:wama:poc:pmu:}"
       POSTGRES_DATABASE: wama
       POSTGRES_DSN: postgresql://wama:wama-postgres-password@postgres:5432/wama

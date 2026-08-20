@@ -1,0 +1,28 @@
+name: ${WAMA_PROCESSOR_COMPOSE_PROJECT_NAME:-wama-processor-lfr-frequency-provision}
+
+services:
+  processor-lfr-frequency-provision:
+    image: "${WAMA_PROCESSOR_IMAGE:-wama.local/processor-lfr-frequency-provision:main}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      LFR_CONFIG_PATH: "${LFR_CONFIG_PATH:-/etc/wama/lfr-config.yaml}"
+      LFR_STATE_PATH: "${LFR_STATE_PATH:-/var/lib/wama/lfr-state.sqlite3}"
+      WAMA_INPUT_TOPIC: "${WAMA_INPUT_TOPIC:-LiveMeasurement}"
+      WAMA_KAFKA_BOOTSTRAP_SERVERS: "${WAMA_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+      WAMA_OUTPUT_TOPIC: "${WAMA_OUTPUT_TOPIC:-LiveMeasurement}"
+      WAMA_PROCESSOR_CONSUMER_GROUP: "${WAMA_PROCESSOR_CONSUMER_GROUP:-processor-lfr-frequency-provision}"
+    networks:
+      - wama-infra
+    restart: unless-stopped
+    volumes:
+      - lfr-state:/var/lib/wama
+
+networks:
+  wama-infra:
+    external: true
+    name: ${WAMA_INFRA_NETWORK:-wama-infra}
+
+volumes:
+  lfr-state:

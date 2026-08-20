@@ -28,9 +28,8 @@ and join this stack through the external `wama-infra` network.
 | [`druid-init/`](druid-init/) | `druid-init` |
 | [`postgres/`](postgres/) | `postgres` |
 | [`seaweedfs/`](seaweedfs/) | `seaweedfs` |
-| [`measurement-session-exporter/`](measurement-session-exporter/) | `measurement-session-exporter` |
-| [`measurement-session-api/`](measurement-session-api/) | `measurement-session-api` |
-| [`measurement-session-browser/`](measurement-session-browser/) | `measurement-session-browser` |
+| [`measurement-session-processor/`](measurement-session-processor/) | `measurement-session-processor` |
+| [`blobmeta-catalog/`](blobmeta-catalog/) | `blobmeta-catalog` |
 | [`measurement-session-e2e/`](measurement-session-e2e/) | `measurement-session-e2e` |
 | [`forgejo/`](forgejo/) | `forgejo` |
 | [`forgejo-init/`](forgejo-init/) | `forgejo-init` |

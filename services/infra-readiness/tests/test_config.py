@@ -20,15 +20,26 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.iec104_browser_url, "http://iec104-browser:8080")
         self.assertEqual(
             settings.forgejo_processor_repositories,
-            ("processor-frequency-scale", "processor-apparent-power"),
+            (
+                "processor-frequency-scale",
+                "processor-apparent-power",
+                "processor-frequency-iec104-export",
+                "processor-lfr-frequency-provision",
+            ),
         )
         self.assertEqual(settings.kafka_bootstrap_servers, "kafka:9092")
+        self.assertEqual(settings.measurement_session_topic_partitions, 12)
+        self.assertEqual(settings.blobmeta_topic_partitions, 12)
         self.assertEqual(settings.s3_buckets, ("wama-raw", "wama-measurement-sessions"))
         self.assertEqual(settings.readiness_timeout_seconds, 180)
 
     def test_rejects_non_positive_timeout(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "READINESS_TIMEOUT_SECONDS"):
             Settings.from_environment({"READINESS_TIMEOUT_SECONDS": "0"})
+
+    def test_rejects_non_positive_worker_topic_partitions(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "MEASUREMENT_SESSION_TOPIC_PARTITIONS"):
+            Settings.from_environment({"MEASUREMENT_SESSION_TOPIC_PARTITIONS": "0"})
 
     def test_rejects_empty_bucket_configuration(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "S3_BUCKETS"):

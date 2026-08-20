@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package wama.iec104.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message ExportRecord {
+    string export_id = 1;
+    google.protobuf.Timestamp created_at = 2;
+
+    oneof target {
+        Iec104Asdu iec104_asdu = 10;
+    }
+
+    reserved 3 to 9;
+}
+
+enum Iec104TypeId {
+    IEC104_TYPE_ID_UNSPECIFIED = 0;
+    IEC104_TYPE_ID_M_SP_NA_1 = 1;
+    IEC104_TYPE_ID_M_DP_NA_1 = 3;
+    IEC104_TYPE_ID_M_ME_NC_1 = 13;
+}
+
+message Iec104Asdu {
+    Iec104TypeId type_id = 1;
+    uint32 common_address = 2;
+    Iec104CauseOfTransmission cause = 3;
+    repeated Iec104InformationObject information_objects = 4;
+
+    reserved 5 to 9;
+}
+
+message Iec104CauseOfTransmission {
+    uint32 code = 1;
+    reserved 2 to 9;
+}
+
+message Iec104InformationObject {
+    uint32 information_object_address = 1;
+
+    oneof value {
+        Iec104SinglePoint single_point = 10;
+        Iec104DoublePoint double_point = 11;
+        Iec104ShortFloat short_float = 12;
+    }
+
+    reserved 2 to 9;
+}
+
+message Iec104SinglePoint {
+    bool value = 1;
+    Iec104Quality quality = 2;
+}
+
+enum Iec104DoublePointState {
+    IEC104_DOUBLE_POINT_INTERMEDIATE = 0;
+    IEC104_DOUBLE_POINT_OFF = 1;
+    IEC104_DOUBLE_POINT_ON = 2;
+    IEC104_DOUBLE_POINT_INDETERMINATE = 3;
+}
+
+message Iec104DoublePoint {
+    Iec104DoublePointState value = 1;
+    Iec104Quality quality = 2;
+}
+
+message Iec104ShortFloat {
+    float value = 1;
+    Iec104Quality quality = 2;
+}
+
+message Iec104Quality {
+    bool invalid = 1;
+    bool not_topical = 2;
+    bool substituted = 3;
+    bool blocked = 4;
+    bool overflow = 5;
+}

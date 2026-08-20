@@ -13,6 +13,7 @@ in SharePoint; update these summaries when the source docs change.
 - Business_Descpt_UseCase_Sek_Frequenzwertbereit_final.pdf — LFR per-second
   frequency provision; distilled in
   [04-lfr-frequency-provision.md](04-lfr-frequency-provision.md).
+- [IEEE Std C37.118.2-2024](https://eliagroup.sharepoint.com/sites/MCCSTopicGroups/Shared%20Documents/Forms/AllItems.aspx?viewid=1483051c%2Dd713%2D488d%2D9aaf%2D15e353515e52&csf=1&FolderCTID=0x0120005D0DF4ED6F06CE4EAABC52695A2BA16B&id=%2Fsites%2FMCCSTopicGroups%2FShared%20Documents%2FProduct%20Cluster%20Grid%2C%20Asset%20%26%20System%2F02%20%2D%20Product%20Lines%2F06%2DFuture%5FProduct%5FDevelopment%2FInitiatives%2FWAMA%2F10%5FWAMA%5FData%5FConcepts%2FStandards%2FIEEE%20Std%20C37%2E118%2E2%E2%84%A2%2D2024%2EPDF&parent=%2Fsites%2FMCCSTopicGroups%2FShared%20Documents%2FProduct%20Cluster%20Grid%2C%20Asset%20%26%20System%2F02%20%2D%20Product%20Lines%2F06%2DFuture%5FProduct%5FDevelopment%2FInitiatives%2FWAMA%2F10%5FWAMA%5FData%5FConcepts%2FStandards) — normative C37.118.2 wire-format reference for the planned simulator and gateway. It requires authenticated SharePoint access; the implementation brief is [05-c37-118-simulator.md](05-c37-118-simulator.md).
 - schema/rtd_schema.proto — Common Format contract (`MCCSMeasurementValue`,
   `rtd_schema.v1`). Same schema as MCCS. PoC uses its own MRIDs first.
 - schema/iec104_export.proto — PoC raw-Protobuf contract for one-way IEC 104

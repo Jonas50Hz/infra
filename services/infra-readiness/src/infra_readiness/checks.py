@@ -32,6 +32,12 @@ TOPIC_CLEANUP_POLICIES = {
     **{topic: "compact" for topic in COMPACTED_TOPICS},
 }
 REQUIRED_TOPICS = tuple(TOPIC_CLEANUP_POLICIES)
+TOPIC_PARTITION_COUNTS = {
+    **{topic: 1 for topic in STREAM_TOPICS},
+    **{topic: 1 for topic in COMPACTED_TOPICS},
+    "MeasurementSession": 12,
+    "Blobmeta": 12,
+}
 MONITORING_JOBS = (
     "victoria-metrics",
     "grafana",
@@ -93,12 +99,15 @@ def check_kafka_topics(settings: Settings) -> None:
         if admin is not None:
             admin.close()
 
-    validate_topic_descriptions(descriptions)
+    validate_topic_descriptions(descriptions, _topic_partition_counts(settings))
     validate_topic_configurations(topic_configurations_from_responses(responses))
 
 
-def validate_topic_descriptions(descriptions: Sequence[Mapping[str, Any]]) -> None:
-    """Validate that every topic has a single healthy replica and partition."""
+def validate_topic_descriptions(
+    descriptions: Sequence[Mapping[str, Any]],
+    expected_partitions: Mapping[str, int] = TOPIC_PARTITION_COUNTS,
+) -> None:
+    """Validate that every topic has its configured partitions and one replica."""
 
     by_topic = {str(description.get("topic")): description for description in descriptions}
     for topic in REQUIRED_TOPICS:
@@ -111,15 +120,30 @@ def validate_topic_descriptions(descriptions: Sequence[Mapping[str, Any]]) -> No
             )
 
         partitions = description.get("partitions", [])
-        if len(partitions) != 1:
-            raise ReadinessError(f"Kafka topic {topic} must have one partition")
-        partition = partitions[0]
-        replicas = partition.get("replicas", [])
-        in_sync_replicas = partition.get("isr", [])
-        if len(replicas) != 1 or len(in_sync_replicas) != 1:
+        expected_partition_count = expected_partitions.get(topic)
+        if expected_partition_count is None:
+            raise ReadinessError(f"Kafka topic {topic} has no partition expectation")
+        if len(partitions) != expected_partition_count:
             raise ReadinessError(
-                f"Kafka topic {topic} must have one replica and one in-sync replica"
+                f"Kafka topic {topic} must have {expected_partition_count} partitions"
             )
+        for partition in partitions:
+            replicas = partition.get("replicas", [])
+            in_sync_replicas = partition.get("isr", [])
+            if len(replicas) != 1 or len(in_sync_replicas) != 1:
+                raise ReadinessError(
+                    f"Kafka topic {topic} must have one replica and one in-sync replica"
+                )
+
+
+def _topic_partition_counts(settings: Settings) -> dict[str, int]:
+    """Build worker-topic expectations from the same env overrides as Kafka."""
+
+    return {
+        **TOPIC_PARTITION_COUNTS,
+        "MeasurementSession": settings.measurement_session_topic_partitions,
+        "Blobmeta": settings.blobmeta_topic_partitions,
+    }
 
 
 def topic_configurations_from_responses(responses: Iterable[Any]) -> dict[str, dict[str, str]]:
@@ -356,28 +380,39 @@ def validate_forgejo_runners(repository_name: str, payload: Any) -> None:
         f"wama-{repository_name}-ci": "wama-processors-ci",
         f"wama-{repository_name}-deploy": "wama-processors-deploy",
     }
-    runners_by_name = {
-        runner.get("name"): runner
-        for runner in payload
-        if isinstance(runner, Mapping) and isinstance(runner.get("name"), str)
-    }
+    runners_by_name: dict[str, list[Mapping[str, Any]]] = {}
+    for runner in payload:
+        if not isinstance(runner, Mapping) or not isinstance(runner.get("name"), str):
+            continue
+        runners_by_name.setdefault(runner["name"], []).append(runner)
+
     for runner_name, required_label in expected_connections.items():
-        runner = runners_by_name.get(runner_name)
-        if runner is None:
+        candidates = runners_by_name.get(runner_name, [])
+        if not candidates:
             raise ReadinessError(f"Forgejo runner {runner_name!r} is not registered")
-        if runner.get("status") not in {"active", "idle", "online"}:
+        usable = [
+            runner
+            for runner in candidates
+            if runner.get("status") in {"active", "idle", "online"}
+            and required_label
+            in {
+                label.split(":", 1)[0]
+                for label in runner.get("labels", [])
+                if isinstance(label, str)
+            }
+        ]
+        if usable:
+            continue
+        statuses = ", ".join(
+            sorted({str(runner.get("status")) for runner in candidates})
+        )
+        if all(runner.get("status") not in {"active", "idle", "online"} for runner in candidates):
             raise ReadinessError(
-                f"Forgejo runner {runner_name!r} is not online: {runner.get('status')!r}"
+                f"Forgejo runner {runner_name!r} is not online: {statuses or '<missing>'}"
             )
-        labels = {
-            label.split(":", 1)[0]
-            for label in runner.get("labels", [])
-            if isinstance(label, str)
-        }
-        if required_label not in labels:
-            raise ReadinessError(
-                f"Forgejo runner {runner_name!r} is missing label {required_label!r}"
-            )
+        raise ReadinessError(
+            f"Forgejo runner {runner_name!r} is missing label {required_label!r}"
+        )
 
 
 def check_kafka_ui(settings: Settings) -> None:
