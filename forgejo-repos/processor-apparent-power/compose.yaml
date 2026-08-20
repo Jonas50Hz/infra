@@ -1,0 +1,16 @@
+name: ${WAMA_PROCESSOR_COMPOSE_PROJECT_NAME:-wama-processor-apparent-power}
+
+services:
+  processor-apparent-power:
+    image: "${WAMA_PROCESSOR_IMAGE:-wama.local/processor-apparent-power:main}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - wama-infra
+    restart: unless-stopped
+
+networks:
+  wama-infra:
+    external: true
+    name: ${WAMA_INFRA_NETWORK:-wama-infra}

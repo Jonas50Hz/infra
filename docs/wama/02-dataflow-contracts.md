@@ -16,7 +16,10 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 2. **Gateway → Kafka.** Normalised measurements published to `LiveMeasurement`.
 3. **Processing.** Quixstreams processors consume `LiveMeasurement`, compute
   derived values, and write them back to Kafka. They also emit
-  `MeasurementSession`, `Alarm`, and `Export` records.
+  `MeasurementSession`, `Alarm`, and `Export` records. The planned
+  [LFR per-second frequency provision](04-lfr-frequency-provision.md) processor
+  begins at this Kafka boundary; source-protocol and PDC ingestion are outside
+  that use-case specification.
 4. **Storage.**
    - Druid directly ingests raw-Protobuf `MCCSMeasurementValue` records from
      `LiveMeasurement` with its Kafka and Protobuf extensions. It uses the
@@ -45,7 +48,7 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 | `LiveMeasurement` | stream | `MCCSMeasurementValue` (Common Format) + derived values |
 | `MeasurementSession` | stream | Bounded measurement sessions (start/end/measurement context) |
 | `Alarm` | stream | Alarm records raised from measurement sessions |
-| `Export` | stream | Records destined for IEC 104 / file export |
+| `Export` | stream | Typed raw-Protobuf `ExportRecord` values for one-way IEC 104 export; file/MQTT payloads remain future work |
 | `Masterdata` | compacted | Source masterdata (IP + location, capabilities) |
 | `Schema` | compacted | Common-Format schema definitions |
 | `Blobmeta` | compacted | Pointers/metadata for blobs in SeaweedFS |
@@ -93,6 +96,47 @@ supervisor keeps `mrid`, Kafka key/topic metadata, all scalar `oneof` values,
 quality flags, and source timestamps queryable. It uses `queryGranularity: none`
 and `rollup: false`; no Druid Schema Registry, Kafka ZooKeeper service, or JSON
 translation path is introduced.
+
+## IEC 104 Export contract
+**`ExportRecord`**, proto3, package `wama.iec104.v1`. Canonical file:
+[`schema/iec104_export.proto`](schema/iec104_export.proto). Serialization is raw
+Protobuf on the existing `Export` topic. The Kafka key is the canonical
+`export_id` UUID, and the Kafka record timestamp must equal `created_at` rounded
+down to milliseconds.
+
+Each record contains one typed `Iec104Asdu`: type identifier, common address,
+monitor-direction cause of transmission, and ordered information objects with
+three-octet addresses, values, and IEC quality bits. The current PoC accepts
+only `M_SP_NA_1`, `M_DP_NA_1`, and `M_ME_NC_1`; it rejects commands,
+interrogations, non-finite short floats, unsupported COTs, and ASDUs larger than
+the IEC 104 limit. The exporter derives VSQ object count and sequence addressing
+from the ordered objects. c104 owns APDU framing, sequence numbers, and its
+default COT flags: originator address 0, test false, and negative confirmation
+false.
+
+`iec104-exporter` is the controlled-station server on plain TCP port 2404. It
+only sends monitor-direction ASDUs to one active control-center connection and
+only processes TCP/IEC transport control traffic inbound. Its TCP ingress guard
+forwards only well-formed U (`STARTDT`, `STOPDT`, `TESTFR`) and S
+acknowledgement frames, and closes any connection that sends a malformed control
+frame or application I-frame before c104 can process or answer it. It exposes no
+command, interrogation, parameterization, or other inbound application-ASDU
+handler. A Kafka offset is committed only after c104 accepts the exact outbound
+batch, so Kafka remains at-least-once and a reconnect/restart can resend a
+record.
+
+The profile-gated `iec104-receiver` is a test-only control center. It uses
+`STARTDT` without a general interrogation, publishes unique fixture records,
+and verifies the received ASDU fields. It then deliberately sends a raw
+general-interrogation I-frame and requires connection closure without an
+application response. `iec104-browser` is the on-demand read-only control center
+for operator viewing: an open page starts its `STARTDT` connection and receives
+live values over IEC 104; the browser page owns the transient event list and
+discarding the final page ends reception. It is the same single control-center
+slot used by the profile-gated receiver, so browser and receiver tests do not
+run concurrently. No export-producing processor exists yet; a future processor
+owns its own deliberate copy of this canonical contract in its Forgejo
+repository.
 
 ## Finalized MeasurementSession contract
 **`MeasurementSession`**, proto3, package `wama.measurement_session.v1`.

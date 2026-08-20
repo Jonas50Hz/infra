@@ -61,6 +61,7 @@ def check_druid(settings: Settings) -> None:
         rows,
         settings.druid_expected_mrid,
         settings.druid_expected_double_value,
+        settings.druid_expected_double_value_tolerance,
     )
 
 
@@ -107,6 +108,7 @@ def validate_measurement_rows(
     payload: Any,
     expected_mrid: str,
     expected_double_value: float,
+    expected_double_value_tolerance: float = 0.0,
 ) -> None:
     """Require Druid SQL to return the configured raw-Protobuf PMU frequency row."""
 
@@ -122,9 +124,14 @@ def validate_measurement_rows(
     actual_value = row.get("double_value")
     if isinstance(actual_value, bool) or not isinstance(actual_value, (int, float)):
         raise DruidReadinessError("Druid live_measurements row has no numeric double_value")
-    if not math.isclose(float(actual_value), expected_double_value, abs_tol=1e-9):
+    if not math.isclose(
+        float(actual_value),
+        expected_double_value,
+        rel_tol=0.0,
+        abs_tol=expected_double_value_tolerance,
+    ):
         raise DruidReadinessError(
-            "Druid live_measurements double_value does not match the PMU fixture: "
+            "Druid live_measurements double_value is outside the expected PMU range: "
             f"{actual_value!r}"
         )
     if row.get("quality_valid") not in {True, "true", "TRUE"}:

@@ -18,6 +18,7 @@ from infra_readiness.checks import (
     validate_grafana_pmu_query,
     validate_forgejo_repository,
     validate_forgejo_runners,
+    validate_iec104_browser_status,
     validate_live_measurement,
     validate_prometheus_up,
     validate_topic_configurations,
@@ -226,7 +227,7 @@ class ControlPlaneTests(unittest.TestCase):
                                     "values": [
                                         [1_787_054_665_443],
                                         ["urn:wama:poc:pmu:bay-01:frequency"],
-                                        [50.01],
+                                        [50.005],
                                     ]
                                 },
                             }
@@ -236,6 +237,7 @@ class ControlPlaneTests(unittest.TestCase):
             },
             "urn:wama:poc:pmu:bay-01:frequency",
             50.01,
+            0.01,
         )
 
     def test_rejects_grafana_druid_pmu_query_with_wrong_value(self) -> None:
@@ -268,6 +270,7 @@ class ControlPlaneTests(unittest.TestCase):
                 },
                 "urn:wama:poc:pmu:bay-01:frequency",
                 50.01,
+                0.01,
             )
 
     def test_accepts_druid_supervisor_status_payload_envelope(self) -> None:
@@ -289,14 +292,32 @@ class ControlPlaneTests(unittest.TestCase):
                 {
                     "__time": "2026-08-18T12:00:00.000Z",
                     "mrid": "urn:wama:poc:pmu:bay-01:frequency",
-                    "double_value": 50.01,
+                    "double_value": 50.005,
                     "quality_valid": "true",
                     "timestamp_mccs": "2026-08-18T12:00:00.000Z",
                 }
             ],
             "urn:wama:poc:pmu:bay-01:frequency",
             50.01,
+            0.01,
         )
+
+    def test_rejects_queryable_druid_pmu_frequency_outside_tolerance(self) -> None:
+        with self.assertRaisesRegex(DruidReadinessError, "expected PMU range"):
+            validate_measurement_rows(
+                [
+                    {
+                        "__time": "2026-08-18T12:00:00.000Z",
+                        "mrid": "urn:wama:poc:pmu:bay-01:frequency",
+                        "double_value": 50.03,
+                        "quality_valid": "true",
+                        "timestamp_mccs": "2026-08-18T12:00:00.000Z",
+                    }
+                ],
+                "urn:wama:poc:pmu:bay-01:frequency",
+                50.01,
+                0.01,
+            )
 
     def test_rejects_druid_row_with_mismatched_mccs_timestamp(self) -> None:
         with self.assertRaisesRegex(DruidReadinessError, "timestamp_mccs"):
@@ -325,35 +346,38 @@ class ControlPlaneTests(unittest.TestCase):
                 "live_measurements",
             )
 
-    def test_accepts_private_seeded_processors_repository(self) -> None:
+    def test_accepts_private_seeded_processor_repository(self) -> None:
         validate_forgejo_repository(
             {
                 "private": True,
                 "empty": False,
                 "default_branch": "main",
-            }
+            },
+            "processor-frequency-scale",
         )
 
-    def test_rejects_unseeded_processors_repository(self) -> None:
+    def test_rejects_unseeded_processor_repository(self) -> None:
         with self.assertRaisesRegex(ReadinessError, "private and seeded"):
             validate_forgejo_repository(
                 {
                     "private": True,
                     "empty": True,
                     "default_branch": "main",
-                }
+                },
+                "processor-apparent-power",
             )
 
     def test_accepts_registered_idle_runner_connections(self) -> None:
         validate_forgejo_runners(
+            "processor-frequency-scale",
             [
                 {
-                    "name": "wama-processors-ci",
+                    "name": "wama-processor-frequency-scale-ci",
                     "status": "idle",
                     "labels": ["wama-processors-ci:docker://wama-forgejo-runner:local"],
                 },
                 {
-                    "name": "wama-processors-deploy",
+                    "name": "wama-processor-frequency-scale-deploy",
                     "status": "idle",
                     "labels": ["wama-processors-deploy:host"],
                 },
@@ -361,11 +385,15 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_rejects_missing_deployment_runner_connection(self) -> None:
-        with self.assertRaisesRegex(ReadinessError, "wama-processors-deploy"):
+        with self.assertRaisesRegex(
+            ReadinessError,
+            "wama-processor-apparent-power-deploy",
+        ):
             validate_forgejo_runners(
+                "processor-apparent-power",
                 [
                     {
-                        "name": "wama-processors-ci",
+                        "name": "wama-processor-apparent-power-ci",
                         "status": "idle",
                         "labels": ["wama-processors-ci"],
                     }
@@ -396,6 +424,16 @@ class ControlPlaneTests(unittest.TestCase):
                 },
                 "kafka-exporter",
             )
+
+    def test_accepts_idle_or_active_iec104_browser_status(self) -> None:
+        validate_iec104_browser_status({"active": False, "state": "idle", "viewers": 0})
+        validate_iec104_browser_status({"active": True, "state": "active", "viewers": 1})
+
+    def test_rejects_inconsistent_iec104_browser_status(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "active state"):
+            validate_iec104_browser_status({"active": False, "state": "active", "viewers": 1})
+        with self.assertRaisesRegex(ReadinessError, "viewer count"):
+            validate_iec104_browser_status({"active": False, "state": "idle", "viewers": -1})
 
 
 class PostgreSQLReadinessTests(unittest.TestCase):

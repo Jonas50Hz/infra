@@ -9,7 +9,6 @@ services:
       forgejo-init:
         condition: service_completed_successfully
     environment:
-      WAMA_PROCESSORS_DEPLOY_ROOT: "${WAMA_PROCESSORS_DEPLOY_ROOT:-/var/lib/wama-processors}"
       WAMA_INFRA_NETWORK: "${WAMA_INFRA_NETWORK:-wama-infra}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -17,7 +16,10 @@ services:
       - forgejo-runner-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - type: bind
-        source: "${WAMA_PROCESSORS_DEPLOY_ROOT:-/var/lib/wama-processors}"
-        target: "${WAMA_PROCESSORS_DEPLOY_ROOT:-/var/lib/wama-processors}"
+        source: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
+        target: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
+      - type: bind
+        source: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
+        target: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
     command: ["/bin/forgejo-runner", "daemon", "--config", "/data/config.yaml"]
     restart: unless-stopped

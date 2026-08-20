@@ -12,7 +12,10 @@ backed by VictoriaMetrics provide host and Docker container infrastructure
 telemetry plus Kafka broker and topic operations metrics, while a Druid-backed
 dashboard displays live PMU measurements over time. A persistent single-server
 Druid instance directly ingests raw-Protobuf `LiveMeasurement` records for live
-SQL queries.
+SQL queries. A root-owned IEC 60870-5-104 controlled station consumes typed
+raw-Protobuf `Export` records and sends monitor-direction values to one control
+center connection. An on-demand browser becomes that control center only while
+its live page is open and displays the values it receives on the IEC wire.
 
 This is a Compose-based PoC foundation. It deliberately does not include
 a Kafka ZooKeeper service, Confluent components, a Schema Registry, a
@@ -30,15 +33,17 @@ and every asset outside the narrow Forgejo deployment scope; in particular, the
 current `pmu-gateway` remains an infrastructure service here. This checkout is
 never added as a Forgejo remote and is never pushed to Forgejo.
 
-[`forgejo-repos/wama-processors/`](forgejo-repos/wama-processors/) is a
-separate processors-repository seed. `forgejo-init` automatically creates a
-private Forgejo repository and seeds its `main` branch from this directory when
-the remote has no refs. An existing nonempty private repository is left
-unchanged. It contains internal processor code, processor-only Compose fragments
-and deployment tooling, and a Forgejo Actions workflow. A future gateway may
-use that workflow only as an explicit gateway-deployment test; it does not move
-the current `pmu-gateway` or any other infrastructure service out of this
-checkout. Processor containers connect to this stack through the external
+[`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/)
+and
+[`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/)
+are separate processor-repository seeds. `forgejo-init` automatically creates
+one private Forgejo repository per seed and seeds each `main` branch only when
+its remote has no refs. An existing nonempty private repository is left
+unchanged. Each repository contains one internal processor, its one-service
+Compose fragment, deployment tooling, and a Forgejo Actions workflow. A future
+gateway may use its own repository only as an explicit gateway-deployment test;
+it does not move the current `pmu-gateway` or any other infrastructure service
+out of this checkout. Processor containers connect through the external
 `wama-infra` Docker network; they do not include, modify, or redeploy this
 Compose project.
 
@@ -57,6 +62,9 @@ service owns its fragment, configuration, and scripts beneath
 | [services/kafka-exporter/](services/kafka-exporter/) | `kafka-exporter` | Compose fragment for internal Kafka broker, topic, and consumer-lag metrics |
 | [services/kafka-ui/](services/kafka-ui/) | `kafka-ui` | Compose fragment and Kafka UI environment configuration |
 | [services/pmu-gateway/](services/pmu-gateway/) | `pmu-gateway` | Compose fragment, configurable PMU fixture, image, source, and tests |
+| [services/iec104-exporter/](services/iec104-exporter/) | `iec104-exporter` | One-way IEC 104 controlled station consuming raw-Protobuf `Export` records |
+| [services/iec104-receiver/](services/iec104-receiver/) | `iec104-receiver` | Profile-gated test control center for IEC 104 protocol verification |
+| [services/iec104-browser/](services/iec104-browser/) | `iec104-browser` | On-demand browser control center for wire-received IEC 104 values |
 | [services/druid/](services/druid/) | `druid` | Persistent single-server Druid image, canonical Protobuf descriptor build, and Router API |
 | [services/druid-init/](services/druid-init/) | `druid-init` | Idempotent `LiveMeasurement` Kafka supervisor initializer and tests |
 | [services/postgres/](services/postgres/) | `postgres` | Compose fragment, trusted local credentials, and persistent prepared database |
@@ -80,13 +88,13 @@ definition, Dockerfiles, configuration, scripts, and service documentation in
 that service directory.
 
 `processor-*` services do not belong under this infrastructure `services/`
-directory. Provision them in the separate processors repository seed.
+directory. Provision each in its own separate processor repository seed.
 
 ## Prerequisites
 
 - Docker Engine with Docker Compose v2 or newer
 - Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8333`, `23646`,
-  `3000`, `3001`, `3002`, `5432`, `8888`, and `2222` available
+  `3000`, `3001`, `3002`, `3003`, `5432`, `8888`, `2222`, and `127.0.0.1:2404` available
 
 ## Start and stop
 
@@ -128,15 +136,16 @@ docker compose logs forgejo-init
 docker compose logs infra-readiness
 ```
 
-`kafka`, `druid`, `postgres`, `seaweedfs`, `victoria-metrics`, `grafana`, and
-`measurement-session-api` should be `healthy`; `kafka-init` and `druid-init`
-should have exited with status `0`; and `kafka-ui`, `kafka-exporter`, `pmu-gateway`,
-`measurement-session-browser`, `node-exporter`, `cadvisor`, `forgejo`, and
-`forgejo-runner` should be running. `forgejo-init` and `infra-readiness` should
-have exited with status `0`; the latter verifies the Kafka contract and PMU
-traffic, Druid supervisor and SQL query, PostgreSQL, SeaweedFS S3, Forgejo, and
-the monitoring path. The profile-gated exporter and E2E verifier run only when
-explicitly invoked.
+`kafka`, `druid`, `postgres`, `seaweedfs`, `victoria-metrics`, `grafana`,
+`measurement-session-api`, `iec104-exporter`, and `iec104-browser` should be `healthy`;
+`kafka-init` and `druid-init` should have exited with status `0`; and
+`kafka-ui`, `kafka-exporter`, `pmu-gateway`, `measurement-session-browser`,
+`node-exporter`, `cadvisor`, `forgejo`, and `forgejo-runner` should be running.
+`forgejo-init` and `infra-readiness` should have exited with status `0`; the
+latter verifies the Kafka contract and PMU traffic, Druid supervisor and SQL
+query, PostgreSQL, SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener.
+The profile-gated measurement-session exporter, contract-to-download verifier,
+and IEC 104 test receiver run only when explicitly invoked.
 
 Stop the stack while preserving Kafka, Druid, PostgreSQL, SeaweedFS, Forgejo,
 runner, Grafana, and VictoriaMetrics data:
@@ -146,7 +155,7 @@ docker compose down
 ```
 
 Start it again with `docker compose up -d`. Kafka topic initialization and
-Forgejo runner registration and processors repository seeding are idempotent.
+Forgejo runner registration and processor repository seeding are idempotent.
 
 To remove all local state and begin with an empty broker, database, object
 store, Forgejo instance, dashboards, and metrics history, stop the stack and
@@ -189,52 +198,75 @@ Run the Druid-backed Grafana dashboard path:
 scripts/test-grafana-pmu-dashboard.sh
 ```
 
-## CI
+Run the complete one-way IEC 104 path:
 
-The root [infrastructure workflow](.github/workflows/infrastructure.yml) renders
-the Compose assembly, validates the Druid descriptor/image and helper tests,
-proves PMU-to-Druid ingestion and the Grafana PMU dashboard path, runs every
-finalized-session image test target, and proves the complete contract-to-download
-path on an ephemeral Docker runner. It only validates this root repository; it
-does not publish images or deploy services. The separate Forgejo workflow remains
-restricted to the processors repository.
+```sh
+scripts/test-iec104-export.sh
+```
+
+The script starts the root-owned exporter, connects a profile-gated test control
+center using `STARTDT` only, publishes three unique raw-Protobuf `Export`
+records, and proves receipt of single-point, double-point, and short-float
+monitor values with their COT, information-object address, quality, and value.
+It then sends a raw general-interrogation I-frame and requires the exporter to
+close the connection without an application response. The script stops the IEC
+104 browser while its profile-gated test control center owns the one IEC
+connection, then restores the browser idle afterward.
+
+Run the browser wire-to-page validation:
+
+```sh
+scripts/test-iec104-browser.sh
+```
+
+The script opens the browser's transient WebSocket control center, publishes a
+unique three-ASDU fixture through Kafka, proves the live page stream receives
+each typed value, then requires the browser to release IEC 104 after the stream
+closes.
+
+Open the live IEC 104 monitor at `http://localhost:3003`. Opening the page
+starts its read-only control-center connection and shows only values received on
+that IEC connection. Closing the final page disconnects it and discards the
+page's value list. The browser and the profile-gated receiver cannot be active
+at the same time because the exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator, a private
-`<owner>/wama-processors` repository, its initial `main` commit, and the
-`.wama-forgejo-processors-root` marker in the isolated processors deployment
-root. It skips seeding without modifying an existing repository that already
-has refs, and it fails without mutation if that existing repository is not
-private. Its generated runner credentials remain in the `forgejo-runner-data`
-volume.
+`forgejo-init` creates the configured administrator, private
+`<owner>/processor-frequency-scale` and `<owner>/processor-apparent-power`
+repositories, their initial `main` commits, and a
+`.wama-forgejo-processor-root` marker in each isolated deployment root. It
+skips seeding without modifying any existing repository that already has refs,
+and it fails without mutation if an existing repository is not private. Its
+generated runner credentials remain in the `forgejo-runner-data` volume.
 
-After bootstrap, clone the separate processors repository to work on it. These
-commands must never be run from this infrastructure checkout:
+After bootstrap, clone the individual processor repository you intend to work
+on. These commands must never be run from this infrastructure checkout:
 
 ```sh
-git clone "https://<forgejo-host>/<owner>/wama-processors.git"
-cd wama-processors
+git clone "https://<forgejo-host>/<owner>/processor-frequency-scale.git"
+cd processor-frequency-scale
 ```
 
-The processors seed's workflow validates pull requests. A trusted processors
-`main` push tests and publishes only `processor-*` images, then synchronizes
-only the processors checkout to `WAMA_PROCESSORS_DEPLOY_ROOT` and deploys only
-those processor services. A gateway may use Forgejo only in a deliberately declared
-gateway-deployment test; that exception must not deploy, modify, or take
-ownership of the current `pmu-gateway` or any root infrastructure service.
+Each processor workflow validates pull requests. A trusted `main` push tests
+and publishes only its one processor image, then synchronizes only its checkout
+to its own deployment root and deploys only that service. A gateway may use
+Forgejo only in a deliberately declared gateway-deployment test; that exception
+must not deploy, modify, or take ownership of the current `pmu-gateway` or any
+root infrastructure service.
 
-The `wama-processors-ci` and `wama-processors-deploy` labels belong to separate
-repository-scoped connections handled by the same capacity-one runner daemon.
-The deployment connection runs in the runner container with the host Docker
-socket and processors deployment root mounted at the same path. This is trusted
-local-PoC access: processors-repository workflow authors can control the Docker
-host. Do not expose this runner to untrusted repositories, users, or production
+Each processor has distinct repository-scoped CI and deployment runner
+connections, all handled by the same capacity-one runner daemon. The deployment
+connection runs in the runner container with the host Docker socket and its
+matching deployment root mounted at the same path. This is trusted local-PoC
+access: processor-repository workflow authors can control the Docker host. Do
+not expose this runner to untrusted repositories, users, or production
 workloads.
 
-Create processors only from the instructions in the separate
-[processors repository README](forgejo-repos/wama-processors/README.md).
-Each processor owns its Python code, test suite, and app-local Compose fragment.
+Create or adapt processors only from the instructions in the individual
+[frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
+[apparent-power README](forgejo-repos/processor-apparent-power/README.md). Each
+repository owns its Python code, test suite, and app-local Compose fragment.
 
 ## Fake PMU messages
 
@@ -250,6 +282,11 @@ value names are `double_value`, `int_value`, `uint_value`, `bool_value`,
 [configuration reference](services/pmu-gateway/README.md). The gateway creates
 Kafka, gateway, and MCCS timestamps at send time. It can optionally derive a
 field timestamp from `field_timestamp_offset_ms`.
+
+The default `double_value` signals use small bounded `value_jitter` amplitudes,
+so each publish cycle produces realistic variation around its nominal PMU
+value. Custom fixture values remain fixed unless their individual entries opt
+into jitter.
 
 Change the default fixture, then recreate the gateway to apply it:
 
@@ -284,6 +321,9 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 | Measurement session browser | `http://<host-ip>:3002` |
 | Druid Router API and web console | `http://<host-ip>:8888` |
 | VictoriaMetrics API and VMUI | `http://127.0.0.1:8428` |
+| IEC 104 controlled station | `tcp://127.0.0.1:2404` |
+| IEC 104 live monitor | `http://localhost:3003` |
+| IEC 104 live monitor | `http://localhost:3003` |
 
 Kafka UI exposes topic contents, partitions, consumer groups, messages, and
 broker metadata. Its port is exposed on all host interfaces so it can be opened
@@ -476,6 +516,12 @@ JSON console messages as application data on that topic.
 [the finalized-session schema](docs/wama/schema/measurement_session.proto).
 Its Kafka payload contains bounded metadata and an integrity-checked manifest
 reference only; artifacts remain in SeaweedFS.
+
+`Export` uses raw Protobuf, serialized from
+[the IEC 104 export schema](docs/wama/schema/iec104_export.proto). The current
+root-owned exporter supports outbound `M_SP_NA_1`, `M_DP_NA_1`, and `M_ME_NC_1`
+monitor values only. A future processor may produce this contract from its own
+Forgejo repository, but no export-producing processor is part of this checkout.
 
 ## CLI inspection
 

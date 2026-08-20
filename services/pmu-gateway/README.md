@@ -20,6 +20,7 @@ messages:
   - mrid: urn:wama:poc:pmu:bay-01:frequency
     value:
       double_value: 50.01
+    value_jitter: 0.01
     quality:
       valid: true
     field_timestamp_offset_ms: 20
@@ -36,6 +37,13 @@ For every publish cycle, the gateway derives one UTC millisecond timestamp,
 uses it for Kafka's record timestamp plus `timestamp_gateway` and
 `timestamp_mccs`, then derives `timestamp_field` by subtracting the optional
 offset. The resulting timestamp ordering follows the Common Format contract.
+
+`value_jitter` is optional, finite, and non-negative. It is supported only for
+`double_value`; when greater than zero, each publish cycle samples a new value
+uniformly from the configured nominal value plus or minus the amplitude. Omit
+it or set it to `0` to retain a fixed value. The default PMU fixture uses small
+per-signal jitter for voltage, current, frequency, and ROCOF; custom fixtures
+remain fixed unless they opt individual values in.
 
 The fixture is intentionally not watched. Recreate or restart the service
 after changing it:

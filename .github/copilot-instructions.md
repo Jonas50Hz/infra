@@ -72,13 +72,21 @@ This is NOT the production target (production is Kubernetes-based).
   and `services/measurement-session-e2e/`. They are root-owned, not Forgejo
   deployment targets. The browser is credential-free; only the API may access
   SeaweedFS and it must proxy every artifact download.
+- IEC 104 services own `services/iec104-exporter/`,
+  `services/iec104-receiver/`, and `services/iec104-browser/`. The exporter is
+  a root-owned one-way controlled station that consumes typed raw-Protobuf
+  `Export` records; the receiver is a profile-gated control-center test only;
+  the browser is an on-demand, read-only control center that holds no values
+  after its final page closes. None is a Forgejo deployment target and no
+  export-producing processor exists yet.
 - Forgejo services own `services/forgejo/`, `services/forgejo-init/`, and
   `services/forgejo-runner/`.
-- This repository is never pushed to Forgejo. The seed at
-  `forgejo-repos/wama-processors/` is the only Forgejo-pushable surface; it
-  owns workflows, code, app Compose fragments, and deployment scripts only for
-  internal `processor-*` services and explicitly declared gateway-deployment
-  tests. All other assets remain in this repository. The seed connects to
+- This repository is never pushed to Forgejo. Each tracked seed at
+  `forgejo-repos/processor-*/` is an independent Forgejo-pushable processor
+  repository. It owns one internal `processor-*` service, its workflow, code,
+  app Compose fragment, and deployment script. A repository may contain a
+  gateway only for an explicitly declared gateway-deployment test. All other
+  assets remain in this repository. Every processor seed connects to
   infrastructure only through the external `wama-infra` Docker network.
 - Infrastructure monitoring services own `services/victoria-metrics/`,
   `services/node-exporter/`, `services/cadvisor/`, `services/kafka-exporter/`,
@@ -99,7 +107,7 @@ This is NOT the production target (production is Kubernetes-based).
 | Infrastructure metrics | Grafana + metrics backend | VictoriaMetrics + node-exporter + cAdvisor + Grafana |
 | Raw/blob | SeaweedFS | SeaweedFS `weed mini`, S3-compatible single-node service |
 | Viz | Grafana | VictoriaMetrics for infrastructure; Druid-backed PMU measurement dashboard; anonymous static browser for finalized sessions |
-| Export | IEC 104 + file export | out of PoC scope |
+| Export | IEC 104 + file export | root-owned one-way IEC 104 exporter; file export remains future work |
 
 ## Coding conventions
 - Python: type hints, early returns, docstrings, no bare excepts.

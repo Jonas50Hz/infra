@@ -10,13 +10,14 @@ checks the Druid Router and `live_measurements` supervisor, and queries the PMU
 frequency fixture through Druid SQL to require matching `__time` and
 `timestamp_mccs`. It also checks PostgreSQL connectivity and identity, and
 performs signed temporary S3 put/get/delete operations in both SeaweedFS
-buckets. It checks Forgejo's private seeded processors repository and its
+buckets. It checks both private seeded Forgejo processor repositories and their
 separate CI/deployment Actions runner connections, Kafka UI, Grafana
 provisioning, and VictoriaMetrics scrape health including Kafka exporter metrics
 for all WAMA topics. Grafana readiness requires the VictoriaMetrics datasource,
 the internal Druid datasource, the **WAMA Measurements / WAMA PMU Live
 Measurements** dashboard, and a Grafana datasource query returning the expected
-PMU frequency value.
+PMU frequency value. It also checks the IEC 104 browser HTTP health and accepts
+its idle or viewer-owned status without opening an IEC control-center connection.
 
 The probe deliberately does not require PostgreSQL to have no application
 tables. The measurement-session catalog is an app-owned schema and is verified

@@ -48,8 +48,9 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 - **Grafana** uses VictoriaMetrics for operational dashboards and its provisioned
   Druid datasource for live PMU measurement trends; **Trino** remains later for
   federated query.
-- **Export:** IEC 104 exporter (real-time) + File Export (xlsx/csv). MQTT
-  exporter for OT/EAS targets.
+- **Export:** root-owned `iec104-exporter` sends supported real-time monitor
+  ASDUs from typed `Export` records to one control center. File (xlsx/csv) and
+  MQTT export remain later work.
 - **CI/CD target:** Git → CI/CD → infrastructure Git → ArgoCD (GitOps deploy).
 - **Apache Spark** is a future-only option for heavy or batch workloads; it is
   not a current PoC service.
@@ -78,33 +79,33 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 ### Compose PoC delivery
 - The infrastructure repository provisions Forgejo, Kafka, and the external
   `wama-infra` Docker network. It is never pushed to Forgejo.
-- `forgejo-repos/wama-processors/` is a separate processors repository seed.
-  `forgejo-init` creates its private Forgejo repository, seeds `main` only when
-  it is empty, and registers separate CI and deployment runner connections.
-- Processors pull requests validate only processor code and processors-local
-  tooling. Trusted processors `main` pushes publish only processor OCI images
-  and deploy only processors Compose services from an isolated deployment root.
-- Processor authors edit Python/Quixstreams code in the processors repository;
+- `forgejo-repos/processor-frequency-scale/` and
+  `forgejo-repos/processor-apparent-power/` are separate processor repository
+  seeds. `forgejo-init` creates their private Forgejo repositories, seeds each
+  `main` only when it is empty, and registers separate CI and deployment runner
+  connections for each.
+- Processor pull requests validate only their own code and local tooling. A
+  trusted processor `main` push publishes only that processor OCI image and
+  deploys only its one Compose service from an isolated deployment root.
+- Processor authors edit Python/Quixstreams code in their processor repository;
   YAML is optional service configuration, not a substitute for the pipeline.
+- `iec104-exporter` and its profile-gated `iec104-receiver` control-center test
+  are root-owned infrastructure services. A future processor may produce typed
+  `Export` records but must not deploy or take ownership of either service.
 - The finalized-session exporter, catalog API, browser, and contract-to-download
-  verifier are root infrastructure services because they are outside the narrow
   Forgejo processor deployment scope. Forgejo does not deploy or modify them.
-- `druid` and its one-shot `druid-init` supervisor helper are likewise
   root-owned. Root Compose builds and deploys the local Druid image; the
   processor-only Forgejo workflow neither publishes nor deploys it.
-- Root CI renders Compose, runs the finalized-session service test images, and
-  proves the contract-to-download path, Druid descriptor generation, PMU query
-  ingestion, and Grafana dashboard datasource path without publishing or
-  deploying root services.
-- The processors deployment runner has host Docker access by design for this
   local PoC. It is not a production isolation model.
 
 ### Quixstreams
-- Power Users (electrical engineers) write processing/detection pipelines in Python.
 - Runs on the measurement stream; derived values are written back to Kafka.
 - Processor detection and lifecycle updates remain future work. This PoC uses a
   static final-only exporter that writes an immutable `MeasurementSession`
   record and long-term blob manifest.
+- The planned [LFR per-second frequency provision](04-lfr-frequency-provision.md)
+  is a separate Kafka-first processor specification. It does not extend the
+  current Hz-to-mHz `processor-frequency-scale` example.
 - Commit → CI tests → auto-deploy if it passes.
 - **Open risk:** throughput / heavy waveform at target load unproven — benchmark
   early. Heavy signal-processing may need a JVM engine (Flink/Beam).
@@ -126,6 +127,26 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
   unset. Grafana provisions a pinned Druid datasource plugin and the
   `WAMA Measurements / WAMA PMU Live Measurements` dashboard for valid PMU
   voltage, current, frequency, and ROCOF trends; alerting remains deferred.
+
+### IEC 104 export
+- `iec104-exporter` is a c104-backed controlled-station server that consumes
+  raw-Protobuf `ExportRecord` values from Kafka's `Export` topic.
+- It sends only `M_SP_NA_1`, `M_DP_NA_1`, and `M_ME_NC_1` monitor-direction
+  values to one active control center on TCP port 2404. Application commands,
+  interrogation, and parameterization are rejected at a TCP ingress guard before
+  c104 sees an application I-frame. Only well-formed U/S transport control
+  frames reach c104. TLS/IEC 62351 and file/MQTT export remain outside this PoC
+  slice.
+- `iec104-receiver` is a profile-gated test control center. It starts IEC data
+  transfer without general interrogation and proves the Kafka-to-ASDU path. It
+  then deliberately probes a raw general-interrogation I-frame and requires the
+  exporter to close the connection. It is not a production control-center
+  deployment.
+- `iec104-browser` is an on-demand, read-only control center. Its WebSocket page
+  starts the IEC connection only while at least one browser tab is open, shows
+  wire-received monitor values, and discards them when the final tab closes. It
+  is mutually exclusive with the profile-gated receiver because the exporter
+  permits one control center.
 
 ### VictoriaMetrics + Grafana (operational observability)
 - VictoriaMetrics scrapes host and Docker-container metrics directly in the

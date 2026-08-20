@@ -20,6 +20,7 @@ messages:
   - mrid: urn:wama:poc:test:frequency
     value:
       double_value: 50.01
+    value_jitter: 0.01
     quality:
       valid: true
     field_timestamp_offset_ms: 20
@@ -33,8 +34,39 @@ messages:
         self.assertEqual(config.publish_interval_ms, 250)
         self.assertEqual(len(config.messages), 2)
         self.assertEqual(config.messages[0].value_field, "double_value")
+        self.assertEqual(config.messages[0].value_jitter, 0.01)
         self.assertEqual(config.messages[0].quality, {"valid": True})
         self.assertEqual(config.messages[1].value, 2)
+        self.assertEqual(config.messages[1].value_jitter, 0.0)
+
+    def test_rejects_negative_or_non_finite_value_jitter(self) -> None:
+        for value_jitter in ("-0.01", ".nan"):
+            with self.subTest(value_jitter=value_jitter):
+                with self.assertRaisesRegex(
+                    ConfigurationError,
+                    "finite non-negative number",
+                ):
+                    self._load(
+                        f"""
+messages:
+  - mrid: urn:wama:poc:test:frequency
+    value:
+      double_value: 50.01
+    value_jitter: {value_jitter}
+"""
+                    )
+
+    def test_rejects_value_jitter_for_non_double_value(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "only supported for double_value"):
+            self._load(
+                """
+messages:
+  - mrid: urn:wama:poc:test:state
+    value:
+      uint_value: 2
+    value_jitter: 1
+"""
+            )
 
     def test_rejects_multiple_oneof_values(self) -> None:
         with self.assertRaisesRegex(

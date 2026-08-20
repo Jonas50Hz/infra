@@ -10,9 +10,8 @@ fragment assembly and shared top-level resources.
 
 This directory is infrastructure-only. Do not add application `processor-*`
 services here. The separate
-[`../forgejo-repos/wama-processors/`](../forgejo-repos/wama-processors/)
-seed owns processor services and joins this stack through the external
-`wama-infra` network.
+[`../forgejo-repos/`](../forgejo-repos/) seeds each own one processor service
+and join this stack through the external `wama-infra` network.
 
 | Directory | Compose service |
 | --- | --- |
@@ -22,6 +21,9 @@ seed owns processor services and joins this stack through the external
 | [`kafka-exporter/`](kafka-exporter/) | `kafka-exporter` |
 | [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
 | [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` |
+| [`iec104-exporter/`](iec104-exporter/) | `iec104-exporter` |
+| [`iec104-receiver/`](iec104-receiver/) | `iec104-receiver` (profile `iec104-test`) |
+| [`iec104-browser/`](iec104-browser/) | `iec104-browser` |
 | [`druid/`](druid/) | `druid` |
 | [`druid-init/`](druid-init/) | `druid-init` |
 | [`postgres/`](postgres/) | `postgres` |

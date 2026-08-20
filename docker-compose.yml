@@ -5,6 +5,9 @@ include:
   - ./services/kafka-exporter/compose.yaml
   - ./services/kafka-ui/compose.yaml
   - ./services/pmu-gateway/compose.yaml
+  - ./services/iec104-exporter/compose.yaml
+  - ./services/iec104-receiver/compose.yaml
+  - ./services/iec104-browser/compose.yaml
   - ./services/postgres/compose.yaml
   - ./services/seaweedfs/compose.yaml
   - ./services/measurement-session-exporter/compose.yaml

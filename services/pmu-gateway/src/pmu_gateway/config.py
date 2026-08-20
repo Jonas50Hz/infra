@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,7 @@ class MessageDefinition:
     value: bool | datetime | float | int | str
     quality: dict[str, bool]
     field_timestamp_offset_ms: int | None
+    value_jitter: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -94,7 +96,7 @@ def _parse_message(raw_message: Any, index: int) -> MessageDefinition:
     message = _mapping(raw_message, location)
     _reject_unknown_keys(
         message,
-        {"mrid", "value", "quality", "field_timestamp_offset_ms"},
+        {"mrid", "value", "quality", "field_timestamp_offset_ms", "value_jitter"},
         location,
     )
 
@@ -112,12 +114,24 @@ def _parse_message(raw_message: Any, index: int) -> MessageDefinition:
             f"{location}.field_timestamp_offset_ms",
         )
 
+    value_jitter = 0.0
+    if "value_jitter" in message:
+        if value_field != "double_value":
+            raise ConfigurationError(
+                f"{location}.value_jitter is only supported for double_value"
+            )
+        value_jitter = _parse_non_negative_finite_number(
+            message["value_jitter"],
+            f"{location}.value_jitter",
+        )
+
     return MessageDefinition(
         mrid=raw_mrid.strip(),
         value_field=value_field,
         value=value,
         quality=quality,
         field_timestamp_offset_ms=offset,
+        value_jitter=value_jitter,
     )
 
 
@@ -226,6 +240,13 @@ def _parse_number(value: Any, location: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ConfigurationError(f"{location} must be a number")
     return float(value)
+
+
+def _parse_non_negative_finite_number(value: Any, location: str) -> float:
+    parsed = _parse_number(value, location)
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ConfigurationError(f"{location} must be a finite non-negative number")
+    return parsed
 
 
 def _mapping(value: Any, location: str) -> dict[str, Any]:

@@ -1,0 +1,27 @@
+services:
+  iec104-exporter:
+    build:
+      context: ../..
+      dockerfile: services/iec104-exporter/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      IEC104_BIND_HOST: 0.0.0.0
+      IEC104_BACKEND_PORT: 2405
+      IEC104_PORT: 2404
+      IEC104_READY_FILE: /tmp/iec104-exporter-ready
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUMER_GROUP: iec104-exporter
+      KAFKA_TOPIC: Export
+    ports:
+      - "127.0.0.1:${IEC104_EXPORTER_HOST_PORT:-2404}:2404"
+    healthcheck:
+      test: ["CMD", "python", "-m", "iec104_exporter.healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped

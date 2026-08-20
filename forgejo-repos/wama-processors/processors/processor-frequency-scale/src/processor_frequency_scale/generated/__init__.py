@@ -1,1 +1,0 @@
-"""Generated Protocol Buffer bindings for the application Common Format copy."""

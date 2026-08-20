@@ -65,6 +65,7 @@ def check_all(settings: Settings) -> None:
     check_s3(settings)
     check_forgejo(settings)
     check_kafka_ui(settings)
+    check_iec104_browser(settings)
     check_grafana(settings)
     check_victoria_metrics(settings)
 
@@ -302,38 +303,38 @@ def _check_s3_bucket(client: Any, bucket: str, payload: bytes) -> None:
 
 
 def check_forgejo(settings: Settings) -> None:
-    """Verify Forgejo, its bootstrapped private repository, and its runner."""
+    """Verify Forgejo, its private processor repositories, and their runners."""
 
     session = requests.Session()
     try:
         _request_json(session, "Forgejo health", _url(settings.forgejo_url, "/api/healthz"))
         encoded_owner = quote(settings.forgejo_admin_username, safe="")
-        encoded_repository = quote(settings.forgejo_processors_repository, safe="")
         auth = (settings.forgejo_admin_username, settings.forgejo_admin_password)
-        repository = _request_json(
-            session,
-            "Forgejo processors repository",
-            _url(settings.forgejo_url, f"/api/v1/repos/{encoded_owner}/{encoded_repository}"),
-            auth=auth,
-        )
-        validate_forgejo_repository(repository)
-        runners = _request_json(
-            session,
-            "Forgejo processors runners",
-            _url(
-                settings.forgejo_url,
-                f"/api/v1/repos/{encoded_owner}/{encoded_repository}/actions/runners",
-            ),
-            auth=auth,
-        )
+        for repository_name in settings.forgejo_processor_repositories:
+            encoded_repository = quote(repository_name, safe="")
+            repository = _request_json(
+                session,
+                f"Forgejo processor repository {repository_name}",
+                _url(settings.forgejo_url, f"/api/v1/repos/{encoded_owner}/{encoded_repository}"),
+                auth=auth,
+            )
+            validate_forgejo_repository(repository, repository_name)
+            runners = _request_json(
+                session,
+                f"Forgejo processor runners {repository_name}",
+                _url(
+                    settings.forgejo_url,
+                    f"/api/v1/repos/{encoded_owner}/{encoded_repository}/actions/runners",
+                ),
+                auth=auth,
+            )
+            validate_forgejo_runners(repository_name, runners)
     finally:
         session.close()
 
-    validate_forgejo_runners(runners)
 
-
-def validate_forgejo_repository(payload: Any) -> None:
-    """Require the processors repository to be private and seeded on main."""
+def validate_forgejo_repository(payload: Any, repository_name: str) -> None:
+    """Require one processor repository to be private and seeded on main."""
 
     if (
         not isinstance(payload, Mapping)
@@ -341,17 +342,19 @@ def validate_forgejo_repository(payload: Any) -> None:
         or payload.get("empty") is not False
         or payload.get("default_branch") != "main"
     ):
-        raise ReadinessError("Forgejo processors repository must be private and seeded on main")
+        raise ReadinessError(
+            f"Forgejo processor repository {repository_name!r} must be private and seeded on main"
+        )
 
 
-def validate_forgejo_runners(payload: Any) -> None:
-    """Require usable, separately scoped CI and deployment runner connections."""
+def validate_forgejo_runners(repository_name: str, payload: Any) -> None:
+    """Require usable CI and deployment runner connections for one repository."""
 
     if not isinstance(payload, list):
         raise ReadinessError("Forgejo runner endpoint did not return a list")
     expected_connections = {
-        "wama-processors-ci": "wama-processors-ci",
-        "wama-processors-deploy": "wama-processors-deploy",
+        f"wama-{repository_name}-ci": "wama-processors-ci",
+        f"wama-{repository_name}-deploy": "wama-processors-deploy",
     }
     runners_by_name = {
         runner.get("name"): runner
@@ -391,6 +394,46 @@ def check_kafka_ui(settings: Settings) -> None:
         session.close()
     if not isinstance(payload, Mapping) or str(payload.get("status", "")).upper() != "UP":
         raise ReadinessError("Kafka UI health endpoint did not report UP")
+
+
+def check_iec104_browser(settings: Settings) -> None:
+    """Require the on-demand browser HTTP surface without opening IEC 104."""
+
+    session = requests.Session()
+    try:
+        health = _request_json(
+            session,
+            "IEC 104 browser health",
+            _url(settings.iec104_browser_url, "/healthz"),
+        )
+        status = _request_json(
+            session,
+            "IEC 104 browser status",
+            _url(settings.iec104_browser_url, "/v1/iec104/status"),
+        )
+    finally:
+        session.close()
+    if not isinstance(health, Mapping) or health.get("status") != "ok":
+        raise ReadinessError("IEC 104 browser health endpoint did not report ok")
+    validate_iec104_browser_status(status)
+
+
+def validate_iec104_browser_status(payload: Any) -> None:
+    """Accept no-viewer and browser-viewer states without retaining messages."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError("IEC 104 browser status did not return an object")
+    state = payload.get("state")
+    active = payload.get("active")
+    viewers = payload.get("viewers")
+    if state not in {"idle", "connecting", "active"} or not isinstance(active, bool):
+        raise ReadinessError("IEC 104 browser status has an invalid monitor state")
+    if isinstance(viewers, bool) or not isinstance(viewers, int) or viewers < 0:
+        raise ReadinessError("IEC 104 browser status has an invalid viewer count")
+    if state == "active" and not active:
+        raise ReadinessError("IEC 104 browser active state has no IEC connection")
+    if state == "idle" and active:
+        raise ReadinessError("IEC 104 browser idle state has an IEC connection")
 
 
 def check_grafana(settings: Settings) -> None:
@@ -467,6 +510,7 @@ def check_grafana(settings: Settings) -> None:
         pmu_query,
         settings.druid_expected_mrid,
         settings.druid_expected_double_value,
+        settings.druid_expected_double_value_tolerance,
     )
 
 
@@ -522,6 +566,7 @@ def validate_grafana_pmu_query(
     payload: Any,
     expected_mrid: str,
     expected_double_value: float,
+    expected_double_value_tolerance: float = 0.0,
 ) -> None:
     """Require Grafana's Druid datasource to return the expected PMU frame."""
 
@@ -571,9 +616,14 @@ def validate_grafana_pmu_query(
             continue
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ReadinessError("Grafana Druid PMU frame has no numeric double_value")
-        if math.isclose(float(value), expected_double_value, abs_tol=1e-9):
+        if math.isclose(
+            float(value),
+            expected_double_value,
+            rel_tol=0.0,
+            abs_tol=expected_double_value_tolerance,
+        ):
             return
-        raise ReadinessError("Grafana Druid PMU double_value does not match the PMU fixture")
+        raise ReadinessError("Grafana Druid PMU double_value is outside the expected range")
     raise ReadinessError("Grafana Druid PMU frame did not return the expected MRID")
 
 

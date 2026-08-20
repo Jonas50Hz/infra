@@ -10,8 +10,13 @@ in SharePoint; update these summaries when the source docs change.
   rationale).
 - WAMA Platform.pptx — Gerbrand Jonas / Olsen Ida
   (data-platform framing, capability model, storage split, governance).
+- Business_Descpt_UseCase_Sek_Frequenzwertbereit_final.pdf — LFR per-second
+  frequency provision; distilled in
+  [04-lfr-frequency-provision.md](04-lfr-frequency-provision.md).
 - schema/rtd_schema.proto — Common Format contract (`MCCSMeasurementValue`,
   `rtd_schema.v1`). Same schema as MCCS. PoC uses its own MRIDs first.
+- schema/iec104_export.proto — PoC raw-Protobuf contract for one-way IEC 104
+  export records (`wama.iec104.v1`).
 - [image.png](image.png) — authoritative target component model and component
   vocabulary.
 - [User_Konfiguration_Nexus.bpmn](User_Konfiguration_Nexus.bpmn) —

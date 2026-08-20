@@ -80,6 +80,73 @@ class MeasurementEncodingTests(unittest.TestCase):
             datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc),
         )
 
+    def test_publisher_applies_double_value_jitter_with_injected_sampler(self) -> None:
+        definition = MessageDefinition(
+            mrid="urn:wama:poc:test:frequency",
+            value_field="double_value",
+            value=50.01,
+            quality={"valid": True},
+            field_timestamp_offset_ms=20,
+            value_jitter=0.01,
+        )
+        sampled_values = iter((50.0, 50.02))
+        sampler_arguments: list[tuple[float, float]] = []
+
+        def sample_uniform(lower_bound: float, upper_bound: float) -> float:
+            sampler_arguments.append((lower_bound, upper_bound))
+            return next(sampled_values)
+
+        producer = FakeProducer()
+        publisher = MeasurementPublisher(
+            producer,
+            "LiveMeasurement",
+            clock_ms=iter((1_700_000_000_123, 1_700_000_001_123)).__next__,
+            random_uniform=sample_uniform,
+        )
+
+        self.assertEqual(publisher.publish_cycle((definition,)), 1)
+        self.assertEqual(publisher.publish_cycle((definition,)), 1)
+
+        messages = []
+        for record in producer.records:
+            message = rtd_schema_pb2.MCCSMeasurementValue()
+            message.ParseFromString(record["value"])
+            messages.append(message)
+
+        self.assertEqual(len(sampler_arguments), 2)
+        for lower_bound, upper_bound in sampler_arguments:
+            self.assertAlmostEqual(lower_bound, 50.0)
+            self.assertAlmostEqual(upper_bound, 50.02)
+        self.assertEqual([message.double_value for message in messages], [50.0, 50.02])
+        self.assertEqual(
+            [message.timestamp_mccs.ToMilliseconds() for message in messages],
+            [1_700_000_000_123, 1_700_000_001_123],
+        )
+
+    def test_publisher_preserves_zero_jitter_double_value(self) -> None:
+        definition = MessageDefinition(
+            mrid="urn:wama:poc:test:frequency",
+            value_field="double_value",
+            value=50.01,
+            quality={},
+            field_timestamp_offset_ms=None,
+        )
+        producer = FakeProducer()
+        publisher = MeasurementPublisher(
+            producer,
+            "LiveMeasurement",
+            clock_ms=lambda: 1_700_000_000_123,
+            random_uniform=lambda _lower_bound, _upper_bound: self.fail(
+                "zero jitter must not sample a value"
+            ),
+        )
+
+        self.assertEqual(publisher.publish_cycle((definition,)), 1)
+
+        message = rtd_schema_pb2.MCCSMeasurementValue()
+        message.ParseFromString(producer.records[0]["value"])
+        self.assertEqual(message.double_value, 50.01)
+
     def test_publisher_uses_fixture_order_and_shared_kafka_timestamp(self) -> None:
         definitions = (
             MessageDefinition(

@@ -50,7 +50,11 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `cadvisor` — Docker-container metrics.
 - `grafana` — infrastructure dashboards over VictoriaMetrics and the
    Druid-backed `WAMA Measurements` PMU dashboard.
-- `exporter` — IEC 104 real-time export + file export (xlsx/csv).
+- `iec104-exporter` — root-owned one-way IEC 104 controlled station consuming
+   typed raw-Protobuf `Export` records.
+- `iec104-receiver` — profile-gated test control center for the IEC 104 path.
+- `iec104-browser` — on-demand, read-only web control center for live
+   wire-received IEC 104 values.
 - `forgejo` + `forgejo-runner` — Git + CI/CD + built-in registry.
 
 Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
@@ -112,9 +116,15 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    This is separate from the already-provisioned VictoriaMetrics infrastructure
    dashboards.
 
-### Phase 3 — Export (closes the data path)
-10. **Exporter service** — gateway on `Export` topic -> IEC 104; batch/file
-   export -> xlsx/csv on a configured measurement session or manual selection.
+### Phase 3 — Export (IEC 104 available now)
+10. **IEC 104 exporter** — root-owned controlled station consumes typed
+   raw-Protobuf `ExportRecord` values from `Export` and sends `M_SP_NA_1`,
+   `M_DP_NA_1`, and `M_ME_NC_1` monitor values to one connected control center.
+   The on-demand browser is the read-only live control center while a page is
+   open and discards messages when its final page closes. The profile-gated
+   receiver proves the exclusive wire path using only `STARTDT` and unique
+   fixtures. An export-producing processor, file/xlsx/csv export, and MQTT
+   export remain future work.
 
 ### Phase 4 — Onboarding + config as data
 11. **Masterdata via Git** — masterdata = IP + location committed to Git;
@@ -123,23 +133,18 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    security tests -> Systemexperte decision -> auditable deployment.
 
 ### Phase 5 — CI/CD loop (automates deploy)
-13. **Forgejo + Actions runner + registry** — infrastructure provisions a
-   private seeded `wama-processors` repository and two processors-scoped runner
-   connections on one daemon. The separate `forgejo-repos/wama-processors/`
-   seed owns CI: test + build image + push.
-14. **CD trigger** — a processors-repository Forgejo Actions job synchronizes
-   only its checkout to an isolated processors deployment root and runs
-   processors `docker compose up -d` on the external infrastructure network. It
-   never deploys or modifies the infrastructure Compose project.
-15. **Root validation CI** — the infrastructure workflow renders the root
-   Compose assembly, validates the Druid descriptor and helper tests, proves
-   PMU-to-Druid query ingestion and the Grafana PMU dashboard path, runs
-   finalized-session image tests, and executes the contract-to-download flow on
-   an ephemeral Docker runner. It neither publishes images nor deploys the root
-   stack.
+13. **Forgejo + Actions runner + registry** — infrastructure provisions
+   private seeded `processor-frequency-scale` and `processor-apparent-power`
+   repositories and four repository-scoped runner connections on one daemon.
+   Each separate `forgejo-repos/processor-*/` seed owns CI: test + build image
+   + push for exactly one processor.
+14. **CD trigger** — each processor's Forgejo Actions job synchronizes only its
+   checkout to its isolated deployment root and runs that processor's
+   `docker compose up -d` on the external infrastructure network. It never
+   deploys or modifies the infrastructure Compose project.
 
 ### Phase 6 — End-to-end pilot
-16. Run one real source through the whole path:
+15. Run one real source through the whole path:
     onboarding -> config/CI -> live data -> Druid -> Grafana -> export.
 
 ## Consumer requirements

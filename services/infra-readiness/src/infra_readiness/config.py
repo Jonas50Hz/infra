@@ -7,6 +7,11 @@ import math
 import os
 from collections.abc import Mapping
 
+DEFAULT_FORGEJO_PROCESSOR_REPOSITORIES = (
+    "processor-frequency-scale",
+    "processor-apparent-power",
+)
+
 
 class ConfigurationError(ValueError):
     """Raised when readiness configuration is incomplete or invalid."""
@@ -18,12 +23,14 @@ class Settings:
 
     druid_datasource: str
     druid_expected_double_value: float
+    druid_expected_double_value_tolerance: float
     druid_expected_mrid: str
     druid_router_url: str
     druid_supervisor_id: str
+    iec104_browser_url: str
     forgejo_admin_password: str
     forgejo_admin_username: str
-    forgejo_processors_repository: str
+    forgejo_processor_repositories: tuple[str, ...]
     forgejo_url: str
     grafana_password: str
     grafana_url: str
@@ -56,6 +63,11 @@ class Settings:
                 "DRUID_EXPECTED_DOUBLE_VALUE",
                 50.01,
             ),
+            druid_expected_double_value_tolerance=_non_negative_finite_float(
+                values,
+                "DRUID_EXPECTED_DOUBLE_VALUE_TOLERANCE",
+                0.01,
+            ),
             druid_expected_mrid=_required(
                 values,
                 "DRUID_EXPECTED_MRID",
@@ -67,6 +79,7 @@ class Settings:
                 "DRUID_SUPERVISOR_ID",
                 "live_measurements",
             ),
+            iec104_browser_url=_url(values, "IEC104_BROWSER_URL", "http://iec104-browser:8080"),
             forgejo_admin_password=_required(
                 values,
                 "FORGEJO_ADMIN_PASSWORD",
@@ -77,10 +90,10 @@ class Settings:
                 "FORGEJO_ADMIN_USERNAME",
                 "wama-admin",
             ),
-            forgejo_processors_repository=_required(
+            forgejo_processor_repositories=_repositories(
                 values,
-                "FORGEJO_PROCESSORS_REPOSITORY",
-                "wama-processors",
+                "FORGEJO_PROCESSOR_REPOSITORIES",
+                DEFAULT_FORGEJO_PROCESSOR_REPOSITORIES,
             ),
             forgejo_url=_url(values, "FORGEJO_URL", "http://forgejo:3000"),
             grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
@@ -146,6 +159,29 @@ def _buckets(values: Mapping[str, str]) -> tuple[str, ...]:
     return buckets
 
 
+def _repositories(
+    values: Mapping[str, str],
+    name: str,
+    default: tuple[str, ...],
+) -> tuple[str, ...]:
+    repositories = tuple(
+        repository.strip()
+        for repository in values.get(name, ",".join(default)).split(",")
+        if repository.strip()
+    )
+    if not repositories:
+        raise ConfigurationError(f"{name} must name at least one repository")
+    if len(set(repositories)) != len(repositories):
+        raise ConfigurationError(f"{name} must not repeat repositories")
+    for repository in repositories:
+        normalized = repository.replace("-", "").replace("_", "").replace(".", "")
+        if not normalized.isalnum():
+            raise ConfigurationError(
+                f"{name} repositories must use letters, numbers, dots, underscores, or hyphens"
+            )
+    return repositories
+
+
 def _finite_float(values: Mapping[str, str], name: str, default: float) -> float:
     raw_value = values.get(name, str(default)).strip()
     try:
@@ -154,6 +190,17 @@ def _finite_float(values: Mapping[str, str], name: str, default: float) -> float
         raise ConfigurationError(f"{name} must be a number") from error
     if not math.isfinite(value):
         raise ConfigurationError(f"{name} must be finite")
+    return value
+
+
+def _non_negative_finite_float(
+    values: Mapping[str, str],
+    name: str,
+    default: float,
+) -> float:
+    value = _finite_float(values, name, default)
+    if value < 0:
+        raise ConfigurationError(f"{name} must be non-negative")
     return value
 
 

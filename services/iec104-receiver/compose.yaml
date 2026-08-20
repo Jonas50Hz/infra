@@ -1,0 +1,22 @@
+services:
+  iec104-receiver:
+    profiles:
+      - iec104-test
+    build:
+      context: ../..
+      dockerfile: services/iec104-receiver/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      iec104-exporter:
+        condition: service_healthy
+    environment:
+      IEC104_EXPORTER_HOST: iec104-exporter
+      IEC104_EXPORTER_PORT: 2404
+      IEC104_RECEIVER_TIMEOUT_SECONDS: "${IEC104_RECEIVER_TIMEOUT_SECONDS:-30}"
+      IEC104_RECEIVER_MODE: "${IEC104_RECEIVER_MODE:-verify}"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: Export
+    restart: "no"

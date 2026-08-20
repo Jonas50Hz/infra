@@ -16,6 +16,8 @@ show_failure_diagnostics() {
     kafka-init \
     kafka-exporter \
     pmu-gateway \
+    iec104-exporter \
+    iec104-browser \
     druid \
     druid-init \
     postgres \
@@ -68,7 +70,7 @@ start_and_verify() {
   verify_druid_live_measurement
 }
 
-sh services/forgejo-init/tests/test_bootstrap.sh
+sh services/forgejo-init/tests/test_bootstrap_processors.sh
 docker compose config --quiet
 docker compose down -v --remove-orphans
 

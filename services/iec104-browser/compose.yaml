@@ -1,0 +1,27 @@
+services:
+  iec104-browser:
+    build:
+      context: ../..
+      dockerfile: services/iec104-browser/Dockerfile
+    depends_on:
+      iec104-exporter:
+        condition: service_healthy
+    environment:
+      IEC104_BROWSER_QUEUE_SIZE: "${IEC104_BROWSER_QUEUE_SIZE:-256}"
+      IEC104_EXPORTER_HOST: iec104-exporter
+      IEC104_EXPORTER_PORT: 2404
+    ports:
+      - "${IEC104_BROWSER_PORT:-3003}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped

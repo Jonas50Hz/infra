@@ -1,1 +1,0 @@
-"""Editable Quixstreams processor template for WAMA applications."""
