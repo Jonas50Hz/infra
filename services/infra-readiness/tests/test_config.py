@@ -27,14 +27,12 @@ class SettingsTests(unittest.TestCase):
             "http://measurement-session-exporter:8080",
         )
         self.assertEqual(
-            settings.forgejo_managed_repositories,
-            (
-                "processor-frequency-scale",
-                "processor-apparent-power",
-                "processor-frequency-iec104-export",
-                "processor-lfr-frequency-provision",
-                "gateway-c37-118-onboarding",
-            ),
+            settings.forgejo_gateway_repository,
+            "gateway-c37-118-onboarding",
+        )
+        self.assertEqual(
+            str(settings.forgejo_processor_registry_status_path),
+            "/registry-status/processors.json",
         )
         self.assertEqual(settings.kafka_bootstrap_servers, "kafka:9092")
         self.assertEqual(settings.measurement_session_topic_partitions, 12)
@@ -73,15 +71,9 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigurationError, "S3_BUCKETS"):
             Settings.from_environment({"S3_BUCKETS": " , "})
 
-    def test_rejects_repeated_managed_repositories(self) -> None:
-        with self.assertRaisesRegex(ConfigurationError, "must not repeat"):
-            Settings.from_environment(
-                {
-                    "FORGEJO_MANAGED_REPOSITORIES": (
-                        "processor-frequency-scale,processor-frequency-scale"
-                    )
-                }
-            )
+    def test_rejects_a_relative_processor_registry_status_path(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "FORGEJO_PROCESSOR_REGISTRY_STATUS_PATH"):
+            Settings.from_environment({"FORGEJO_PROCESSOR_REGISTRY_STATUS_PATH": "registry.json"})
 
     def test_rejects_non_http_service_url(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "FORGEJO_URL"):

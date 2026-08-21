@@ -40,7 +40,13 @@ class InputMeasurement:
     _output_mrids: Mapping[str, str]
     kafka_timestamp_ms: int
 
-    def derive(self, output_name: str, double_value: float) -> DerivedMeasurement:
+    def derive(
+        self,
+        output_name: str,
+        double_value: float,
+        *,
+        kafka_timestamp_ms: int | None = None,
+    ) -> DerivedMeasurement:
         """Create a declared double-valued output with the source context intact."""
 
         output_mrid = self._output_mrids.get(output_name)
@@ -50,6 +56,10 @@ class InputMeasurement:
             )
         if isinstance(double_value, bool) or not isinstance(double_value, Real):
             raise ProcessorDefinitionError("Derived double_value must be a number")
+        if kafka_timestamp_ms is not None and (
+            isinstance(kafka_timestamp_ms, bool) or not isinstance(kafka_timestamp_ms, int)
+        ):
+            raise ProcessorDefinitionError("Derived Kafka timestamp must be an integer")
 
         derived = MCCSMeasurementValue()
         derived.CopyFrom(self._source)
@@ -59,7 +69,9 @@ class InputMeasurement:
             name=output_name,
             double_value=float(double_value),
             _measurement=derived,
-            kafka_timestamp_ms=self.kafka_timestamp_ms,
+            kafka_timestamp_ms=(
+                self.kafka_timestamp_ms if kafka_timestamp_ms is None else kafka_timestamp_ms
+            ),
         )
 
 

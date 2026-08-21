@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -28,6 +31,7 @@ from infra_readiness.checks import (
     validate_measurement_session_api_health,
     validate_measurement_session_exporter_health,
     validate_live_measurement,
+    load_processor_registry_repositories,
     validate_prometheus_up,
     validate_topic_configurations,
     validate_topic_descriptions,
@@ -141,6 +145,42 @@ class ControlPlaneTests(unittest.TestCase):
             },
             "live_measurements",
         )
+
+    def test_reads_dynamic_processor_registry_including_an_empty_active_set(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "processors.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "processors": [
+                            {"repository": "processor-frequency-scale"},
+                            {"repository": "processor-apparent-power"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                load_processor_registry_repositories(path),
+                ("processor-frequency-scale", "processor-apparent-power"),
+            )
+            path.write_text(
+                json.dumps({"schema_version": 1, "processors": []}),
+                encoding="utf-8",
+            )
+            self.assertEqual(load_processor_registry_repositories(path), ())
+
+    def test_rejects_an_invalid_processor_registry_status_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "processors.json"
+            path.write_text(
+                json.dumps({"schema_version": 1, "processors": [{"repository": "gateway"}]}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ReadinessError, "invalid repository"):
+                load_processor_registry_repositories(path)
 
     def test_accepts_measurement_session_api_health(self) -> None:
         validate_measurement_session_api_health({"status": "ok"})

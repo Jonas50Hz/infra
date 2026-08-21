@@ -11,56 +11,34 @@ services:
       FORGEJO_BOOTSTRAP_ADMIN_EMAIL: "${FORGEJO_BOOTSTRAP_ADMIN_EMAIL:-wama-admin@local}"
       FORGEJO_BOOTSTRAP_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_BOOTSTRAP_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_FREQUENCY_SCALE_REPOSITORY: "${FORGEJO_FREQUENCY_SCALE_REPOSITORY:-processor-frequency-scale}"
-      FORGEJO_APPARENT_POWER_REPOSITORY: "${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
-      FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY: "${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
-      FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY: "${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
       FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
       FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME:-wama-gateway-c37-118-onboarding-agent}"
       FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL:-wama-gateway-c37-118-onboarding-agent@local}"
       FORGEJO_RUNNER_URL: "${FORGEJO_RUNNER_URL:-http://host.docker.internal:3000/}"
-      WAMA_FREQUENCY_SCALE_DEPLOY_ROOT: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
-      WAMA_APPARENT_POWER_DEPLOY_ROOT: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
-      WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-      WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+      FORGEJO_INTERNAL_ROOT_URL: "${FORGEJO_INTERNAL_ROOT_URL:-http://forgejo:3000}"
       WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
+      WAMA_PROCESSOR_AUTHORING_ROOT: /opt/wama/processor-authoring
+      WAMA_PROCESSOR_DEPLOY_BASE_ROOT: "${WAMA_PROCESSOR_DEPLOY_BASE_ROOT:-/var/lib/wama-processors}"
+      WAMA_PROCESSOR_REGISTRY_STATUS_PATH: /registry-status/processors.json
       WAMA_INFRA_NETWORK: "${WAMA_INFRA_NETWORK:-wama-infra}"
     volumes:
       - forgejo-data:/data
       - forgejo-runner-data:/runner
+      - forgejo-registry-status:/registry-status
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./bootstrap-processors.sh:/opt/wama/bootstrap.sh:ro
+      - ./processor_registry.py:/opt/wama/processor_registry.py:ro
       - type: bind
-        source: ../../forgejo-repos/processor-frequency-scale
-        target: /opt/wama/seeds/processor-frequency-scale
+        source: ../../forgejo-repos
+        target: /opt/wama/seeds
         read_only: true
       - type: bind
-        source: ../../forgejo-repos/processor-apparent-power
-        target: /opt/wama/seeds/processor-apparent-power
+        source: ../../processor-authoring
+        target: /opt/wama/processor-authoring
         read_only: true
       - type: bind
-        source: ../../forgejo-repos/processor-frequency-iec104-export
-        target: /opt/wama/seeds/processor-frequency-iec104-export
-        read_only: true
-      - type: bind
-        source: ../../forgejo-repos/processor-lfr-frequency-provision
-        target: /opt/wama/seeds/processor-lfr-frequency-provision
-        read_only: true
-      - type: bind
-        source: ../../forgejo-repos/gateway-c37-118-onboarding
-        target: /opt/wama/seeds/gateway-c37-118-onboarding
-        read_only: true
-      - type: bind
-        source: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
-        target: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
-      - type: bind
-        source: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
-        target: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
-      - type: bind
-        source: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-        target: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-      - type: bind
-        source: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
-        target: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+        source: "${WAMA_PROCESSOR_DEPLOY_BASE_ROOT:-/var/lib/wama-processors}"
+        target: "${WAMA_PROCESSOR_DEPLOY_BASE_ROOT:-/var/lib/wama-processors}"
       - type: bind
         source: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
         target: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"

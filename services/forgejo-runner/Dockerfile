@@ -13,5 +13,6 @@ RUN apk add --no-cache \
     npm \
     protobuf \
     py3-pip \
+    py3-yaml \
     python3 \
     rsync

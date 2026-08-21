@@ -1,6 +1,16 @@
-# WAMA Processor Authoring Experience (Deferred Design)
+# WAMA Processor Authoring Experience
 
-Status: **design only; not implemented**.
+Status: **v1alpha1 formula/latest-values/custom implementation in progress**.
+
+The first usable path is implemented in `processor-authoring/`: it validates
+revision-pinned source and output-approval catalogs, runs local engineering
+cases, scaffolds standard processor repositories, and locks generated files.
+`processor-frequency-scale` uses `formula`; `processor-apparent-power` uses
+`latest-values` with a 2,000 ms freshness policy; IEC 104 export and LFR remain
+explicit `custom` processors. Registration and removal are root-admin operations
+through `scripts/wama-processor-admin.sh`; `deploy-existing` intentionally
+reruns an approved retained repository's `main` workflow. None of these actions
+uses directory discovery or grants a processor workflow registration capability.
 
 This document defines a future authoring experience for electrical engineers
 who have basic Python knowledge and need to create, review, test, and evolve

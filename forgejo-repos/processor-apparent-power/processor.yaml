@@ -1,0 +1,64 @@
+api_version: wama.processor/v1alpha1
+kind: latest-values
+name: processor-apparent-power
+sdk:
+  version: 0.1.1
+  sha256: sha256:74493a95eace4ba8dd66e685156847c22f4bfc8921d8888c4acbc95fcbb8feb4
+catalog:
+  id: wama-c37-118-onboarding-v1
+  revision: sha256:9112a41641424565664dea8851003c59ddb030edb1be297ca331f3e368a7713a
+approvals:
+  id: wama-derived-output-v1
+  revision: sha256:52048e66685946994a40c4c28e435824b930295b10eb92d858365dfdaaa49f35
+inputs:
+  voltage_l1:
+    signal: pmu-bay-01.voltage-l1
+    expected_value: double
+    expected_unit: V
+  current_l1:
+    signal: pmu-bay-01.current-l1
+    expected_value: double
+    expected_unit: A
+  voltage_l2:
+    signal: pmu-bay-01.voltage-l2
+    expected_value: double
+    expected_unit: V
+  current_l2:
+    signal: pmu-bay-01.current-l2
+    expected_value: double
+    expected_unit: A
+  voltage_l3:
+    signal: pmu-bay-01.voltage-l3
+    expected_value: double
+    expected_unit: V
+  current_l3:
+    signal: pmu-bay-01.current-l3
+    expected_value: double
+    expected_unit: A
+outputs:
+  apparent_power_l1:
+    mrid: urn:wama:poc:pmu:bay-01:apparent-power-l1
+    value: double
+    unit: VA
+    approval: WAMA-OUTPUT-002
+  apparent_power_l2:
+    mrid: urn:wama:poc:pmu:bay-01:apparent-power-l2
+    value: double
+    unit: VA
+    approval: WAMA-OUTPUT-003
+  apparent_power_l3:
+    mrid: urn:wama:poc:pmu:bay-01:apparent-power-l3
+    value: double
+    unit: VA
+    approval: WAMA-OUTPUT-004
+latest_values:
+  groups:
+    - output: apparent_power_l1
+      inputs: [voltage_l1, current_l1]
+      maximum_age_ms: 2000
+    - output: apparent_power_l2
+      inputs: [voltage_l2, current_l2]
+      maximum_age_ms: 2000
+    - output: apparent_power_l3
+      inputs: [voltage_l3, current_l3]
+      maximum_age_ms: 2000

@@ -5,6 +5,16 @@ This standalone Forgejo repository owns only the
 it consumes the configured fake-PMU frequency from `LiveMeasurement` and writes
 a raw-Protobuf `wama.iec104.v1.ExportRecord` to `Export`.
 
+## Authoring Contract
+
+[processor.yaml](processor.yaml) declares this as a `custom` processor. Its
+input signal and typed `ExportRecord` output contract are pinned to reviewed
+catalog and approval revisions. The custom mode is intentional: an `Export`
+record is not a derived `LiveMeasurement` value, so the standard formula and
+latest-values adapters cannot represent it safely. Keep pipeline changes in the
+existing focused tests and do not replace its typed-output behavior with a
+standard mode.
+
 The output contains one `M_ME_NC_1` information object with defaults CA `1`, IOA
 `1001`, and spontaneous COT `3`. These values are configuration, not hidden
 mapping logic:

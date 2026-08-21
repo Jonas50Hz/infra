@@ -260,16 +260,27 @@ at the same time because the exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator, private
-`<owner>/processor-frequency-scale`, `<owner>/processor-apparent-power`, and
-`<owner>/processor-frequency-iec104-export`, and
-`<owner>/processor-lfr-frequency-provision`, and
-`<owner>/gateway-c37-118-onboarding` repositories. The four processor roots
-use `.wama-forgejo-processor-root`; the onboarding root uses
-`.wama-forgejo-gateway-onboarding-root`. Bootstrap skips seeding without
-modifying any existing repository that already has refs, and it fails without
-mutation if an existing repository is not private. Its generated runner
-credentials remain in the `forgejo-runner-data` volume.
+`forgejo-init` creates the configured administrator, bootstraps the separate
+`<owner>/gateway-c37-118-onboarding` repository, and initializes the approved
+processor registry. Its first run registers the four tracked processor seeds;
+later runs reconcile only the registry, so a folder cannot grant itself
+deployment privileges. Each registered processor owns exactly one marked child
+root under `/var/lib/wama-processors`; onboarding retains its separate gateway
+root. Bootstrap skips seeding without modifying any existing repository that
+already has refs, and it fails without mutation if an existing repository is
+not private. Its generated runner credentials remain in the
+`forgejo-runner-data` volume.
+
+The root-only lifecycle interface validates a manifest against the reviewed
+input and output catalogs before it can create repository connections or a
+deployment root:
+
+```sh
+scripts/wama-processor-admin.sh status
+scripts/wama-processor-admin.sh register processor-example
+scripts/wama-processor-admin.sh deploy-existing processor-example
+scripts/wama-processor-admin.sh unregister processor-example
+```
 
 After bootstrap, clone the individual managed repository you intend to work on.
 These commands must never be run from this infrastructure checkout:
@@ -296,12 +307,16 @@ run the command through
 ../gateway-c37-118-onboarding -- <command>`; the generated token is exported
 only to that child command. Re-run the installer after `docker compose down -v`.
 
-Each processor workflow validates pull requests. A trusted `main` push tests
-and publishes only its one processor image, then synchronizes only its checkout
-to its own deployment root and deploys only that service. A gateway may use
-Forgejo only in a deliberately declared gateway-deployment test; that exception
-must not deploy, modify, or take ownership of the deprecated `pmu-gateway` fixture or any
-root infrastructure service.
+Standard processors are authored through `processor.yaml`, `calculation.py`,
+and `cases.yaml`; their generated workflows verify the generated-file lock,
+catalog/approval evidence, engineering cases, deployment guard, and container
+test target on pull requests. A trusted `main` push then publishes only its one
+processor image, synchronizes only its checkout to its own deployment child
+root, verifies the OCI revision and running container state, and deploys only
+that service. A gateway may use Forgejo only in a deliberately declared
+gateway-deployment test; that exception must not deploy, modify, or take
+ownership of the deprecated `pmu-gateway` fixture or any root infrastructure
+service.
 
 The `gateway-c37-118-onboarding` workflow follows the same trusted
 `validate -> publish -> deploy` sequence. Its deploy step runs

@@ -98,6 +98,19 @@ def _validate_deploy_root(workspace: Path, deploy_root: Path) -> Path:
     return deploy_root
 
 
+def _validate_deploy_base_root(deploy_root: Path, base_root_value: str | None) -> None:
+    if not base_root_value:
+        raise DeploymentError("WAMA_PROCESSOR_DEPLOY_BASE_ROOT must be configured")
+    base_root = Path(base_root_value)
+    if not base_root.is_absolute() or base_root.is_symlink():
+        raise DeploymentError("WAMA_PROCESSOR_DEPLOY_BASE_ROOT must be an absolute real directory")
+    base_root = base_root.resolve()
+    if deploy_root.parent != base_root or deploy_root.name != EXPECTED_SERVICE:
+        raise DeploymentError(
+            "WAMA_PROCESSOR_DEPLOY_ROOT must be the expected child of WAMA_PROCESSOR_DEPLOY_BASE_ROOT"
+        )
+
+
 def _tracked_files(workspace: Path) -> list[Path]:
     result = subprocess.run(
         ["git", "-C", str(workspace), "ls-files", "-z"],
@@ -226,6 +239,18 @@ def _verify_revision(
         raise DeploymentError(
             f"{EXPECTED_SERVICE} revision {revision or '<missing>'} does not match {commit}"
         )
+    running = subprocess.run(
+        ["docker", "inspect", "--format", "{{.State.Running}}", container_id],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    _require_running_state(running)
+
+
+def _require_running_state(running: str) -> None:
+    if running != "true":
+        raise DeploymentError(f"{EXPECTED_SERVICE} is not running after deployment")
 
 
 def main() -> int:
@@ -248,9 +273,14 @@ def main() -> int:
         return 1
     try:
         workspace = Path(os.environ.get("FORGEJO_WORKSPACE", Path.cwd()))
-        synchronize_checkout(workspace, Path(deploy_root_value), arguments.commit)
+        deploy_root = _validate_deploy_root(workspace, Path(deploy_root_value))
+        _validate_deploy_base_root(
+            deploy_root,
+            os.environ.get("WAMA_PROCESSOR_DEPLOY_BASE_ROOT"),
+        )
+        synchronize_checkout(workspace, deploy_root, arguments.commit)
         deploy_processor(
-            Path(deploy_root_value),
+            deploy_root,
             arguments.image,
             arguments.commit,
             arguments.project_name,

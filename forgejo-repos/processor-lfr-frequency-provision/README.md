@@ -6,6 +6,16 @@ preferred frequency per closed UTC second from multiple PMU frequency and
 voltage inputs, then publishes the derived raw-Protobuf
 `MCCSMeasurementValue` back to `LiveMeasurement`.
 
+## Authoring Contract
+
+[processor.yaml](processor.yaml) declares this as a `custom` processor and
+pins its approved preferred-frequency output. The empty standard input section
+is deliberate: its deployed input map remains versioned in
+[config/lfr-config.yaml](config/lfr-config.yaml), where each configured PMU
+requires the deeper deadline, quality, and durable-state validation covered by
+the existing runtime tests. Do not translate this algorithm into a
+`latest-values` declaration.
+
 The processor closes a source second $T$ at its configured $400$-$800$ ms
 post-second deadline, retains a durable local state/outbox, and does not change
 a closed result when a late record arrives. Its current configuration uses a

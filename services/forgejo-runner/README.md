@@ -2,11 +2,15 @@
 
 `forgejo-runner` builds `wama-forgejo-runner:local`, which contains Forgejo
 Runner plus Git, Node, Python 3.12, Protocol Buffer tooling, Docker CLI,
-Docker Compose, and rsync. The image is the default container for the
+Docker Compose, PyYAML, and rsync. The image is the default container for the
 `wama-processors-ci` Actions label.
 
-The bootstrap service registers ten repository-scoped connections on the same
-capacity-one runner daemon:
+The root-owned processor registry registers repository-scoped CI/deploy
+connections on the same capacity-one runner daemon. Its first-run default set
+contains the four approved processor seeds, but registered processors are not a
+static Compose list. The registry atomically renders `config.yaml` with only
+active processor child roots plus the separate gateway root, then restarts this
+runner only after it has confirmed no executing scoped job exists.
 
 - `wama-processor-frequency-scale-ci` and
   `wama-processor-apparent-power-ci` run validation and publication jobs.
@@ -24,9 +28,10 @@ capacity-one runner daemon:
   run the one-shot C37.118 Masterdata publisher, and reconcile only
   catalog-derived legacy-v2 adapters in their marker-owned deployment root.
 
-The service mounts `/var/run/docker.sock` plus all individual managed roots.
-This grants trusted workflow code broad control of the Docker host. Limit write
-access to all managed repositories and do not reuse this
-configuration outside the local PoC. Bootstrap injects one dedicated
+The service mounts `/var/run/docker.sock`, the processor deployment base root,
+and the separate gateway root. Its generated runner configuration still permits
+only exact active child roots. This grants trusted workflow code broad control
+of the Docker host. Limit write access to all managed repositories and do not
+reuse this configuration outside the local PoC. Bootstrap injects one dedicated
 `write:package` token into trusted jobs so they can publish and pull private
 Forgejo images.

@@ -1,0 +1,53 @@
+cases:
+  - name: nominal phase one
+    inputs:
+      - input: voltage_l1
+        value: 230.4
+        valid: true
+        timestamp_ms: 1000
+      - input: current_l1
+        value: 318.2
+        valid: true
+        timestamp_ms: 1100
+    expect:
+      apparent_power_l1:
+        value: 73313.28
+        unit: VA
+        timestamp_ms: 1100
+  - name: reversed timestamps retain newest event time
+    inputs:
+      - input: current_l2
+        value: 316.7
+        valid: true
+        timestamp_ms: 1100
+      - input: voltage_l2
+        value: 229.8
+        valid: true
+        timestamp_ms: 1000
+    expect:
+      apparent_power_l2:
+        value: 72777.66
+        unit: VA
+        timestamp_ms: 1100
+  - name: invalid current produces no result
+    inputs:
+      - input: voltage_l3
+        value: 230.1
+        valid: true
+        timestamp_ms: 1000
+      - input: current_l3
+        value: 317.4
+        valid: false
+        timestamp_ms: 1100
+    expect: no_output
+  - name: stale voltage produces no result
+    inputs:
+      - input: voltage_l1
+        value: 230.4
+        valid: true
+        timestamp_ms: 1000
+      - input: current_l1
+        value: 318.2
+        valid: true
+        timestamp_ms: 3001
+    expect: no_output

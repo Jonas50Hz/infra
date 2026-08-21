@@ -16,11 +16,16 @@ $$
 | `frequency_hz` | `urn:wama:poc:pmu:bay-01:frequency` | Hz |
 | `frequency_millihertz` | `urn:wama:poc:pmu:bay-01:frequency-millihertz` | mHz |
 
-Edit [processor.py](src/processor_frequency_scale/processor.py) to change the
-calculation or signal names, then update
-[test_pipeline.py](tests/test_pipeline.py) with the expected engineering value.
-The processor needs a numeric `double_value`; it does not require
-`quality.valid` for this conversion.
+The authored surface is [processor.yaml](processor.yaml),
+[calculation.py](src/processor_frequency_scale/calculation.py), and
+[cases.yaml](cases.yaml). The generated adapter in
+[processor.py](src/processor_frequency_scale/processor.py) owns Kafka,
+raw-Protobuf, key, timestamp, and output-record mechanics. Update the
+engineering calculation and cases rather than the generated adapter.
+
+The standard formula policy accepts only explicitly valid finite `double_value`
+records. Invalid quality, nonnumeric values, and non-finite values produce no
+output.
 
 The shared runtime accepts only the declared source/key pair, copies source
 context and timestamp, writes the declared output key, and prevents the derived

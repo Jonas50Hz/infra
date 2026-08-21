@@ -41,3 +41,20 @@ class ProcessorTests(unittest.TestCase):
         )
 
         self.assertIsNone(transform(frequency))
+
+    def test_ignores_invalid_quality_and_non_finite_inputs(self) -> None:
+        invalid = input_measurement(
+            PROCESSOR,
+            FREQUENCY_HZ,
+            50.01,
+            is_valid=False,
+        )
+        non_finite = input_measurement(
+            PROCESSOR,
+            FREQUENCY_HZ,
+            float("inf"),
+            is_valid=True,
+        )
+
+        self.assertIsNone(transform(invalid))
+        self.assertIsNone(transform(non_finite))

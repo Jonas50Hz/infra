@@ -123,9 +123,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s %s\n' "$method" "$url" >> "$BOOTSTRAP_TEST_WGET_LOG"
-if [ "$method" = DELETE ]; then
-  exit 0
-fi
 if [ "$is_post" = false ] && [ "$BOOTSTRAP_TEST_REPOSITORY_EXISTS" = false ]; then
   exit 8
 fi
@@ -146,18 +143,24 @@ EOF
   chmod +x "$fake_bin/s6-setuidgid" "$fake_bin/forgejo" "$fake_bin/curl" "$fake_bin/jq" "$fake_bin/wget" "$fake_bin/git" "$fake_bin/chown"
 }
 
+create_registry_stub() {
+  path="$1"
+  cat > "$path" <<'EOF'
+import os
+from pathlib import Path
+import sys
+
+if sys.argv[1:] != ["bootstrap"]:
+    raise SystemExit("expected bootstrap")
+runner = Path(os.environ["FORGEJO_RUNNER_DIRECTORY"])
+runner.mkdir(parents=True, exist_ok=True)
+(runner / "registry-stub.log").write_text("bootstrap\n", encoding="utf-8")
+EOF
+}
+
 setup_case() {
   case_directory="$temporary_root/$1"
-  mkdir -p \
-    "$case_directory/seeds/processor-frequency-scale" \
-    "$case_directory/seeds/processor-apparent-power" \
-    "$case_directory/seeds/processor-frequency-iec104-export" \
-    "$case_directory/seeds/processor-lfr-frequency-provision" \
-    "$case_directory/seeds/gateway-c37-118-onboarding"
-  printf '%s\n' frequency > "$case_directory/seeds/processor-frequency-scale/README.md"
-  printf '%s\n' apparent > "$case_directory/seeds/processor-apparent-power/README.md"
-  printf '%s\n' frequency-iec104-export > "$case_directory/seeds/processor-frequency-iec104-export/README.md"
-  printf '%s\n' lfr-frequency-provision > "$case_directory/seeds/processor-lfr-frequency-provision/README.md"
+  mkdir -p "$case_directory/seeds/gateway-c37-118-onboarding"
   printf '%s\n' gateway-c37-118-onboarding > "$case_directory/seeds/gateway-c37-118-onboarding/README.md"
   : > "$case_directory/app.ini"
   : > "$case_directory/forgejo.log"
@@ -165,6 +168,7 @@ setup_case() {
   : > "$case_directory/curl.log"
   : > "$case_directory/wget.log"
   create_fake_commands "$case_directory/bin"
+  create_registry_stub "$case_directory/registry.py"
 }
 
 run_bootstrap() {
@@ -173,17 +177,16 @@ run_bootstrap() {
     FORGEJO_RUNNER_DIRECTORY="$case_directory/runner" \
     FORGEJO_PROCESSOR_SEED_ROOT="$case_directory/seeds" \
     FORGEJO_API_URL=http://forgejo.test/api/v1 \
+    FORGEJO_INTERNAL_ROOT_URL=http://forgejo.test \
     FORGEJO_BOOTSTRAP_ADMIN_USERNAME=wama-admin \
     FORGEJO_BOOTSTRAP_ADMIN_PASSWORD=wama-admin \
     FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME=wama-gateway-onboarding-agent \
     FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL=wama-gateway-onboarding-agent@test \
     FORGEJO_RUNNER_URL=http://forgejo.test/ \
-    WAMA_FREQUENCY_SCALE_DEPLOY_ROOT="$case_directory/frequency-deploy" \
-    WAMA_APPARENT_POWER_DEPLOY_ROOT="$case_directory/apparent-deploy" \
-    WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT="$case_directory/frequency-iec104-export-deploy" \
-    WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT="$case_directory/lfr-frequency-provision-deploy" \
-    WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT="$case_directory/gateway-c37-118-onboarding-deploy" \
-    BOOTSTRAP_TEST_AGENT_USER_FILE="$case_directory/gateway-onboarding-agent-user" \
+    WAMA_PROCESSOR_DEPLOY_BASE_ROOT="$case_directory/processor-deployments" \
+    WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT="$case_directory/gateway-deploy" \
+    WAMA_PROCESSOR_REGISTRY_SCRIPT="$case_directory/registry.py" \
+    BOOTSTRAP_TEST_AGENT_USER_FILE="$case_directory/gateway-agent-user" \
     BOOTSTRAP_TEST_CURL_LOG="$case_directory/curl.log" \
     BOOTSTRAP_TEST_FORGEJO_LOG="$case_directory/forgejo.log" \
     BOOTSTRAP_TEST_GIT_LOG="$case_directory/git.log" \
@@ -194,52 +197,41 @@ run_bootstrap() {
 assert_contains() {
   expected="$1"
   path="$2"
-  grep -Fq "$expected" "$path" || {
+  grep -Fq -- "$expected" "$path" || {
     printf '%s\n' "Expected $path to contain $expected" >&2
     exit 1
   }
 }
 
-test_seeds_and_registers_all_processor_repositories() {
-  setup_case seed-new
+assert_not_contains() {
+  unexpected="$1"
+  path="$2"
+  if grep -Fq -- "$unexpected" "$path"; then
+    printf '%s\n' "Expected $path not to contain $unexpected" >&2
+    exit 1
+  fi
+}
+
+test_bootstraps_gateway_and_delegates_processor_registry() {
+  setup_case bootstrap
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
   export BOOTSTRAP_TEST_REPOSITORY_REFS=
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
-  assert_contains processor-frequency-scale.git "$case_directory/git.log"
-  assert_contains processor-apparent-power.git "$case_directory/git.log"
-  assert_contains processor-frequency-iec104-export.git "$case_directory/git.log"
-  assert_contains processor-lfr-frequency-provision.git "$case_directory/git.log"
   assert_contains gateway-c37-118-onboarding.git "$case_directory/git.log"
-  assert_contains wama-processor-frequency-scale-ci: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-frequency-scale-deploy: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-apparent-power-ci: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-apparent-power-deploy: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-frequency-iec104-export-ci: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-frequency-iec104-export-deploy: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-lfr-frequency-provision-ci: "$case_directory/runner/config.yaml"
-  assert_contains wama-processor-lfr-frequency-provision-deploy: "$case_directory/runner/config.yaml"
-  assert_contains wama-gateway-c37-118-onboarding-ci: "$case_directory/runner/config.yaml"
-  assert_contains wama-gateway-c37-118-onboarding-deploy: "$case_directory/runner/config.yaml"
-  assert_contains ten-connections-v5 "$case_directory/runner/forgejo-managed-repositories.layout"
-  assert_contains 'PUT http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118-onboarding/collaborators/wama-gateway-onboarding-agent {"permission":"write"}' "$case_directory/curl.log"
+  assert_not_contains processor-frequency-scale.git "$case_directory/git.log"
+  assert_contains "--name wama-gateway-c37-118-onboarding-ci" "$case_directory/forgejo.log"
+  assert_contains "--name wama-gateway-c37-118-onboarding-deploy" "$case_directory/forgejo.log"
+  assert_contains bootstrap "$case_directory/runner/registry-stub.log"
+  test -f "$case_directory/gateway-deploy/.wama-forgejo-gateway-onboarding-root"
   assert_contains 'owner=wama-admin' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
   assert_contains 'repository=gateway-c37-118-onboarding' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
   assert_contains 'username=wama-gateway-onboarding-agent' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
   test "$(stat -c '%a' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.token")" = 600
-  if grep -Fq test-gateway-onboarding-agent-token "$case_directory/bootstrap.log"; then
-    printf '%s\n' "Bootstrap wrote the gateway onboarding agent token to its log" >&2
-    exit 1
-  fi
   run_bootstrap >> "$case_directory/bootstrap.log" 2>&1
   test "$(grep -Fc -- "admin user create --username wama-gateway-onboarding-agent" "$case_directory/forgejo.log")" -eq 1
-  test -f "$case_directory/frequency-deploy/.wama-forgejo-processor-root"
-  test -f "$case_directory/apparent-deploy/.wama-forgejo-processor-root"
-  test -f "$case_directory/frequency-iec104-export-deploy/.wama-forgejo-processor-root"
-  test -f "$case_directory/lfr-frequency-provision-deploy/.wama-forgejo-processor-root"
-  test -f "$case_directory/gateway-c37-118-onboarding-deploy/.wama-forgejo-gateway-onboarding-root"
 }
 
-test_skips_nonempty_repositories() {
+test_skips_nonempty_gateway_repository() {
   setup_case skip-nonempty
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
   export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
@@ -248,68 +240,22 @@ test_skips_nonempty_repositories() {
     printf '%s\n' "Bootstrap changed a repository with refs" >&2
     exit 1
   fi
-  assert_contains "processor-frequency-scale already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
-  assert_contains "processor-apparent-power already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
-  assert_contains "processor-frequency-iec104-export already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
-  assert_contains "processor-lfr-frequency-provision already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "gateway-c37-118-onboarding already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
 }
 
-test_rejects_unmarked_nonempty_processor_root() {
-  setup_case reject-root
-  mkdir "$case_directory/frequency-deploy"
-  printf '%s\n' unmanaged > "$case_directory/frequency-deploy/file"
-  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
-  export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
-  if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
-    printf '%s\n' "Bootstrap accepted an unmarked nonempty processor root" >&2
-    exit 1
-  fi
-  assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
-}
-
-test_rejects_unmarked_nonempty_frequency_iec104_export_root() {
-  setup_case reject-iec104-root
-  mkdir "$case_directory/frequency-iec104-export-deploy"
-  printf '%s\n' unmanaged > "$case_directory/frequency-iec104-export-deploy/file"
-  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
-  export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
-  if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
-    printf '%s\n' "Bootstrap accepted an unmarked nonempty IEC 104 processor root" >&2
-    exit 1
-  fi
-  assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
-}
-
-test_rejects_unmarked_nonempty_lfr_frequency_provision_root() {
-  setup_case reject-lfr-root
-  mkdir "$case_directory/lfr-frequency-provision-deploy"
-  printf '%s\n' unmanaged > "$case_directory/lfr-frequency-provision-deploy/file"
-  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
-  export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
-  if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
-    printf '%s\n' "Bootstrap accepted an unmarked nonempty LFR processor root" >&2
-    exit 1
-  fi
-  assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
-}
-
-test_rejects_unmarked_nonempty_gateway_onboarding_root() {
+test_rejects_unmarked_nonempty_gateway_root() {
   setup_case reject-gateway-root
-  mkdir "$case_directory/gateway-c37-118-onboarding-deploy"
-  printf '%s\n' unmanaged > "$case_directory/gateway-c37-118-onboarding-deploy/file"
+  mkdir "$case_directory/gateway-deploy"
+  printf '%s\n' unmanaged > "$case_directory/gateway-deploy/file"
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
   export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
   if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
-    printf '%s\n' "Bootstrap accepted an unmarked nonempty gateway-onboarding root" >&2
+    printf '%s\n' "Bootstrap accepted an unmarked nonempty gateway root" >&2
     exit 1
   fi
   assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
 }
 
-test_seeds_and_registers_all_processor_repositories
-test_skips_nonempty_repositories
-test_rejects_unmarked_nonempty_processor_root
-test_rejects_unmarked_nonempty_frequency_iec104_export_root
-test_rejects_unmarked_nonempty_lfr_frequency_provision_root
-test_rejects_unmarked_nonempty_gateway_onboarding_root
+test_bootstraps_gateway_and_delegates_processor_registry
+test_skips_nonempty_gateway_repository
+test_rejects_unmarked_nonempty_gateway_root

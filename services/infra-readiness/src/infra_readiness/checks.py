@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+import json
 import logging
 import math
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
@@ -353,7 +355,13 @@ def check_forgejo(settings: Settings) -> None:
         _request_json(session, "Forgejo health", _url(settings.forgejo_url, "/api/healthz"))
         encoded_owner = quote(settings.forgejo_admin_username, safe="")
         auth = (settings.forgejo_admin_username, settings.forgejo_admin_password)
-        for repository_name in settings.forgejo_managed_repositories:
+        processor_repositories = load_processor_registry_repositories(
+            settings.forgejo_processor_registry_status_path
+        )
+        repository_names = (*processor_repositories, settings.forgejo_gateway_repository)
+        if len(set(repository_names)) != len(repository_names):
+            raise ReadinessError("Forgejo processor registry duplicates the gateway repository")
+        for repository_name in repository_names:
             encoded_repository = quote(repository_name, safe="")
             repository = _request_json(
                 session,
@@ -374,6 +382,31 @@ def check_forgejo(settings: Settings) -> None:
             validate_forgejo_runners(repository_name, runners)
     finally:
         session.close()
+
+
+def load_processor_registry_repositories(path: Path) -> tuple[str, ...]:
+    """Read credential-free active processor registrations produced by forgejo-init."""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ReadinessError("Forgejo processor registry status is unavailable or invalid") from error
+    if not isinstance(payload, Mapping) or payload.get("schema_version") != 1:
+        raise ReadinessError("Forgejo processor registry status has an unsupported schema")
+    processors = payload.get("processors")
+    if not isinstance(processors, list):
+        raise ReadinessError("Forgejo processor registry status processors must be a list")
+    repositories: list[str] = []
+    for processor in processors:
+        if not isinstance(processor, Mapping):
+            raise ReadinessError("Forgejo processor registry status has an invalid processor")
+        repository = processor.get("repository")
+        if not isinstance(repository, str) or not repository.startswith("processor-"):
+            raise ReadinessError("Forgejo processor registry status has an invalid repository")
+        repositories.append(repository)
+    if len(set(repositories)) != len(repositories):
+        raise ReadinessError("Forgejo processor registry status repeats a repository")
+    return tuple(repositories)
 
 
 def validate_forgejo_repository(payload: Any, repository_name: str) -> None:

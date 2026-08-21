@@ -1,0 +1,25 @@
+api_version: wama.processor/v1alpha1
+kind: formula
+name: processor-lifecycle-probe
+sdk:
+  version: 0.1.1
+  sha256: sha256:74493a95eace4ba8dd66e685156847c22f4bfc8921d8888c4acbc95fcbb8feb4
+catalog:
+  id: wama-c37-118-onboarding-v1
+  revision: sha256:9112a41641424565664dea8851003c59ddb030edb1be297ca331f3e368a7713a
+approvals:
+  id: wama-derived-output-v1
+  revision: sha256:52048e66685946994a40c4c28e435824b930295b10eb92d858365dfdaaa49f35
+inputs:
+  frequency_hz:
+    signal: pmu-bay-01.frequency
+    expected_value: double
+    expected_unit: Hz
+outputs:
+  frequency_millihertz:
+    mrid: urn:wama:poc:test:lifecycle:frequency-millihertz
+    value: double
+    unit: mHz
+    approval: WAMA-OUTPUT-TEST-001
+calculation:
+  function: frequency_millihertz

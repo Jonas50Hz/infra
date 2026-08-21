@@ -55,7 +55,8 @@ services:
     environment:
       FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_MANAGED_REPOSITORIES: "${FORGEJO_MANAGED_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-lfr-frequency-provision,gateway-c37-118-onboarding}"
+      FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
+      FORGEJO_PROCESSOR_REGISTRY_STATUS_PATH: /registry-status/processors.json
       FORGEJO_URL: http://forgejo:3000
       DRUID_DATASOURCE: live_measurements
       DRUID_EXPECTED_DOUBLE_VALUE: "${DRUID_EXPECTED_DOUBLE_VALUE:-50.01}"
@@ -94,4 +95,9 @@ services:
       S3_SECRET_ACCESS_KEY: wama-s3-admin-secret
       VICTORIA_METRICS_URL: http://victoria-metrics:8428
       GRAFANA_URL: http://grafana:3000
+    volumes:
+      - type: volume
+        source: forgejo-registry-status
+        target: /registry-status
+        read_only: true
     restart: "no"

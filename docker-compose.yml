@@ -38,6 +38,7 @@ volumes:
   seaweedfs-data:
   forgejo-data:
   forgejo-runner-data:
+  forgejo-registry-status:
   victoria-metrics-data:
   druid-data:
   grafana-data:

@@ -16,17 +16,8 @@ services:
       - forgejo-runner-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - type: bind
-        source: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
-        target: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
-      - type: bind
-        source: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
-        target: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
-      - type: bind
-        source: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-        target: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-      - type: bind
-        source: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
-        target: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+        source: "${WAMA_PROCESSOR_DEPLOY_BASE_ROOT:-/var/lib/wama-processors}"
+        target: "${WAMA_PROCESSOR_DEPLOY_BASE_ROOT:-/var/lib/wama-processors}"
       - type: bind
         source: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
         target: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"

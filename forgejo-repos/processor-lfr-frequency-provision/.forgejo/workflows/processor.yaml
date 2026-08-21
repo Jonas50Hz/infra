@@ -17,6 +17,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate custom authoring contract
+        run: |
+          PYTHONPATH=sdk/src python3 -m wama_processor_authoring.cli validate \
+            --manifest processor.yaml \
+            --input-catalog sdk/catalog/input-catalog.yaml \
+            --approval-catalog sdk/catalog/derived-output-approvals.yaml
       - name: Test deployment guard
         run: python3 -m unittest discover -s tooling-tests -v
       - name: Test processor
@@ -75,7 +81,8 @@ jobs:
       group: wama-processor-lfr-frequency-provision-deploy
       cancel-in-progress: false
     env:
-      WAMA_PROCESSOR_DEPLOY_ROOT: /var/lib/wama-processor-lfr-frequency-provision
+      WAMA_PROCESSOR_DEPLOY_BASE_ROOT: /var/lib/wama-processors
+      WAMA_PROCESSOR_DEPLOY_ROOT: /var/lib/wama-processors/processor-lfr-frequency-provision
     steps:
       - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Authenticate to Forgejo Packages

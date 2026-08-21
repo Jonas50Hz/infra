@@ -5,16 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import os
+from pathlib import Path
 from collections.abc import Mapping
-
-DEFAULT_FORGEJO_MANAGED_REPOSITORIES = (
-    "processor-frequency-scale",
-    "processor-apparent-power",
-    "processor-frequency-iec104-export",
-    "processor-lfr-frequency-provision",
-    "gateway-c37-118-onboarding",
-)
-
 
 class ConfigurationError(ValueError):
     """Raised when readiness configuration is incomplete or invalid."""
@@ -35,7 +27,8 @@ class Settings:
     measurement_session_exporter_url: str
     forgejo_admin_password: str
     forgejo_admin_username: str
-    forgejo_managed_repositories: tuple[str, ...]
+    forgejo_gateway_repository: str
+    forgejo_processor_registry_status_path: Path
     forgejo_url: str
     grafana_password: str
     grafana_url: str
@@ -117,10 +110,15 @@ class Settings:
                 "FORGEJO_ADMIN_USERNAME",
                 "wama-admin",
             ),
-            forgejo_managed_repositories=_repositories(
+            forgejo_gateway_repository=_repository_identifier(
                 values,
-                "FORGEJO_MANAGED_REPOSITORIES",
-                DEFAULT_FORGEJO_MANAGED_REPOSITORIES,
+                "FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY",
+                "gateway-c37-118-onboarding",
+            ),
+            forgejo_processor_registry_status_path=_absolute_path(
+                values,
+                "FORGEJO_PROCESSOR_REGISTRY_STATUS_PATH",
+                "/registry-status/processors.json",
             ),
             forgejo_url=_url(values, "FORGEJO_URL", "http://forgejo:3000"),
             grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
@@ -238,27 +236,25 @@ def _buckets(values: Mapping[str, str]) -> tuple[str, ...]:
     return buckets
 
 
-def _repositories(
+def _repository_identifier(
     values: Mapping[str, str],
     name: str,
-    default: tuple[str, ...],
-) -> tuple[str, ...]:
-    repositories = tuple(
-        repository.strip()
-        for repository in values.get(name, ",".join(default)).split(",")
-        if repository.strip()
-    )
-    if not repositories:
-        raise ConfigurationError(f"{name} must name at least one repository")
-    if len(set(repositories)) != len(repositories):
-        raise ConfigurationError(f"{name} must not repeat repositories")
-    for repository in repositories:
-        normalized = repository.replace("-", "").replace("_", "").replace(".", "")
-        if not normalized.isalnum():
-            raise ConfigurationError(
-                f"{name} repositories must use letters, numbers, dots, underscores, or hyphens"
-            )
-    return repositories
+    default: str,
+) -> str:
+    repository = _required(values, name, default)
+    normalized = repository.replace("-", "").replace("_", "").replace(".", "")
+    if not normalized.isalnum():
+        raise ConfigurationError(
+            f"{name} must use letters, numbers, dots, underscores, or hyphens"
+        )
+    return repository
+
+
+def _absolute_path(values: Mapping[str, str], name: str, default: str) -> Path:
+    path = Path(_required(values, name, default))
+    if not path.is_absolute():
+        raise ConfigurationError(f"{name} must be an absolute path")
+    return path
 
 
 def _finite_float(values: Mapping[str, str], name: str, default: float) -> float:

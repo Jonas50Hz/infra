@@ -30,8 +30,12 @@ that external clone only and rejects both this seed and the parent
 infrastructure checkout.
 
 `forgejo-init` seeds each repository only when its remote has no refs; an
-existing nonempty private repository is left unchanged. Processor workflows
-deploy only their one processor into their own marker-owned deployment root.
+existing nonempty private repository is left unchanged. The root-owned processor
+registry gives each approved seed one marker-owned deployment child under
+`/var/lib/wama-processors`; a seed cannot self-register just by existing.
+Use `scripts/wama-processor-admin.sh register <processor-name>` only after its
+manifest, catalog evidence, and output approval have been reviewed. Processor
+workflows deploy only their one processor into their own marked child root.
 The onboarding workflow uses its separate marker-owned root to publish
 Masterdata once and reconcile only its catalog-derived source adapters. The
 parent `infra` repository retains all other assets, including the current

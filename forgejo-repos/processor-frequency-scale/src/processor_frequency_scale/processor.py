@@ -1,8 +1,11 @@
-"""Convert the fake PMU frequency from hertz to millihertz."""
+"""Generated formula adapter for the frequency-scale authoring declaration."""
 
 from __future__ import annotations
 
-from wama_processor import DerivedMeasurement, InputMeasurement, ProcessorDefinition
+from wama_processor import ProcessorDefinition, build_formula_processor
+
+from processor_frequency_scale.calculation import HERTZ_TO_MILLIHERTZ, frequency_millihertz
+
 
 FREQUENCY_HZ = "frequency_hz"
 FREQUENCY_MILLIHERTZ = "frequency_millihertz"
@@ -12,23 +15,14 @@ INPUTS = {
 OUTPUTS = {
     FREQUENCY_MILLIHERTZ: "urn:wama:poc:pmu:bay-01:frequency-millihertz",
 }
-HERTZ_TO_MILLIHERTZ = 1_000.0
-
-
-def transform(measurement: InputMeasurement) -> DerivedMeasurement | None:
-    """Convert one numeric frequency measurement without changing its context."""
-
-    if measurement.name != FREQUENCY_HZ or measurement.double_value is None:
-        return None
-    return measurement.derive(
-        FREQUENCY_MILLIHERTZ,
-        measurement.double_value * HERTZ_TO_MILLIHERTZ,
-    )
-
-
-PROCESSOR = ProcessorDefinition(
+PROCESSOR: ProcessorDefinition = build_formula_processor(
     service_name="processor-frequency-scale",
     inputs=INPUTS,
     outputs=OUTPUTS,
-    transform=transform,
+    input_name=FREQUENCY_HZ,
+    output_name=FREQUENCY_MILLIHERTZ,
+    calculation=frequency_millihertz,
 )
+
+# This alias is retained for domain-focused tests; runtime mechanics remain generated.
+transform = PROCESSOR.transform

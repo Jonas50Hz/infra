@@ -10,6 +10,8 @@ import unittest
 from scripts.deploy_processor import (
     DEPLOY_MARKER,
     DeploymentError,
+    _validate_deploy_base_root,
+    _require_running_state,
     _require_expected_service,
     synchronize_checkout,
 )
@@ -51,6 +53,24 @@ class DeploymentGuardTests(unittest.TestCase):
             _require_expected_service(["processor-frequency-scale"])
         with self.assertRaisesRegex(DeploymentError, "processor-lfr-frequency-provision"):
             _require_expected_service([])
+
+    def test_rejects_a_marked_root_outside_the_expected_base_child(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "processors"
+            expected = base / "processor-lfr-frequency-provision"
+            unexpected = root / "other" / "processor-lfr-frequency-provision"
+            base.mkdir(parents=True)
+            unexpected.parent.mkdir(parents=True)
+
+            _validate_deploy_base_root(expected, str(base))
+            with self.assertRaisesRegex(DeploymentError, "expected child"):
+                _validate_deploy_base_root(unexpected, str(base))
+
+    def test_rejects_a_non_running_deployed_container(self) -> None:
+        _require_running_state("true")
+        with self.assertRaisesRegex(DeploymentError, "not running"):
+            _require_running_state("false")
 
     def _workspace(self, workspace: Path) -> Path:
         workspace.mkdir()

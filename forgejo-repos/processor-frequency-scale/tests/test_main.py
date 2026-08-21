@@ -33,6 +33,7 @@ class TransformationStreamTests(unittest.TestCase):
             mrid=INPUTS[FREQUENCY_HZ],
             double_value=50.01,
         )
+        source.quality.valid = True
         source_timestamp_ms = 1_726_000_123_456
 
         result = build_transformation_stream(application, PROCESSOR, self._config()).test(
@@ -55,6 +56,7 @@ class TransformationStreamTests(unittest.TestCase):
             mrid=INPUTS[FREQUENCY_HZ],
             double_value=50.01,
         )
+        source.quality.valid = True
         source_timestamp_ms = 1_726_000_123_456
         context = MessageContext(
             topic="LiveMeasurement",

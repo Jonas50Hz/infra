@@ -16,16 +16,18 @@ $$
 | `voltage_l2`, `current_l2` | `apparent_power_l2` | VA |
 | `voltage_l3`, `current_l3` | `apparent_power_l3` | VA |
 
-The exact MRIDs are declared at the top of
-[processor.py](src/processor_apparent_power/processor.py). Edit the
-`PhaseCache.transform()` method for the engineering calculation, and update
-[test_processor.py](tests/test_processor.py) with the expected behavior.
+The authored surface is [processor.yaml](processor.yaml),
+[calculation.py](src/processor_apparent_power/calculation.py), and
+[cases.yaml](cases.yaml). The generated adapter in
+[processor.py](src/processor_apparent_power/processor.py) owns Kafka,
+raw-Protobuf, key, timestamp, and cache mechanics. Update the calculations and
+engineering cases rather than the generated adapter.
 
-The cache keeps the latest numeric voltage and current for each phase only when
+The cache keeps the latest finite voltage and current for each phase only when
 `quality.valid=true`. It publishes after both values for the same phase are
-available. Cache state is in-process: after a restart it is empty, then the
-PoC's once-per-second source repopulates it. Replays may publish deterministic
-duplicates, which is expected for Kafka at-least-once delivery.
+available and within 2,000 ms. Cache state is in-process: after a restart it is
+empty, then the PoC's once-per-second source repopulates it. Replays may publish
+deterministic duplicates, which is expected for Kafka at-least-once delivery.
 
 This calculates apparent rather than active power because the fixture does not
 include phase angle or power factor. The shared runtime handles source/key
