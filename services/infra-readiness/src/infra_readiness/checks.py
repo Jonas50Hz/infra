@@ -55,12 +55,8 @@ GRAFANA_TRINO_DATASOURCE_UID = "trino"
 GRAFANA_TRINO_DATASOURCE_TYPE = "trino-datasource"
 GRAFANA_TRINO_DATASOURCE_URL = "http://trino:8080"
 GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID = "wama-kafka-operations"
-GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID = "wama-pmu-live-measurements"
 GRAFANA_SESSION_MEASUREMENTS_DASHBOARD_UID = "wama-measurement-sessions"
 GRAFANA_GATEWAY_FLEET_DASHBOARD_UID = "wama-gateway-fleet"
-GRAFANA_PMU_SESSION_REQUEST_URL = (
-    "http://localhost:3004/?from=${__from}&to=${__to}&mrids=${mrid:csv}"
-)
 GRAFANA_SESSION_CSV_EXPORT_URL = (
     "http://localhost:3005/v1/measurement-sessions/export.csv?from=${__from}&to=${__to}"
 )
@@ -571,15 +567,6 @@ def check_grafana(settings: Settings, require_live_measurement: bool = True) -> 
             ),
             auth=auth,
         )
-        pmu_dashboard = _request_json(
-            session,
-            "Grafana PMU Live Measurements dashboard",
-            _url(
-                settings.grafana_url,
-                f"/api/dashboards/uid/{GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID}",
-            ),
-            auth=auth,
-        )
         session_dashboard = _request_json(
             session,
             "Grafana Measurement Sessions dashboard",
@@ -598,15 +585,6 @@ def check_grafana(settings: Settings, require_live_measurement: bool = True) -> 
             ),
             auth=auth,
         )
-        pmu_query = None
-        if require_live_measurement:
-            pmu_query = _post_json(
-                session,
-                "Grafana Druid PMU query",
-                _url(settings.grafana_url, "/api/ds/query"),
-                _grafana_pmu_query(settings),
-                auth=auth,
-            )
         trino_query = _post_json(
             session,
             "Grafana Trino session metadata query",
@@ -631,23 +609,8 @@ def check_grafana(settings: Settings, require_live_measurement: bool = True) -> 
         "WAMA Infrastructure",
         "Kafka Operations",
     )
-    validate_grafana_dashboard(
-        pmu_dashboard,
-        GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID,
-        "WAMA Measurements",
-        "PMU Live Measurements",
-    )
-    validate_grafana_pmu_dashboard(pmu_dashboard)
-    validate_grafana_pmu_session_request_link(pmu_dashboard)
     validate_grafana_session_dashboard(session_dashboard)
     validate_grafana_gateway_fleet_dashboard(gateway_fleet_dashboard)
-    if require_live_measurement:
-        validate_grafana_pmu_query(
-            pmu_query,
-            settings.druid_expected_mrid,
-            settings.druid_expected_double_value,
-            settings.druid_expected_double_value_tolerance,
-        )
     validate_grafana_trino_query(trino_query)
 
 
@@ -754,40 +717,6 @@ def validate_grafana_gateway_fleet_dashboard(payload: Any) -> None:
         raise ReadinessError("Grafana Gateway Fleet dashboard has no active-sources panel")
 
 
-def _grafana_pmu_query(settings: Settings) -> dict[str, Any]:
-    escaped_mrid = settings.druid_expected_mrid.replace("'", "''")
-    return {
-        "from": "now-15m",
-        "to": "now",
-        "queries": [
-            {
-                "refId": "A",
-                "datasource": {
-                    "uid": GRAFANA_DRUID_DATASOURCE_UID,
-                    "type": GRAFANA_DRUID_DATASOURCE_TYPE,
-                },
-                "builder": {
-                    "queryType": "sql",
-                    "query": (
-                        'SELECT "__time", "mrid", "double_value" '
-                        f'FROM "{settings.druid_datasource}" '
-                        f"WHERE \"mrid\" = '{escaped_mrid}' "
-                        "AND \"quality_valid\" = 'true' "
-                        'AND "double_value" IS NOT NULL '
-                        'ORDER BY "__time" DESC LIMIT 1'
-                    ),
-                },
-                "settings": {
-                    "contextParameters": [],
-                    "format": "long",
-                },
-                "intervalMs": 1_000,
-                "maxDataPoints": 1_000,
-            }
-        ],
-    }
-
-
 def _grafana_trino_query() -> dict[str, Any]:
     return {
         "from": "now-1h",
@@ -806,71 +735,6 @@ def _grafana_trino_query() -> dict[str, Any]:
             }
         ],
     }
-
-
-def validate_grafana_pmu_query(
-    payload: Any,
-    expected_mrid: str,
-    expected_double_value: float,
-    expected_double_value_tolerance: float = 0.0,
-) -> None:
-    """Require Grafana's Druid datasource to return the expected PMU frame."""
-
-    if not isinstance(payload, Mapping):
-        raise ReadinessError("Grafana Druid PMU query did not return an object")
-    results = payload.get("results")
-    if not isinstance(results, Mapping):
-        raise ReadinessError("Grafana Druid PMU query has no results")
-    result = results.get("A")
-    if not isinstance(result, Mapping) or result.get("status") != 200:
-        raise ReadinessError("Grafana Druid PMU query did not succeed")
-    frames = result.get("frames")
-    if not isinstance(frames, list) or not frames or not isinstance(frames[0], Mapping):
-        raise ReadinessError("Grafana Druid PMU query returned no data frames")
-    frame = frames[0]
-    schema = frame.get("schema")
-    data = frame.get("data")
-    if not isinstance(schema, Mapping) or not isinstance(data, Mapping):
-        raise ReadinessError("Grafana Druid PMU frame is invalid")
-    fields = schema.get("fields")
-    values = data.get("values")
-    if not isinstance(fields, list) or not isinstance(values, list) or len(fields) != len(values):
-        raise ReadinessError("Grafana Druid PMU frame has invalid fields")
-    field_names = [field.get("name") if isinstance(field, Mapping) else None for field in fields]
-    try:
-        time_index = field_names.index("__time")
-        mrid_index = field_names.index("mrid")
-        value_index = field_names.index("double_value")
-    except ValueError as error:
-        raise ReadinessError("Grafana Druid PMU frame is missing required columns") from error
-    time_values = values[time_index]
-    mrid_values = values[mrid_index]
-    measurement_values = values[value_index]
-    if (
-        not isinstance(time_values, list)
-        or not isinstance(mrid_values, list)
-        or not isinstance(measurement_values, list)
-        or not time_values
-        or len(time_values) != len(mrid_values)
-        or len(time_values) != len(measurement_values)
-    ):
-        raise ReadinessError("Grafana Druid PMU frame has invalid row values")
-    for timestamp, mrid, value in zip(time_values, mrid_values, measurement_values, strict=True):
-        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
-            raise ReadinessError("Grafana Druid PMU frame has no numeric timestamp")
-        if mrid != expected_mrid:
-            continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ReadinessError("Grafana Druid PMU frame has no numeric double_value")
-        if math.isclose(
-            float(value),
-            expected_double_value,
-            rel_tol=0.0,
-            abs_tol=expected_double_value_tolerance,
-        ):
-            return
-        raise ReadinessError("Grafana Druid PMU double_value is outside the expected range")
-    raise ReadinessError("Grafana Druid PMU frame did not return the expected MRID")
 
 
 def validate_grafana_trino_query(payload: Any) -> None:
@@ -940,77 +804,6 @@ def validate_grafana_dashboard(
         or metadata.get("folderTitle") != expected_folder
     ):
         raise ReadinessError(f"Grafana {name} dashboard is not provisioned correctly")
-
-
-def validate_grafana_pmu_dashboard(payload: Any) -> None:
-    """Require unit-safe Druid panels for the configured PMU measurement groups."""
-
-    if not isinstance(payload, Mapping):
-        raise ReadinessError("Grafana PMU dashboard response is invalid")
-    dashboard = payload.get("dashboard")
-    if not isinstance(dashboard, Mapping):
-        raise ReadinessError("Grafana PMU dashboard has no body")
-    panels = dashboard.get("panels")
-    if not isinstance(panels, list):
-        raise ReadinessError("Grafana PMU dashboard has no panels")
-    expected_panels = {
-        "Phase Voltages": ("timeseries", "volt"),
-        "Phase Currents": ("timeseries", "amp"),
-        "Frequency": ("timeseries", "hertz"),
-        "ROCOF (Hz/s)": ("timeseries", "suffix:Hz/s"),
-        "Latest Valid PMU Records": ("table", None),
-    }
-    by_title = {
-        panel.get("title"): panel
-        for panel in panels
-        if isinstance(panel, Mapping) and isinstance(panel.get("title"), str)
-    }
-    for title, (expected_type, expected_unit) in expected_panels.items():
-        panel = by_title.get(title)
-        if not isinstance(panel, Mapping) or panel.get("type") != expected_type:
-            raise ReadinessError(f"Grafana PMU dashboard is missing the {title!r} panel")
-        datasource = panel.get("datasource")
-        if (
-            not isinstance(datasource, Mapping)
-            or datasource.get("uid") != GRAFANA_DRUID_DATASOURCE_UID
-            or datasource.get("type") != GRAFANA_DRUID_DATASOURCE_TYPE
-        ):
-            raise ReadinessError(f"Grafana PMU dashboard {title!r} does not use Druid")
-        if expected_unit is None:
-            continue
-        field_config = panel.get("fieldConfig")
-        defaults = field_config.get("defaults") if isinstance(field_config, Mapping) else None
-        if not isinstance(defaults, Mapping) or defaults.get("unit") != expected_unit:
-            raise ReadinessError(f"Grafana PMU dashboard {title!r} has an unexpected unit")
-
-
-def validate_grafana_pmu_session_request_link(payload: Any) -> None:
-    """Require the Grafana dashboard to carry selected range and MRIDs to the API."""
-
-    if not isinstance(payload, Mapping):
-        raise ReadinessError("Grafana PMU dashboard response is invalid")
-    dashboard = payload.get("dashboard")
-    if not isinstance(dashboard, Mapping):
-        raise ReadinessError("Grafana PMU dashboard has no body")
-    links = dashboard.get("links")
-    if not isinstance(links, list) or not any(
-        isinstance(link, Mapping)
-        and link.get("title") == "Create measurement session"
-        and link.get("url") == GRAFANA_PMU_SESSION_REQUEST_URL
-        and link.get("targetBlank") is True
-        for link in links
-    ):
-        raise ReadinessError("Grafana PMU dashboard has no measurement session request link")
-    templating = dashboard.get("templating")
-    variables = templating.get("list") if isinstance(templating, Mapping) else None
-    if not isinstance(variables, list) or not any(
-        isinstance(variable, Mapping)
-        and variable.get("name") == "mrid"
-        and variable.get("type") == "custom"
-        and variable.get("multi") is True
-        for variable in variables
-    ):
-        raise ReadinessError("Grafana PMU dashboard has no multi-select MRID variable")
 
 
 def check_victoria_metrics(settings: Settings) -> None:

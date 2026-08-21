@@ -54,10 +54,13 @@ class _FakeServer:
         self.has_active_connections = False
         self.is_running = False
         self.batches: list[_FakeBatch] = []
+        self.stations: list[_FakeStation] = []
         _FakeServer.instances.append(self)
 
     def add_station(self, common_address: int) -> _FakeStation:
-        return _FakeStation(common_address)
+        station = _FakeStation(common_address)
+        self.stations.append(station)
+        return station
 
     def start(self) -> None:
         self.is_running = True
@@ -154,6 +157,29 @@ class C104TransportTests(unittest.TestCase):
 
         with self.assertRaisesRegex(Iec104TransportError, "changed IEC type"):
             self.transport.publish(conflicting)
+
+    def test_accepts_the_same_ioa_on_distinct_common_addresses(self) -> None:
+        self.server.has_active_connections = True
+        first = _short_float_record()
+        first.iec104_asdu.common_address = 1001
+        first.iec104_asdu.information_objects[0].information_object_address = 1001
+        second = _short_float_record()
+        second.iec104_asdu.common_address = 1002
+        second.iec104_asdu.information_objects[0].information_object_address = 1001
+
+        self.assertTrue(self.transport.publish(first))
+        self.assertTrue(self.transport.publish(second))
+
+        self.assertEqual(len(self.server.stations), 2)
+        self.assertEqual(
+            [station.common_address for station in self.server.stations],
+            [1001, 1002],
+        )
+        self.assertEqual(
+            [station.points[0].io_address for station in self.server.stations],
+            [1001, 1001],
+        )
+        self.assertIsNot(self.server.stations[0].points[0], self.server.stations[1].points[0])
 
 
 def _single_point_record() -> iec104_export_pb2.ExportRecord:

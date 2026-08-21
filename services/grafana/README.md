@@ -11,11 +11,8 @@ tracked files in this directory:
 
 - **VictoriaMetrics** remains the default datasource for **WAMA Infrastructure**
 	dashboards: host, Compose-container, and Kafka operations telemetry.
-- **Druid** connects internally to `http://druid:8888` for **WAMA Measurements**.
-	**WAMA PMU Live Measurements** plots valid phase voltages, phase currents,
-	frequency, and ROCOF with separate unit-safe axes and recent PMU timestamp
-	evidence. Its MRID selector and session link open the loopback-only
-	`measurement-session-api` confirmation page with the selected interval.
+- **Druid** connects internally to `http://druid:8888` for the generated
+	**WAMA Gateways** live-value dashboards.
 - **Trino** connects internally to `http://trino:8080` for **WAMA Measurements**.
 	**WAMA Measurement Sessions** selects one immutable `blob_id` and queries its
 	registered Iceberg artifact without parsing object paths. Its visible **Export
@@ -38,12 +35,6 @@ Anonymous access and self-registration are disabled. Set
 for a LAN address. The administrator password is applied only while the
 `grafana-data` volume is first initialized; rotate an existing password through
 Grafana rather than replacing `grafana.env`.
-
-Validate the complete PMU dashboard path locally:
-
-```sh
-scripts/test-grafana-pmu-dashboard.sh
-```
 
 No Grafana alert rules are provisioned in this PoC. The Trino datasource and
 dashboard remain read-only and do not grant Grafana access to the internal

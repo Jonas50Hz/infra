@@ -32,9 +32,9 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
    - Measurement sessions go to long-term storage (not deleted after six
      weeks).
 5. **Visualisation.** The Druid Router makes Common Format measurement data
-  queryable now. Grafana's `WAMA Measurements / WAMA PMU Live Measurements`
-  dashboard queries Druid for valid PMU voltage, current, frequency, and ROCOF
-  trends. This is separate from the Compose PoC's
+  queryable now. Grafana's generated `WAMA Gateways` dashboards query Druid for
+  catalog-defined gateway trends and retain each record's explicit quality
+  state. This is separate from the Compose PoC's
   Grafana-over-VictoriaMetrics infrastructure dashboards. Kafka exporter sends
   only operational broker/topic metadata there; no measurement, waveform,
   measurement-session, alarm, or Kafka message records are sent to

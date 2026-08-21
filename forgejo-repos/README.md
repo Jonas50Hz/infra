@@ -39,9 +39,10 @@ parent `infra` repository retains all other assets, including the current
 
 `processor-frequency-iec104-export` deliberately copies the canonical
 [`../docs/wama/schema/iec104_export.proto`](../docs/wama/schema/iec104_export.proto)
-and writes direct configured PMU-frequency `M_ME_NC_1` requests to `Export`.
-It is not the full LFR preferred-frequency algorithm. It must not take ownership
-of the root-owned IEC 104 exporter, receiver, or browser.
+and writes direct reviewed gateway-frequency `M_ME_NC_1` requests to `Export`
+through its processor-owned mapping file. It is not the full LFR
+preferred-frequency algorithm. It must not take ownership of the root-owned IEC
+104 exporter, receiver, or browser.
 
 `processor-lfr-frequency-provision` is the separate multi-PMU per-second LFR
 core. It publishes a configured preferred-frequency Common Format value back to

@@ -22,7 +22,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_transformation_preserves_source_timestamp_and_headers(self) -> None:
         application = self._application()
-        source = _frequency()
+        source = _frequency(2)
         timestamp_ms = 1_726_000_123_456
 
         result = build_transformation_stream(application, _settings()).test(
@@ -38,6 +38,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(timestamp, timestamp_ms)
         self.assertEqual(headers, [("trace-id", b"frequency-iec104")])
         self.assertEqual(record.created_at.ToMilliseconds(), timestamp_ms)
+        self.assertEqual(record.iec104_asdu.common_address, 1002)
 
     def test_output_uses_export_id_key_and_source_timestamp(self) -> None:
         application = self._application()
@@ -74,9 +75,9 @@ class PipelineTests(unittest.TestCase):
         )
 
 
-def _frequency() -> rtd_schema_pb2.MCCSMeasurementValue:
+def _frequency(bay: int = 1) -> rtd_schema_pb2.MCCSMeasurementValue:
     source = rtd_schema_pb2.MCCSMeasurementValue(
-        mrid="urn:wama:poc:pmu:bay-01:frequency",
+        mrid=f"urn:wama:poc:pmu:bay-{bay:02}:frequency",
         double_value=50.01,
     )
     source.quality.valid = True

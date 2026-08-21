@@ -1,0 +1,22 @@
+version: 1
+exports:
+  - mrid: urn:wama:poc:pmu:bay-01:frequency
+    common_address: 1001
+    information_object_address: 1001
+    cause_code: 3
+  - mrid: urn:wama:poc:pmu:bay-02:frequency
+    common_address: 1002
+    information_object_address: 1001
+    cause_code: 3
+  - mrid: urn:wama:poc:pmu:bay-03:frequency
+    common_address: 1003
+    information_object_address: 1001
+    cause_code: 3
+  - mrid: urn:wama:poc:pmu:bay-04:frequency
+    common_address: 1004
+    information_object_address: 1001
+    cause_code: 3
+  - mrid: urn:wama:poc:pmu:bay-05:frequency
+    common_address: 1005
+    information_object_address: 1001
+    cause_code: 3

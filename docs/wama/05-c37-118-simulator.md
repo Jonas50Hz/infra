@@ -32,9 +32,12 @@ SYNC | FRAMESIZE | IDCODE | SOC | FRACSEC_AND_MSG_TQ | payload | CHK
 
 `IDCODE` identifies the endpoint stream. `FRACSEC_AND_MSG_TQ` is four bytes:
 the high byte holds message time quality and the low 24 bits hold the
-`TIME_BASE` fraction. The simulator reports the conservative unknown message
-time quality and PMU time-quality status instead of claiming unavailable clock
-accuracy.
+`TIME_BASE` fraction. The simulator reports conservative unknown message time
+quality and PMU time-quality status by default instead of claiming unavailable
+clock accuracy. The five-PMU V2 onboarding profile is the controlled exception:
+it sets STAT `0` for PMU IDs `1001` and `1002`, allowing their adapters to emit
+`quality.valid=true`; PMU IDs `1003` through `1005` retain the conservative
+status. The V2 message-time-quality byte remains unknown for every endpoint.
 
 | Purpose | SYNC byte | Command code when requested |
 | --- | ---: | ---: |
@@ -174,7 +177,8 @@ Use `protocol_version: 2` for V2. The supplied profiles are
 
 The Forgejo onboarding demonstration uses `five-pmu-v2.yaml`. It binds the
 root-owned simulator's stable `172.30.0.10` address to listeners `4712` through
-`4716`, with matching stream and PMU IDs `1001` through `1005`:
+`4716`, with matching stream and PMU IDs `1001` through `1005`. Its
+`v2_good_stat_pmu_ids` lists only `1001` and `1002`:
 
 ```sh
 C37_118_SIMULATOR_PROFILE_SOURCE="$PWD/services/c37-118-simulator/profiles/five-pmu-v2.yaml" \

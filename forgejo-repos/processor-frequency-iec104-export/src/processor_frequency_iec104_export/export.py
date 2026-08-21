@@ -7,7 +7,7 @@ from hashlib import sha256
 import math
 from uuid import UUID, uuid5
 
-from processor_frequency_iec104_export.config import Settings
+from processor_frequency_iec104_export.config import ExportMapping, Settings
 from processor_frequency_iec104_export.generated import iec104_export_pb2, rtd_schema_pb2
 
 
@@ -30,19 +30,21 @@ def build_export(
 ) -> ExportEnvelope | None:
     """Create a configured M_ME_NC_1 export only from an explicitly valid frequency."""
 
-    if not _is_exportable_frequency(source, key, kafka_timestamp_ms, settings):
+    mapping = settings.mapping_for(source.mrid)
+    if not _is_exportable_frequency(source, key, kafka_timestamp_ms, mapping):
         return None
+    assert mapping is not None
     payload = source.SerializeToString(deterministic=True)
-    export_id = _export_id(payload, kafka_timestamp_ms, settings)
+    export_id = _export_id(payload, source.mrid, kafka_timestamp_ms, mapping)
     record = iec104_export_pb2.ExportRecord(export_id=export_id)
     record.created_at.seconds = kafka_timestamp_ms // 1_000
     record.created_at.nanos = (kafka_timestamp_ms % 1_000) * 1_000_000
     asdu = record.iec104_asdu
     asdu.type_id = iec104_export_pb2.IEC104_TYPE_ID_M_ME_NC_1
-    asdu.common_address = settings.common_address
-    asdu.cause.code = settings.cause_code
+    asdu.common_address = mapping.common_address
+    asdu.cause.code = mapping.cause_code
     information_object = asdu.information_objects.add()
-    information_object.information_object_address = settings.information_object_address
+    information_object.information_object_address = mapping.information_object_address
     information_object.short_float.value = float(source.double_value)
     _copy_quality(source, information_object.short_float.quality)
     return ExportEnvelope(record=record, kafka_timestamp_ms=kafka_timestamp_ms)
@@ -52,25 +54,30 @@ def _is_exportable_frequency(
     source: rtd_schema_pb2.MCCSMeasurementValue,
     key: bytes | None,
     kafka_timestamp_ms: int,
-    settings: Settings,
+    mapping: ExportMapping | None,
 ) -> bool:
     if kafka_timestamp_ms <= 0:
         return False
-    if source.mrid != settings.source_mrid or key != settings.source_mrid.encode("utf-8"):
+    if mapping is None or key != source.mrid.encode("utf-8"):
         return False
     if source.WhichOneof("value") != "double_value" or not math.isfinite(source.double_value):
         return False
     return source.HasField("quality") and source.quality.HasField("valid") and source.quality.valid
 
 
-def _export_id(payload: bytes, kafka_timestamp_ms: int, settings: Settings) -> str:
+def _export_id(
+    payload: bytes,
+    source_mrid: str,
+    kafka_timestamp_ms: int,
+    mapping: ExportMapping,
+) -> str:
     seed = b"\0".join(
         (
-            settings.source_mrid.encode("utf-8"),
+            source_mrid.encode("utf-8"),
             str(kafka_timestamp_ms).encode("ascii"),
-            str(settings.common_address).encode("ascii"),
-            str(settings.information_object_address).encode("ascii"),
-            str(settings.cause_code).encode("ascii"),
+            str(mapping.common_address).encode("ascii"),
+            str(mapping.information_object_address).encode("ascii"),
+            str(mapping.cause_code).encode("ascii"),
             sha256(payload).hexdigest().encode("ascii"),
         )
     )

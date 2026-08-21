@@ -151,8 +151,8 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
   introduced.
 - Retention, deletion, compaction, and aggregation policy are deliberately
   unset. Grafana provisions a pinned Druid datasource plugin and the
-  `WAMA Measurements / WAMA PMU Live Measurements` dashboard for valid PMU
-  voltage, current, frequency, and ROCOF trends; alerting remains deferred.
+  generated `WAMA Gateways` dashboards for live source values; alerting remains
+  deferred.
 
 ### IEC 104 export
 - `iec104-exporter` is a c104-backed controlled-station server that consumes

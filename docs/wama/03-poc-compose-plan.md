@@ -142,10 +142,10 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    The on-demand browser is the read-only live control center while a page is
    open and discards messages when its final page closes. The profile-gated
    receiver proves the exclusive wire path using only `STARTDT` and unique
-   fixtures. `processor-frequency-iec104-export` now provides the direct
-   configured fake-PMU frequency-to-`M_ME_NC_1` PoC producer through its own
-   Forgejo repository. `processor-lfr-frequency-provision` separately seeds the
-   first multi-PMU per-second selection core; complete PMU-status evidence, IEC
+   fixtures. `processor-frequency-iec104-export` now provides the direct,
+   processor-mapped C37.118 gateway-frequency-to-`M_ME_NC_1` PoC producer
+   through its own Forgejo repository. `processor-lfr-frequency-provision`
+   separately seeds the first multi-PMU per-second selection core; complete PMU-status evidence, IEC
    104 LFR export, XLSX and broader file export, and MQTT export remain future
    work.
 

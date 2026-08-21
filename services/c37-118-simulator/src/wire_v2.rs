@@ -236,10 +236,15 @@ pub fn encode_periodic_data_into(
         timestamp,
     );
     let mut offset = FRAME_HEADER_BYTES;
+    let stat = if metadata.good_stat {
+        0
+    } else {
+        STAT_FLAG_SYNC_UNCERTAIN | STAT_PMU_TIME_QUALITY_UNKNOWN
+    };
     write_u16(
         output,
         &mut offset,
-        STAT_FLAG_SYNC_UNCERTAIN | STAT_PMU_TIME_QUALITY_UNKNOWN,
+        stat,
     );
     for channel in 0..PHASOR_COUNT {
         let magnitude = if channel < 3 {
@@ -412,14 +417,15 @@ fn write_i16(buffer: &mut [u8], offset: &mut usize, value: i16) {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::parse_profile;
+    use crate::config::{load_profile, parse_profile};
 
     use super::{
         checksum_matches, crc16_ccitt, encode_command, encode_configuration_1,
         encode_configuration_2, encode_header, encode_periodic_data_into, parse_command, Command,
         CommandRequest, FrameError, FrameView, Timestamp, FRAME_TYPE_COMMAND,
         FRAME_TYPE_CONFIGURATION_1, FRAME_TYPE_CONFIGURATION_2, FRAME_TYPE_HEADER,
-        FRAME_TYPE_PERIODIC_DATA, PERIODIC_DATA_FRAME_BYTES,
+        FRAME_TYPE_PERIODIC_DATA, PERIODIC_DATA_FRAME_BYTES, STAT_FLAG_SYNC_UNCERTAIN,
+        STAT_PMU_TIME_QUALITY_UNKNOWN,
     };
 
     fn endpoint() -> crate::config::EndpointDescriptor {
@@ -525,5 +531,35 @@ mod tests {
         assert_eq!(view.frame_type(), FRAME_TYPE_PERIODIC_DATA);
         assert_eq!(view.message_time_quality(), 0x0f);
         assert_eq!(view.timestamp().fracsec, 20_000);
+        assert_eq!(
+            u16::from_be_bytes([view.body()[0], view.body()[1]]),
+            STAT_FLAG_SYNC_UNCERTAIN | STAT_PMU_TIME_QUALITY_UNKNOWN,
+        );
+    }
+
+    #[test]
+    fn writes_good_stat_only_for_profile_selected_v2_pmus() {
+        let profile = load_profile(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/profiles/five-pmu-v2.yaml"
+        ))
+        .expect("five-PMU V2 profile must compile");
+        let timestamp = Timestamp {
+            soc: 1_700_000_000,
+            fracsec: 20_000,
+        };
+
+        for (endpoint, expected_stat) in profile.endpoints.iter().zip([
+            0,
+            0,
+            STAT_FLAG_SYNC_UNCERTAIN | STAT_PMU_TIME_QUALITY_UNKNOWN,
+            STAT_FLAG_SYNC_UNCERTAIN | STAT_PMU_TIME_QUALITY_UNKNOWN,
+            STAT_FLAG_SYNC_UNCERTAIN | STAT_PMU_TIME_QUALITY_UNKNOWN,
+        ]) {
+            let mut frame = [0_u8; PERIODIC_DATA_FRAME_BYTES];
+            encode_periodic_data_into(endpoint, profile.seed, 2, timestamp, &mut frame);
+            let view = FrameView::parse(&frame).expect("data must parse");
+            assert_eq!(u16::from_be_bytes([view.body()[0], view.body()[1]]), expected_stat);
+        }
     }
 }

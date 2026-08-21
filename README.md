@@ -45,9 +45,9 @@ one private Forgejo repository per seed and seeds each `main` branch only when
 its remote has no refs. An existing nonempty private repository is left
 unchanged. Each repository contains one internal processor, its one-service
 Compose fragment, deployment tooling, and a Forgejo Actions workflow. The IEC
-104 seed maps the fake-PMU frequency directly to a configured `M_ME_NC_1`
-`ExportRecord`; it does not implement the full LFR preferred-frequency
-algorithm. The LFR seed evaluates configured multi-PMU frequency and voltage
+104 seed maps reviewed gateway frequency MRIDs through an explicit
+processor-owned IEC map to `M_ME_NC_1` `ExportRecord` values; it does not
+implement the full LFR preferred-frequency algorithm. The LFR seed evaluates configured multi-PMU frequency and voltage
 inputs per UTC second and writes its preferred frequency to `LiveMeasurement`;
 it does not yet produce IEC 104 export requests. A future gateway may use its
 own repository only as an explicit
@@ -218,12 +218,6 @@ Run only the Druid/Kafka/PMU path during focused local development:
 
 ```sh
 scripts/test-druid-ingestion.sh
-```
-
-Run the Druid-backed Grafana dashboard path:
-
-```sh
-scripts/test-grafana-pmu-dashboard.sh
 ```
 
 Run the complete one-way IEC 104 path:
@@ -401,7 +395,6 @@ run as part of normal infrastructure lifecycle validation.
 | Forgejo | `http://<host-ip>:3000` |
 | Forgejo Git over SSH | `ssh://git@<host-ip>:2222/<owner>/<repository>.git` |
 | Grafana | `http://<host-ip>:3001` |
-| PMU live dashboard | `http://<host-ip>:3001/d/wama-pmu-live-measurements/wama-pmu-live-measurements` |
 | Measurement-session request | `http://localhost:3004` |
 | Measurement-session CSV export | `http://localhost:3005` |
 | Measurement session dashboard | `http://<host-ip>:3001/d/wama-measurement-sessions/wama-measurement-sessions` |
@@ -443,13 +436,9 @@ read-only dashboards under the **WAMA Infrastructure** folder:
   memory, and network traffic.
 
 Grafana also provisions the internal `Druid` datasource through
-`http://druid:8888` and the following read-only dashboard under
-**WAMA Measurements**:
+`http://druid:8888` for generated gateway dashboards, and the following
+read-only dashboard under **WAMA Measurements**:
 
-- **WAMA PMU Live Measurements**: valid PMU voltage, current, frequency, and
-  ROCOF values as separate unit-safe trends plus recent timestamp evidence. Its
-  MRID selector and session link open the loopback-only confirmation page with
-  the current selected range and measurements.
 - **WAMA Measurement Sessions**: selected immutable session values through the
   internal read-only Trino datasource, with Blobmeta evidence and MRID coverage.
   Its **Export CSV** dashboard action downloads the current selection through
@@ -460,12 +449,11 @@ The root-owned `gateway-dashboard-provisioner` also consumes compacted
 
 - **WAMA Gateway Fleet**: the active catalog sources and links to their pages.
 - **WAMA Gateway: <source>**: source provenance, endpoint metadata, unit-safe
-  Druid live-value trends, freshness, and latest valid records.
+  Druid live-value trends, freshness, and latest records with explicit quality.
 
 Gateway dashboard membership follows active Masterdata records, including
 tombstones; it is not evidence of a running adapter or a substitute for gateway
-deployment health. The static PMU fixture dashboard remains available before
-any catalog source is published.
+deployment health.
 
 No alert rules, contact points, or notification delivery are provisioned in
 this PoC slice. Set `GRAFANA_ROOT_URL=http://<host-ip>:3001/` when Grafana must

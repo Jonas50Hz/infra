@@ -470,11 +470,11 @@ fn decode_periodic_data(
         ));
     }
     let stat = u16::from_be_bytes([frame.body[0], frame.body[1]]);
-    if stat & wire_v2::STAT_FLAG_SYNC_UNCERTAIN == 0
-        || stat & wire_v2::STAT_PMU_TIME_QUALITY_UNKNOWN != wire_v2::STAT_PMU_TIME_QUALITY_UNKNOWN
-    {
+    let conservative_stat = wire_v2::STAT_FLAG_SYNC_UNCERTAIN
+        | wire_v2::STAT_PMU_TIME_QUALITY_UNKNOWN;
+    if stat != 0 && stat != conservative_stat {
         return Err(ProbeError::new(
-            "V2 periodic data STAT does not carry conservative clock status",
+            "V2 periodic data STAT is neither good nor the simulator's conservative status",
         ));
     }
     if frame.timestamp.fracsec >= configuration.time_base

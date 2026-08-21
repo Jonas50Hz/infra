@@ -79,6 +79,7 @@ pub struct V2EndpointMetadata {
     pub station_name: [u8; V2_NAME_FIELD_BYTES],
     pub channel_names: [[u8; V2_NAME_FIELD_BYTES]; PHASOR_COUNT],
     pub phunits: [u32; PHASOR_COUNT],
+    pub good_stat: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -147,6 +148,8 @@ struct Fleet {
     pdc_name: String,
     pmu_name_prefix: String,
     protocol_version: u8,
+    #[serde(default)]
+    v2_good_stat_pmu_ids: Vec<u16>,
     data_rate_hz: u16,
     time_base: u32,
     nominal_frequency_hz: u16,
@@ -268,6 +271,7 @@ fn compile_profile(profile: Profile) -> Result<CompiledProfile, ConfigError> {
                 channel_names: v2_channel_names
                     .expect("V2 profiles compile fixed-width channel names"),
                 phunits: v2_phunits.expect("V2 profiles compile PHUNIT values"),
+                good_stat: profile.fleet.v2_good_stat_pmu_ids.contains(&pmu_id),
             }),
             WireVersion::V3 => None,
         };
@@ -380,7 +384,13 @@ fn validate_fleet(fleet: &Fleet, max_logical_pmus: usize) -> Result<WireVersion,
     let count_minus_one = u16::try_from(fleet.count - 1)
         .map_err(|_| ConfigError::new("fleet.count exceeds the V3 PMU limit"))?;
     let _ = final_identifier(fleet.first_stream_id, count_minus_one, "STREAM_ID")?;
-    let _ = final_identifier(fleet.first_pmu_id, count_minus_one, "PMU_ID")?;
+    let final_pmu_id = final_identifier(fleet.first_pmu_id, count_minus_one, "PMU_ID")?;
+    validate_v2_good_stat_pmu_ids(
+        &fleet.v2_good_stat_pmu_ids,
+        fleet.first_pmu_id,
+        final_pmu_id,
+        wire_version,
+    )?;
     validate_positive_finite(
         "fleet.phasors.voltage_magnitude",
         fleet.phasors.voltage_magnitude,
@@ -448,6 +458,34 @@ fn validate_fleet(fleet: &Fleet, max_logical_pmus: usize) -> Result<WireVersion,
     }
 
     Ok(wire_version)
+}
+
+fn validate_v2_good_stat_pmu_ids(
+    pmu_ids: &[u16],
+    first_pmu_id: u16,
+    final_pmu_id: u16,
+    wire_version: WireVersion,
+) -> Result<(), ConfigError> {
+    if !pmu_ids.is_empty() && wire_version != WireVersion::V2 {
+        return Err(ConfigError::new(
+            "fleet.v2_good_stat_pmu_ids is supported only by V2 profiles",
+        ));
+    }
+    let mut seen = Vec::with_capacity(pmu_ids.len());
+    for pmu_id in pmu_ids {
+        if !(*pmu_id >= first_pmu_id && *pmu_id <= final_pmu_id) {
+            return Err(ConfigError::new(
+                "fleet.v2_good_stat_pmu_ids must reference configured PMU_IDs",
+            ));
+        }
+        if seen.contains(pmu_id) {
+            return Err(ConfigError::new(
+                "fleet.v2_good_stat_pmu_ids must not contain duplicates",
+            ));
+        }
+        seen.push(*pmu_id);
+    }
+    Ok(())
 }
 
 fn final_identifier(first: u16, offset: u16, name: &str) -> Result<u16, ConfigError> {
@@ -659,6 +697,24 @@ mod tests {
         assert_eq!(compiled.endpoints[4].stream_id, 1005);
         assert_eq!(compiled.endpoints[0].pmu_id, 1001);
         assert_eq!(compiled.endpoints[4].pmu_id, 1005);
+        let good_stats: Vec<bool> = compiled
+            .endpoints
+            .iter()
+            .map(|endpoint| endpoint.v2.as_ref().expect("V2 metadata must be present").good_stat)
+            .collect();
+        assert_eq!(good_stats, vec![true, true, false, false, false]);
+    }
+
+    #[test]
+    fn rejects_good_stat_pmu_ids_outside_the_v2_fleet() {
+        let contents = profile(1).replace(
+            "protocol_version: 3",
+            "protocol_version: 2\n  v2_good_stat_pmu_ids:\n    - 1002",
+        );
+
+        let error = parse_profile(&contents).expect_err("must reject an unknown PMU_ID");
+
+        assert!(error.to_string().contains("v2_good_stat_pmu_ids"));
     }
 
     #[test]

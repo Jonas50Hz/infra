@@ -16,9 +16,6 @@ from infra_readiness.checks import (
     validate_grafana_dashboard,
     validate_grafana_gateway_fleet_dashboard,
     validate_grafana_datasource,
-    validate_grafana_pmu_dashboard,
-    validate_grafana_pmu_session_request_link,
-    validate_grafana_pmu_query,
     validate_grafana_session_dashboard,
     validate_grafana_trino_datasource,
     validate_grafana_trino_query,
@@ -156,7 +153,7 @@ class ControlPlaneTests(unittest.TestCase):
         with self.assertRaisesRegex(ReadinessError, "Measurement session exporter"):
             validate_measurement_session_exporter_health({"status": "degraded"})
 
-    def test_accepts_provisioned_grafana_druid_measurement_views(self) -> None:
+    def test_accepts_provisioned_grafana_druid_datasource(self) -> None:
         validate_grafana_datasource(
             {
                 "uid": "druid",
@@ -166,37 +163,6 @@ class ControlPlaneTests(unittest.TestCase):
             "grafadruid-druid-datasource",
             "Druid",
         )
-        validate_grafana_dashboard(
-            {
-                "meta": {
-                    "provisioned": True,
-                    "folderTitle": "WAMA Measurements",
-                },
-                "dashboard": {
-                    "uid": "wama-pmu-live-measurements",
-                },
-            },
-            "wama-pmu-live-measurements",
-            "WAMA Measurements",
-            "PMU Live Measurements",
-        )
-
-    def test_rejects_grafana_druid_dashboard_in_wrong_folder(self) -> None:
-        with self.assertRaisesRegex(ReadinessError, "PMU Live Measurements"):
-            validate_grafana_dashboard(
-                {
-                    "meta": {
-                        "provisioned": True,
-                        "folderTitle": "WAMA Infrastructure",
-                    },
-                    "dashboard": {
-                        "uid": "wama-pmu-live-measurements",
-                    },
-                },
-                "wama-pmu-live-measurements",
-                "WAMA Measurements",
-                "PMU Live Measurements",
-            )
 
     def test_accepts_provisioned_grafana_trino_session_views(self) -> None:
         validate_grafana_trino_datasource(
@@ -250,100 +216,6 @@ class ControlPlaneTests(unittest.TestCase):
             }
         )
 
-    def test_accepts_unit_safe_grafana_pmu_dashboard(self) -> None:
-        validate_grafana_pmu_dashboard(
-            {"dashboard": {"panels": self._pmu_dashboard_panels()}}
-        )
-
-    def test_accepts_pmu_measurement_session_request_link(self) -> None:
-        validate_grafana_pmu_session_request_link(
-            {
-                "dashboard": {
-                    "links": [
-                        {
-                            "title": "Create measurement session",
-                            "url": (
-                                "http://localhost:3004/?from=${__from}&to=${__to}"
-                                "&mrids=${mrid:csv}"
-                            ),
-                            "targetBlank": True,
-                        }
-                    ],
-                    "templating": {
-                        "list": [
-                            {
-                                "name": "mrid",
-                                "type": "custom",
-                                "multi": True,
-                            }
-                        ]
-                    },
-                }
-            }
-        )
-
-    def test_rejects_grafana_pmu_dashboard_with_wrong_rocof_unit(self) -> None:
-        panels = self._pmu_dashboard_panels()
-        panels[3]["fieldConfig"]["defaults"]["unit"] = "hertz"
-        with self.assertRaisesRegex(ReadinessError, "ROCOF"):
-            validate_grafana_pmu_dashboard({"dashboard": {"panels": panels}})
-
-    @staticmethod
-    def _pmu_dashboard_panels() -> list[dict[str, object]]:
-        panels: list[dict[str, object]] = []
-        for title, panel_type, unit in (
-            ("Phase Voltages", "timeseries", "volt"),
-            ("Phase Currents", "timeseries", "amp"),
-            ("Frequency", "timeseries", "hertz"),
-            ("ROCOF (Hz/s)", "timeseries", "suffix:Hz/s"),
-            ("Latest Valid PMU Records", "table", None),
-        ):
-            defaults = {} if unit is None else {"unit": unit}
-            panels.append(
-                {
-                    "title": title,
-                    "type": panel_type,
-                    "datasource": {
-                        "uid": "druid",
-                        "type": "grafadruid-druid-datasource",
-                    },
-                    "fieldConfig": {"defaults": defaults},
-                }
-            )
-        return panels
-
-    def test_accepts_grafana_druid_pmu_query_frame(self) -> None:
-        validate_grafana_pmu_query(
-            {
-                "results": {
-                    "A": {
-                        "status": 200,
-                        "frames": [
-                            {
-                                "schema": {
-                                    "fields": [
-                                        {"name": "__time"},
-                                        {"name": "mrid"},
-                                        {"name": "double_value"},
-                                    ]
-                                },
-                                "data": {
-                                    "values": [
-                                        [1_787_054_665_443],
-                                        ["urn:wama:poc:pmu:bay-01:frequency"],
-                                        [50.005],
-                                    ]
-                                },
-                            }
-                        ],
-                    }
-                }
-            },
-            "urn:wama:poc:pmu:bay-01:frequency",
-            50.01,
-            0.01,
-        )
-
     def test_accepts_grafana_trino_session_metadata_query_frame(self) -> None:
         validate_grafana_trino_query(
             {
@@ -360,39 +232,6 @@ class ControlPlaneTests(unittest.TestCase):
                 }
             }
         )
-
-    def test_rejects_grafana_druid_pmu_query_with_wrong_value(self) -> None:
-        with self.assertRaisesRegex(ReadinessError, "double_value"):
-            validate_grafana_pmu_query(
-                {
-                    "results": {
-                        "A": {
-                            "status": 200,
-                            "frames": [
-                                {
-                                    "schema": {
-                                        "fields": [
-                                            {"name": "__time"},
-                                            {"name": "mrid"},
-                                            {"name": "double_value"},
-                                        ]
-                                    },
-                                    "data": {
-                                        "values": [
-                                            [1_787_054_665_443],
-                                            ["urn:wama:poc:pmu:bay-01:frequency"],
-                                            [49.99],
-                                        ]
-                                    },
-                                }
-                            ],
-                        }
-                    }
-                },
-                "urn:wama:poc:pmu:bay-01:frequency",
-                50.01,
-                0.01,
-            )
 
     def test_accepts_druid_supervisor_status_payload_envelope(self) -> None:
         validate_supervisor_status(

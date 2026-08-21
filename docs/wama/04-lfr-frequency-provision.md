@@ -13,10 +13,10 @@ Upstream normalization must already convert the C37.118 frequency deviation to a
 This document does not claim that the existing `processor-frequency-scale` sample implements the LFR algorithm. That seed only scales one fixture value from Hz to mHz. A real implementation must be a separately owned `processor-*` repository and must not deploy or modify the root-owned IEC 104 exporter.
 
 The checked-in `processor-frequency-iec104-export` seed is a separate direct
-PoC mapping: one explicitly valid fake-PMU frequency produces one configured
-`M_ME_NC_1` `ExportRecord`. It deliberately does not satisfy this document's
-per-second aggregation, status, voltage, preferred-frequency selection,
-timeout-hold, audit, or heartbeat requirements.
+PoC mapping: each explicitly mapped, valid C37.118 gateway frequency produces
+one configured `M_ME_NC_1` `ExportRecord`. It deliberately does not satisfy
+this document's per-second aggregation, status, voltage, preferred-frequency
+selection, timeout-hold, audit, or heartbeat requirements.
 
 ## Current PoC Implementation
 

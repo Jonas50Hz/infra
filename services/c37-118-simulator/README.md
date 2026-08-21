@@ -11,6 +11,13 @@ deviation, and ROCOF; V3 accepts capability/stream-configuration/start/stop.
 The default V3 profile has one PMU on TCP/4712; matching V2 profiles use the
 same internal ports and IDs.
 
+V2 profiles omit `v2_good_stat_pmu_ids` by default and therefore emit a
+conservative synchronization-uncertain STAT. The five-PMU V2 onboarding profile
+is the explicit exception: PMU IDs `1001` and `1002` emit STAT `0`, so the
+onboarding adapters normalize them as `quality.valid=true`; IDs `1003` through
+`1005` remain conservative-invalid. This is controlled integration-fixture
+behavior, not a claim about physical PMU clock quality.
+
 Both wire subsets are derived from the authenticated local IEEE C37.118.2-2024
 standard. V2 uses the genuine nibble `0010` (`0x02` data, `0x12` HDR, `0x22`
 CFG-1, `0x32` CFG-2, and `0x42` command), not Annex-A's V1 illustrations. An
@@ -47,7 +54,8 @@ docker compose --profile c37-118 exec c37-118-simulator \
 
 For the five-PMU Forgejo onboarding demonstration, use the dedicated V2 profile.
 It exposes five internal endpoints at `172.30.0.10:4712` through
-`172.30.0.10:4716`, with matching stream and PMU IDs `1001` through `1005`:
+`172.30.0.10:4716`, with matching stream and PMU IDs `1001` through `1005`.
+It configures good STAT for PMU IDs `1001` and `1002` only:
 
 ```sh
 C37_118_SIMULATOR_PROFILE_SOURCE="$PWD/services/c37-118-simulator/profiles/five-pmu-v2.yaml" \

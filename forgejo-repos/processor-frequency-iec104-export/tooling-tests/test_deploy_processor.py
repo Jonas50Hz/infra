@@ -32,6 +32,12 @@ class DeploymentGuardTests(unittest.TestCase):
                 (deploy_root / "compose.yaml").read_text(encoding="utf-8"),
                 "services: {}\n",
             )
+            self.assertEqual(
+                (deploy_root / "config" / "frequency-iec104-export.yaml").read_text(
+                    encoding="utf-8"
+                ),
+                "version: 1\nexports: []\n",
+            )
             self.assertTrue((deploy_root / ".wama-forgejo-processor-manifest.json").is_file())
 
     def test_rejects_an_unmanaged_destination_file(self) -> None:
@@ -56,6 +62,12 @@ class DeploymentGuardTests(unittest.TestCase):
         workspace.mkdir()
         (workspace / "compose.yaml").write_text("services: {}\n", encoding="utf-8")
         (workspace / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        config_directory = workspace / "config"
+        config_directory.mkdir()
+        (config_directory / "frequency-iec104-export.yaml").write_text(
+            "version: 1\nexports: []\n",
+            encoding="utf-8",
+        )
         subprocess.run(["git", "init", "--quiet", str(workspace)], check=True)
         subprocess.run(["git", "-C", str(workspace), "add", "."], check=True)
         return workspace

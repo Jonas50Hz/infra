@@ -70,10 +70,11 @@ def run_processor() -> None:
 
     settings = Settings.from_environment()
     LOGGER.info(
-        "Starting direct frequency IEC 104 export group %s from %s to %s",
+        "Starting direct frequency IEC 104 export group %s from %s to %s with %s mappings",
         settings.consumer_group,
         settings.input_topic,
         settings.output_topic,
+        len(settings.mappings),
     )
     application, stream = build_application(settings)
     application.run(stream)

@@ -18,8 +18,7 @@ and its separate CI/deployment Actions runner connections, Kafka UI, Grafana
 provisioning, and VictoriaMetrics scrape health including Kafka exporter metrics
 for all WAMA topics. Grafana readiness requires the VictoriaMetrics datasource,
 the internal Druid datasource, the read-only internal Trino datasource, the
-**WAMA Measurements / WAMA PMU Live Measurements** and **WAMA Measurement
-Sessions** dashboards, and a Trino metadata query proving the
+**WAMA Measurements / WAMA Measurement Sessions** dashboard, and a Trino metadata query proving the
 initialized Iceberg session table is visible. It also requires the provisioned
 **WAMA Gateways / WAMA Gateway Fleet** entry point, but does not require an
 active catalog source. It checks the local measurement-session API HTTP health

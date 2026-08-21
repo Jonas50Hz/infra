@@ -55,8 +55,10 @@ non-committing consumer group. It ignores unrelated topic traffic and succeeds
 only after it observes every approved catalog MRID with a well-formed
 raw-Protobuf record, matching key, double value, explicit quality flag, and
 ordered timestamps. The V2 simulator deliberately reports synchronization
-uncertainty, so its fixture records have `quality.valid=false`; the verifier
-proves source transport and record integrity, not a synchronized-PMU quality
-claim. Set
+uncertainty by default. Its five-PMU onboarding profile deliberately overrides
+the V2 STAT for PMU IDs `1001` and `1002`, so bays 01 and 02 have
+`quality.valid=true`; bays 03 through 05 remain `quality.valid=false`. The
+verifier proves source transport and record integrity, not a real
+synchronized-PMU quality claim. Set
 `WAMA_LIVE_MEASUREMENT_VERIFY_TIMEOUT_SECONDS` to adjust its bounded 30-second
 default.

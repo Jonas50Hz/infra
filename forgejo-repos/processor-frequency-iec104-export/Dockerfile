@@ -27,6 +27,7 @@ WORKDIR /app
 
 COPY --from=build /install /usr/local
 COPY --from=build /build/src /app
+COPY config /etc/wama
 COPY scripts /app/scripts
 COPY tests /app/tests
 COPY tooling-tests /app/tooling-tests
