@@ -62,15 +62,24 @@ class DeploymentGuardTests(unittest.TestCase):
             _require_expected_service([])
 
     def test_allows_only_the_expected_generated_gateway_services(self) -> None:
-        gateway_service = _gateway_service_name("pmu-bay-01")
+        gateway_services = tuple(
+            _gateway_service_name(source_id)
+            for source_id in (
+                "pmu-bay-01",
+                "pmu-bay-02",
+                "pmu-bay-03",
+                "pmu-bay-04",
+                "pmu-bay-05",
+            )
+        )
         _require_expected_services(
-            ["masterdata-publisher", gateway_service],
-            ("masterdata-publisher", gateway_service),
+            ["masterdata-publisher", *gateway_services],
+            ("masterdata-publisher", *gateway_services),
         )
         with self.assertRaisesRegex(DeploymentError, "c37-118-gateway-pmu-bay-01"):
             _require_expected_services(
-                ["masterdata-publisher", "pmu-gateway"],
-                ("masterdata-publisher", gateway_service),
+                ["masterdata-publisher", *gateway_services, "pmu-gateway"],
+                ("masterdata-publisher", *gateway_services),
             )
 
     def test_derives_safe_gateway_services_from_catalog_filenames(self) -> None:
@@ -78,20 +87,27 @@ class DeploymentGuardTests(unittest.TestCase):
             deploy_root = Path(directory)
             source_directory = deploy_root / "catalog" / "sources"
             source_directory.mkdir(parents=True)
-            (source_directory / "pmu-bay-02.yaml").write_text("source_id: pmu-bay-02\n", encoding="utf-8")
-            (source_directory / "pmu-bay-01.yaml").write_text("source_id: pmu-bay-01\n", encoding="utf-8")
+            source_ids = (
+                "pmu-bay-01",
+                "pmu-bay-02",
+                "pmu-bay-03",
+                "pmu-bay-04",
+                "pmu-bay-05",
+            )
+            for source_id in reversed(source_ids):
+                (source_directory / f"{source_id}.yaml").write_text(
+                    f"source_id: {source_id}\n",
+                    encoding="utf-8",
+                )
 
-            source_ids = _active_source_ids(deploy_root)
-            _write_gateway_compose(deploy_root, source_ids)
+            active_source_ids = _active_source_ids(deploy_root)
+            _write_gateway_compose(deploy_root, active_source_ids)
             generated = json.loads((deploy_root / GATEWAY_COMPOSE_FILE).read_text(encoding="utf-8"))
 
-            self.assertEqual(source_ids, ("pmu-bay-01", "pmu-bay-02"))
+            self.assertEqual(active_source_ids, source_ids)
             self.assertEqual(
                 sorted(generated["services"]),
-                [
-                    f"{GATEWAY_SERVICE_PREFIX}pmu-bay-01",
-                    f"{GATEWAY_SERVICE_PREFIX}pmu-bay-02",
-                ],
+                [f"{GATEWAY_SERVICE_PREFIX}{source_id}" for source_id in source_ids],
             )
             self.assertEqual(
                 generated["services"][f"{GATEWAY_SERVICE_PREFIX}pmu-bay-01"]["networks"],

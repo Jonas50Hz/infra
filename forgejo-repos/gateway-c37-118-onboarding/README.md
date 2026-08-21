@@ -14,9 +14,12 @@ a CFG-2 phasor magnitude channel and binds frequency/ROCOF to their singleton
 v2 values. V1 accepts only the `voltage`, `current`, `frequency`, and `rocof`
 double-value mappings with units `V`, `A`, `Hz`, and `Hz/s`.
 
-The checked-in `pmu-bay-01` record mirrors the eight MRIDs emitted by the
-root-owned fake PMU fixture. It is catalog evidence only; this repository does
-not control, deploy, or restart that fixture.
+The root-owned simulator remains a fixed five-PMU V2 fixture at
+`172.30.0.10:4712` through `172.30.0.10:4716`. The initial catalog contains
+one source YAML for each fixture PMU, but reviewed source YAML files may be
+added or removed. Active Masterdata records, generated adapters, and
+verification expectations are derived from the current catalog; this
+repository does not control, deploy, or restart the simulator.
 
 Run the repository checks from this directory:
 
@@ -37,3 +40,23 @@ Deleting a catalog source publishes a null-valued tombstone for its source key
 and removes only that source's previously managed adapter. Raw STAT/time-quality
 retention, version 3, CFG-3, UDP, TLS, source discovery, and the root simulator
 remain outside this repository's gateway scope.
+
+After a successful deployment, verify fresh records for every approved catalog
+MRID from the marker-owned deployment root:
+
+```sh
+cd /var/lib/wama-gateway-c37-118-onboarding
+docker compose run --rm --no-deps masterdata-publisher \
+	python -m gateway_c37_118_onboarding.verify_live_measurements
+```
+
+The verifier consumes from `LiveMeasurement` at `latest` through a unique,
+non-committing consumer group. It ignores unrelated topic traffic and succeeds
+only after it observes every approved catalog MRID with a well-formed
+raw-Protobuf record, matching key, double value, explicit quality flag, and
+ordered timestamps. The V2 simulator deliberately reports synchronization
+uncertainty, so its fixture records have `quality.valid=false`; the verifier
+proves source transport and record integrity, not a synchronized-PMU quality
+claim. Set
+`WAMA_LIVE_MEASUREMENT_VERIFY_TIMEOUT_SECONDS` to adjust its bounded 30-second
+default.

@@ -13,15 +13,14 @@ show_failure_diagnostics() {
     druid \
     druid-init \
     kafka \
-    kafka-init \
-    pmu-gateway || true
+    kafka-init || true
 }
 
 trap show_failure_diagnostics ERR
 
 docker compose config --quiet
 docker compose build druid druid-init infra-readiness
-docker compose up -d --wait pmu-gateway druid
+docker compose up -d --wait druid
 docker compose run --rm --no-deps druid-init
 docker compose run --rm --no-deps infra-readiness \
   python -c 'from infra_readiness.config import Settings; from infra_readiness.druid import check_druid; check_druid(Settings.from_environment())'

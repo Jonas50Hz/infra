@@ -104,3 +104,43 @@ absolute frequency in Hz, and ROCOF in Hz/s as raw-Protobuf
 Future field timestamps are rejected. Generic Common Format quality is limited
 to `valid` and `substituted` from conservative v2 `STAT` handling; a separate
 status-evidence contract remains necessary for LFR audit use.
+
+## Five-PMU Demonstration
+
+The root-owned `c37-118-simulator` provides the separate V2 source fixture for
+this declared Forgejo gateway-deployment test. Its `five-pmu-v2.yaml` profile
+uses the stable `wama-infra` address `172.30.0.10`, listeners `4712` through
+`4716`, and matching C37.118 PMU IDCODEs `1001` through `1005`. The simulator
+remains root infrastructure: the onboarding repository neither deploys nor
+restarts it.
+
+The initial approved Forgejo catalog contains `pmu-bay-01` through
+`pmu-bay-05`, one source for each listener. Each source maps six phasor
+magnitudes, frequency, and ROCOF to eight immutable MRIDs. Source YAML files
+are the reviewed enrollment surface: adding or removing one changes the active
+Masterdata record, generated adapter, and verifier expectation while the
+root-owned simulator continues running its fixed five-PMU fixture. When all
+five initial sources are active, the adapters produce approximately
+$5 \times 8 \times 50 = 2{,}000$ records per second at the fixture's 50 Hz
+rate.
+
+After a reviewed Forgejo merge has completed `validate`, `publish`, and
+`deploy`, run the verifier only from the marker-owned onboarding deployment
+root:
+
+```sh
+cd /var/lib/wama-gateway-c37-118-onboarding
+docker compose run --rm --no-deps masterdata-publisher \
+	python -m gateway_c37_118_onboarding.verify_live_measurements
+```
+
+The verifier starts at the current `LiveMeasurement` end offset with a unique,
+non-committing consumer group. It ignores unrelated root-PMU traffic and passes
+only after every approved catalog MRID has a well-formed raw-Protobuf double
+value, matching Kafka key, explicit quality flag, and ordered
+field/gateway/MCCS timestamps. The simulator deliberately marks synchronization
+uncertain, so this fixture has `quality.valid=false`; the verifier proves source
+transport and record integrity, not synchronized-PMU quality for an LFR
+decision. Kafka UI can then inspect the compacted `Masterdata` keys and matching
+`LiveMeasurement` key families for the current catalog; its payloads remain raw
+Protobuf, so the verifier is the semantic pass/fail evidence.

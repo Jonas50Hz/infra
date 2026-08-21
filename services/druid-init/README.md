@@ -8,7 +8,9 @@ The immutable supervisor specification reads raw-Protobuf
 `MCCSMeasurementValue` records from `LiveMeasurement` using the descriptor built
 into the Druid image. It uses the Kafka record timestamp as `__time`, preserves
 the individual typed value fields and quality flags, and explicitly disables
-rollup.
+rollup. Its hourly segment row ceiling is sized for the five-PMU V2 fixture's
+approximately 2,000 records per second; byte-based intermediate persists retain
+the task's bounded in-memory behavior during catch-up.
 
 Run the focused unit suite:
 

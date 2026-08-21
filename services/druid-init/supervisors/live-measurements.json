@@ -88,7 +88,7 @@
     },
     "tuningConfig": {
       "type": "kafka",
-      "maxRowsPerSegment": 500000,
+      "maxRowsPerSegment": 10000000,
       "maxParseExceptions": 0,
       "maxSavedParseExceptions": 10
     },

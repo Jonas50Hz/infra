@@ -85,7 +85,7 @@ class TrinoClient:
             raise TrinoReadinessError(f"Trino statement result retrieval failed: {error}") from error
 
 
-def check_trino(settings: Settings) -> None:
+def check_trino(settings: Settings, require_live_measurement: bool = True) -> None:
     """Require read-only Druid, Blobmeta, and session Iceberg federation through Trino."""
 
     client = TrinoClient(settings.trino_url, settings.trino_user)
@@ -119,16 +119,17 @@ def check_trino(settings: Settings) -> None:
             "session table discovery",
         )
         validate_session_table(session_tables, settings.trino_session_table)
-        pmu_rows = _successful_result(
-            client.execute(_pmu_query(settings)),
-            "Druid PMU query",
-        )
-        validate_pmu_rows(
-            pmu_rows,
-            settings.druid_expected_mrid,
-            settings.druid_expected_double_value,
-            settings.druid_expected_double_value_tolerance,
-        )
+        if require_live_measurement:
+            pmu_rows = _successful_result(
+                client.execute(_pmu_query(settings)),
+                "Druid PMU query",
+            )
+            validate_pmu_rows(
+                pmu_rows,
+                settings.druid_expected_mrid,
+                settings.druid_expected_double_value,
+                settings.druid_expected_double_value_tolerance,
+            )
         write_attempt = client.execute(
             f"CREATE SCHEMA {settings.trino_blobmeta_catalog}.trino_read_only_probe"
         )

@@ -1,0 +1,75 @@
+source_id: pmu-bay-03
+location:
+  site_id: wama-poc-bay-03
+  display_name: WAMA PoC Bay 03
+connection:
+  protocol: c37_118_tcp
+  ip_address: 172.30.0.10
+  port: 4714
+  pmu_idcode: 1003
+  wire_version: 2
+signals:
+  - signal_id: voltage-l1
+    source_channel: VL1
+    mrid: urn:wama:poc:pmu:bay-03:voltage-l1
+    value_kind: double
+    quantity: voltage
+    unit: V
+    c37_118_v2_selector:
+      phasor_magnitude_channel: VL1
+  - signal_id: voltage-l2
+    source_channel: VL2
+    mrid: urn:wama:poc:pmu:bay-03:voltage-l2
+    value_kind: double
+    quantity: voltage
+    unit: V
+    c37_118_v2_selector:
+      phasor_magnitude_channel: VL2
+  - signal_id: voltage-l3
+    source_channel: VL3
+    mrid: urn:wama:poc:pmu:bay-03:voltage-l3
+    value_kind: double
+    quantity: voltage
+    unit: V
+    c37_118_v2_selector:
+      phasor_magnitude_channel: VL3
+  - signal_id: current-l1
+    source_channel: IL1
+    mrid: urn:wama:poc:pmu:bay-03:current-l1
+    value_kind: double
+    quantity: current
+    unit: A
+    c37_118_v2_selector:
+      phasor_magnitude_channel: IL1
+  - signal_id: current-l2
+    source_channel: IL2
+    mrid: urn:wama:poc:pmu:bay-03:current-l2
+    value_kind: double
+    quantity: current
+    unit: A
+    c37_118_v2_selector:
+      phasor_magnitude_channel: IL2
+  - signal_id: current-l3
+    source_channel: IL3
+    mrid: urn:wama:poc:pmu:bay-03:current-l3
+    value_kind: double
+    quantity: current
+    unit: A
+    c37_118_v2_selector:
+      phasor_magnitude_channel: IL3
+  - signal_id: frequency
+    source_channel: FREQ
+    mrid: urn:wama:poc:pmu:bay-03:frequency
+    value_kind: double
+    quantity: frequency
+    unit: Hz
+    c37_118_v2_selector:
+      frequency: true
+  - signal_id: rocof
+    source_channel: ROCOF
+    mrid: urn:wama:poc:pmu:bay-03:rocof
+    value_kind: double
+    quantity: rocof
+    unit: Hz/s
+    c37_118_v2_selector:
+      rocof: true

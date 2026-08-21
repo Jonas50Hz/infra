@@ -54,9 +54,14 @@ path with Forgejo Actions and application-local `docker compose up -d`.
   measurement-session artifacts. **Trino** federates Druid, PostgreSQL Blobmeta
   metadata, and the Iceberg session table; its internal writer is not exposed to
   Grafana or the host.
+- **Gateway dashboard provisioning** is root-owned: it consumes compacted
+  Masterdata directly, creates a Grafana fleet page and source-scoped Druid
+  views, and removes generated pages on source tombstones. It does not manage
+  gateway containers or use Trino as a dashboard control plane.
 - **Export:** root-owned `iec104-exporter` sends supported real-time monitor
-  ASDUs from typed `Export` records to one control center. File (xlsx/csv) and
-  MQTT export remain later work.
+  ASDUs from typed `Export` records to one control center. Grafana can download
+  a selected immutable measurement session as CSV through the loopback-only
+  fixed-query exporter. XLSX, broader file export, and MQTT remain later work.
 - **CI/CD target:** Git → CI/CD → infrastructure Git → ArgoCD (GitOps deploy).
 - **Apache Spark** is a future-only option for heavy or batch workloads; it is
   not a current PoC service.

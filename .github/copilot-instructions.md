@@ -40,7 +40,7 @@ This is NOT the production target (production is Kubernetes-based).
   catalog; a tombstone may remove only its matching previously managed adapter.
   It must not control the root `pmu-gateway`, simulator, or any other gateway.
 - The root `docker-compose.yml` runs and deploys infrastructure services. The
-  current `pmu-gateway`, all infrastructure gateways, and every asset outside
+  the deprecated `pmu-gateway` fixture, all infrastructure gateways, and every asset outside
   the explicit Forgejo deployment scope belong in this repository, never in an
   application Compose assembly.
 - **Infrastructure metrics = VictoriaMetrics.** Use its single-node direct
@@ -59,8 +59,9 @@ This is NOT the production target (production is Kubernetes-based).
 - When adding, renaming, or removing a Compose service, make the corresponding
   directory and Compose-fragment change; then update the root `include` list,
   the root README, and these instructions in the same change.
-- The current Phase 1 source gateway is `pmu-gateway`; it publishes configured
-  fake PMU scalar measurements as raw `MCCSMeasurementValue` Protobuf records.
+- The legacy Phase 1 `pmu-gateway` fixture is retained for reference only and
+  is excluded from the root Compose assembly. The standalone C37.118 simulator
+  remains opt-in and does not publish Kafka or Common Format records.
 - `c37-118-simulator` owns `services/c37-118-simulator/`. It is an opt-in,
   root-owned standalone C37.118 TCP source simulator with no Kafka, Common
   Format, gateway, or Forgejo dependency. Its large fleet checks stay manually
@@ -88,14 +89,27 @@ This is NOT the production target (production is Kubernetes-based).
   neither service may modify canonical session artifacts.
 - SeaweedFS owns `services/seaweedfs/` and provides the PoC's authenticated
   S3-compatible raw/waveform and long-term measurement-session storage.
-- Measurement-session services own `services/measurement-session-processor/`,
-  `services/blobmeta-catalog/`, `services/measurement-session-query-indexer/`,
-  and `services/measurement-session-e2e/`. They are root-owned, not Forgejo
-  deployment targets. The processor accesses Druid and SeaweedFS to create
-  Parquet artifacts; the catalog holds no S3 credentials and projects only
-  Blobmeta metadata to PostgreSQL. The query indexer verifies canonical
-  artifacts and registers their exact Parquet object URI through the
-  internal-only Trino writer; it owns only mutable query-registration state.
+- Measurement-session services own `services/measurement-session-api/`,
+  `services/measurement-session-exporter/`,
+  `services/measurement-session-processor/`, `services/blobmeta-catalog/`,
+  `services/measurement-session-query-indexer/`, and
+  `services/measurement-session-e2e/`. They are root-owned, not Forgejo
+  deployment targets. The local-only API accepts browser-confirmed Grafana
+  selections and publishes validated raw-Protobuf requests; it has Kafka only,
+  never Druid, SeaweedFS, PostgreSQL, or Trino-writer access. The processor
+  accesses Druid and SeaweedFS to create Parquet artifacts; the catalog holds
+  no S3 credentials and projects only Blobmeta metadata to PostgreSQL. The
+  query indexer verifies canonical artifacts and registers their exact Parquet
+  object URI through the internal-only Trino writer; it owns only mutable
+  query-registration state. The loopback-only exporter streams only a selected
+  immutable session through a fixed public read-only Trino query; it has no
+  Kafka, Druid, SeaweedFS, PostgreSQL, or Trino-writer access.
+- `gateway-dashboard-provisioner` owns
+  `services/gateway-dashboard-provisioner/` and is root infrastructure. It
+  replays compacted raw-Protobuf `Masterdata` into Grafana's generated **WAMA
+  Gateways** file-provider volume. It may never deploy, restart, infer health
+  for, or take ownership of a gateway; active Masterdata controls dashboard
+  membership and Druid provides live values.
 - IEC 104 services own `services/iec104-exporter/`,
   `services/iec104-receiver/`, and `services/iec104-browser/`. The exporter is
   a root-owned one-way controlled station that consumes typed raw-Protobuf
@@ -123,9 +137,11 @@ This is NOT the production target (production is Kubernetes-based).
   `services/node-exporter/`, `services/cadvisor/`, `services/kafka-exporter/`,
   and `services/grafana/`. VictoriaMetrics holds infrastructure telemetry only;
   Common Format records remain out of VictoriaMetrics. Druid owns the live
-  measurement store; Grafana owns the pinned Druid datasource plugin and the
-  `WAMA Measurements` PMU dashboard. Keep measurement queries on Druid and
-  infrastructure telemetry on VictoriaMetrics.
+  measurement store; Grafana owns pinned Druid and Trino datasource plugins,
+  the `WAMA Measurements` PMU/session dashboards, and generated `WAMA
+  Gateways` pages. Keep live gateway measurement queries on Druid, immutable
+  session queries on read-only Trino, and infrastructure telemetry on
+  VictoriaMetrics.
 
 ## Stack (PoC mapping vs. production)
 | Layer | Production (target) | This PoC |
@@ -138,7 +154,7 @@ This is NOT the production target (production is Kubernetes-based).
 | Infrastructure metrics | Grafana + metrics backend | VictoriaMetrics + node-exporter + cAdvisor + Grafana |
 | Raw/blob | SeaweedFS | SeaweedFS `weed mini`, S3-compatible single-node service |
 | Viz | Grafana | VictoriaMetrics for infrastructure; Druid-backed PMU measurement dashboard |
-| Export | IEC 104 + file export | root-owned one-way IEC 104 exporter; file export remains future work |
+| Export | IEC 104 + file export | root-owned one-way IEC 104 exporter plus selected-session CSV download; broader file export remains future work |
 
 ## Coding conventions
 - Python: type hints, early returns, docstrings, no bare excepts.

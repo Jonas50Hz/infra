@@ -1,0 +1,1 @@
+"""Build-generated raw-Protobuf bindings for the gateway dashboard service."""

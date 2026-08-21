@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from hashlib import sha256
 from math import ceil
 from typing import Any, Final
+from urllib.parse import quote
 
 from gateway_dashboard_provisioner.model import GatewaySignal, GatewaySource
 
@@ -14,6 +15,7 @@ DRUID_DATASOURCE_UID: Final = "druid"
 DRUID_DATASOURCE_TYPE: Final = "grafadruid-druid-datasource"
 LIVE_MEASUREMENTS_DATASOURCE: Final = "live_measurements"
 FLEET_DASHBOARD_UID: Final = "wama-gateway-fleet"
+MEASUREMENT_SESSION_URL: Final = "http://localhost:3004/?from=${__from}&to=${__to}"
 
 _QUANTITY_DETAILS: Final = {
     "voltage": ("Phase Voltages", "volt"),
@@ -63,15 +65,18 @@ def render_fleet_dashboard(sources: Iterable[GatewaySource]) -> dict[str, Any]:
         "annotations": {"list": []},
         "editable": False,
         "links": [
-            {
+            _measurement_session_link(),
+            *[
+                {
                 "includeTimeRange": True,
                 "keepTime": True,
                 "targetBlank": False,
                 "title": f"{source.display_name} ({source.source_id})",
                 "type": "link",
                 "url": f"/d/{dashboard_uid(source.source_id)}",
-            }
-            for source in ordered_sources
+                }
+                for source in ordered_sources
+            ],
         ],
         "panels": [
             {
@@ -128,6 +133,7 @@ def render_gateway_dashboard(source: GatewaySource) -> dict[str, Any]:
         "editable": False,
         "graphTooltip": 1,
         "links": [
+            _measurement_session_link(signal.mrid for signal in source.signals),
             {
                 "includeTimeRange": True,
                 "keepTime": True,
@@ -160,6 +166,26 @@ def _fleet_content(sources: tuple[GatewaySource, ...]) -> str:
             f"(/d/{dashboard_uid(source.source_id)})"
         )
     return "\n".join(lines)
+
+
+def _measurement_session_link(mrids: Iterable[str] = ()) -> dict[str, Any]:
+    """Build the shared link to the local measurement-session form."""
+
+    mrid_values = tuple(sorted(set(mrids)))
+    url = MEASUREMENT_SESSION_URL
+    if mrid_values:
+        url += f"&mrids={quote(','.join(mrid_values), safe=',')}"
+    return {
+        "asDropdown": False,
+        "icon": "external link",
+        "includeTimeRange": False,
+        "includeVars": False,
+        "keepTime": False,
+        "targetBlank": True,
+        "title": "Create measurement session",
+        "type": "link",
+        "url": url,
+    }
 
 
 def _metadata_panel(source: GatewaySource) -> dict[str, Any]:
@@ -274,7 +300,7 @@ def _latest_records_panel(signals: tuple[GatewaySignal, ...], y: int) -> dict[st
         "id": 101,
         "options": {"cellHeight": "sm", "showHeader": True},
         "targets": [_druid_target(_latest_records_query(signals), "long")],
-        "title": "Latest Valid Records",
+        "title": "Latest Records",
         "type": "table",
     }
 
@@ -301,7 +327,6 @@ def _series_query(signals: tuple[GatewaySignal, ...]) -> str:
         f'{aliases} END AS "signal", "double_value" '
         f'FROM "{LIVE_MEASUREMENTS_DATASOURCE}" '
         f'WHERE "mrid" IN ({_mrid_list(signals)}) '
-        "AND \"quality_valid\" = 'true' "
         'AND "double_value" IS NOT NULL '
         'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
         'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '
@@ -314,7 +339,6 @@ def _freshness_query(signals: tuple[GatewaySignal, ...]) -> str:
         'SELECT MAX("__time") AS "last_measurement" '
         f'FROM "{LIVE_MEASUREMENTS_DATASOURCE}" '
         f'WHERE "mrid" IN ({_mrid_list(signals)}) '
-        "AND \"quality_valid\" = 'true' "
         'AND "double_value" IS NOT NULL'
     )
 
@@ -322,10 +346,9 @@ def _freshness_query(signals: tuple[GatewaySignal, ...]) -> str:
 def _latest_records_query(signals: tuple[GatewaySignal, ...]) -> str:
     return (
         'SELECT "__time", "mrid", "double_value", "timestamp_field", '
-        '"timestamp_gateway", "timestamp_mccs" '
+        '"timestamp_gateway", "timestamp_mccs", "quality_valid" '
         f'FROM "{LIVE_MEASUREMENTS_DATASOURCE}" '
         f'WHERE "mrid" IN ({_mrid_list(signals)}) '
-        "AND \"quality_valid\" = 'true' "
         'AND "double_value" IS NOT NULL '
         'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
         'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '

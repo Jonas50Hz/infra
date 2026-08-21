@@ -1,0 +1,26 @@
+services:
+  measurement-session-exporter:
+    build:
+      context: ../..
+      dockerfile: services/measurement-session-exporter/Dockerfile
+    depends_on:
+      trino:
+        condition: service_healthy
+    environment:
+      TRINO_URL: http://trino:8080
+      TRINO_USER: measurement-session-exporter
+    ports:
+      - "127.0.0.1:${MEASUREMENT_SESSION_EXPORTER_PORT:-3005}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped

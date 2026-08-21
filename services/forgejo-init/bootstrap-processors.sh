@@ -10,6 +10,11 @@ runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
 runner_layout=ten-connections-v5
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
+gateway_c37_118_onboarding_agent_username="${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME:-wama-gateway-c37-118-onboarding-agent}"
+gateway_c37_118_onboarding_agent_email="${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL:-wama-gateway-c37-118-onboarding-agent@local}"
+gateway_c37_118_onboarding_agent_token_name=wama-gateway-c37-118-onboarding-agent
+gateway_c37_118_onboarding_agent_token_file="$runner_dir/forgejo-gateway-c37-118-onboarding-agent.token"
+gateway_c37_118_onboarding_agent_identity_file="$runner_dir/forgejo-gateway-c37-118-onboarding-agent.identity"
 seed_root="${FORGEJO_PROCESSOR_SEED_ROOT:-/opt/wama/seeds}"
 admin_username="${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
 admin_email="${FORGEJO_BOOTSTRAP_ADMIN_EMAIL:-wama-admin@local}"
@@ -163,6 +168,115 @@ ensure_package_token() {
   fi
 }
 
+forgejo_api_as_admin() {
+  curl --fail --silent --show-error \
+    --user "$admin_username:$admin_password" \
+    "$@"
+}
+
+lookup_gateway_c37_118_onboarding_agent() {
+  gateway_c37_118_onboarding_agent_users_file="$temporary_directory/gateway-c37-118-onboarding-agent-users.json"
+  gateway_c37_118_onboarding_agent_file="$temporary_directory/gateway-c37-118-onboarding-agent.json"
+  forgejo_api_as_admin \
+    --output "$gateway_c37_118_onboarding_agent_users_file" \
+    "$api_url/admin/users?limit=100"
+  if ! jq -e --arg username "$gateway_c37_118_onboarding_agent_username" \
+    '.[] | select(.username == $username)' \
+    "$gateway_c37_118_onboarding_agent_users_file" > "$gateway_c37_118_onboarding_agent_file"; then
+    : > "$gateway_c37_118_onboarding_agent_file"
+  fi
+}
+
+gateway_c37_118_onboarding_agent_is_restricted_non_admin() {
+  [ -s "$gateway_c37_118_onboarding_agent_file" ] \
+    && jq -e --arg username "$gateway_c37_118_onboarding_agent_username" \
+      '.username == $username and .is_admin == false and .restricted == true' \
+      "$gateway_c37_118_onboarding_agent_file" > /dev/null
+}
+
+ensure_gateway_c37_118_onboarding_agent_user() {
+  lookup_gateway_c37_118_onboarding_agent
+  if [ ! -s "$gateway_c37_118_onboarding_agent_file" ]; then
+    gateway_c37_118_onboarding_agent_password="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '\n')"
+    if [ -z "$gateway_c37_118_onboarding_agent_password" ]; then
+      printf '%s\n' "Unable to generate a Forgejo gateway onboarding agent password" >&2
+      exit 1
+    fi
+    forgejo_as_git admin user create \
+      --username "$gateway_c37_118_onboarding_agent_username" \
+      --password "$gateway_c37_118_onboarding_agent_password" \
+      --email "$gateway_c37_118_onboarding_agent_email" \
+      --restricted \
+      --must-change-password=false
+    lookup_gateway_c37_118_onboarding_agent
+  fi
+  if ! gateway_c37_118_onboarding_agent_is_restricted_non_admin; then
+    printf '%s\n' "Forgejo gateway onboarding agent must be a restricted non-admin user" >&2
+    exit 1
+  fi
+}
+
+ensure_gateway_c37_118_onboarding_agent_collaboration() {
+  forgejo_api_as_admin \
+    --request PUT \
+    --header "Content-Type: application/json" \
+    --data '{"permission":"write"}' \
+    --output "$temporary_directory/gateway-c37-118-onboarding-agent-collaboration.json" \
+    "$api_url/repos/$admin_username/$gateway_c37_118_onboarding_repository/collaborators/$gateway_c37_118_onboarding_agent_username"
+}
+
+gateway_c37_118_onboarding_agent_token_is_valid() {
+  if [ ! -s "$gateway_c37_118_onboarding_agent_token_file" ]; then
+    return 1
+  fi
+  gateway_c37_118_onboarding_agent_token="$(cat "$gateway_c37_118_onboarding_agent_token_file")"
+  if [ -z "$gateway_c37_118_onboarding_agent_token" ]; then
+    return 1
+  fi
+  gateway_c37_118_onboarding_agent_token_response="$temporary_directory/gateway-c37-118-onboarding-agent-token.json"
+  if ! curl --fail --silent --show-error \
+    --header "Authorization: token $gateway_c37_118_onboarding_agent_token" \
+    --output "$gateway_c37_118_onboarding_agent_token_response" \
+    "$api_url/user"; then
+    return 1
+  fi
+  grep -Fq "\"username\":\"$gateway_c37_118_onboarding_agent_username\"" "$gateway_c37_118_onboarding_agent_token_response"
+}
+
+ensure_gateway_c37_118_onboarding_agent_token() {
+  if ! gateway_c37_118_onboarding_agent_token_is_valid; then
+    rm -f "$gateway_c37_118_onboarding_agent_token_file"
+    forgejo_as_git admin user generate-access-token \
+      --username "$gateway_c37_118_onboarding_agent_username" \
+      --token-name "$gateway_c37_118_onboarding_agent_token_name" \
+      --scopes all \
+      --raw > "$gateway_c37_118_onboarding_agent_token_file"
+  fi
+  chown git:git "$gateway_c37_118_onboarding_agent_token_file"
+  chmod 600 "$gateway_c37_118_onboarding_agent_token_file"
+  if ! gateway_c37_118_onboarding_agent_token_is_valid; then
+    printf '%s\n' "Forgejo gateway onboarding agent token is invalid" >&2
+    exit 1
+  fi
+}
+
+write_gateway_c37_118_onboarding_agent_identity() {
+  cat > "$gateway_c37_118_onboarding_agent_identity_file" <<EOF
+owner=$admin_username
+repository=$gateway_c37_118_onboarding_repository
+username=$gateway_c37_118_onboarding_agent_username
+EOF
+  chown git:git "$gateway_c37_118_onboarding_agent_identity_file"
+  chmod 600 "$gateway_c37_118_onboarding_agent_identity_file"
+}
+
+ensure_gateway_c37_118_onboarding_agent() {
+  ensure_gateway_c37_118_onboarding_agent_user
+  ensure_gateway_c37_118_onboarding_agent_collaboration
+  ensure_gateway_c37_118_onboarding_agent_token
+  write_gateway_c37_118_onboarding_agent_identity
+}
+
 reset_runner_state() {
   rm -f \
     "$runner_dir/forgejo-runner.secret" \
@@ -212,6 +326,7 @@ fi
 
 require_value FORGEJO_BOOTSTRAP_ADMIN_PASSWORD "$admin_password"
 require_value FORGEJO_RUNNER_URL "$runner_url"
+require_value FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL "$gateway_c37_118_onboarding_agent_email"
 require_value WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 require_value WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 require_value WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
@@ -223,6 +338,7 @@ validate_identifier FORGEJO_APPARENT_POWER_REPOSITORY "$apparent_repository"
 validate_identifier FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY "$frequency_iec104_export_repository"
 validate_identifier FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY "$lfr_frequency_provision_repository"
 validate_identifier FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY "$gateway_c37_118_onboarding_repository"
+validate_identifier FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME "$gateway_c37_118_onboarding_agent_username"
 validate_deploy_root WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 validate_deploy_root WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
@@ -259,6 +375,7 @@ seed_repository_if_empty "$frequency_iec104_export_repository" "$seed_root/proce
 seed_repository_if_empty "$lfr_frequency_provision_repository" "$seed_root/processor-lfr-frequency-provision"
 seed_repository_if_empty "$gateway_c37_118_onboarding_repository" "$seed_root/gateway-c37-118-onboarding"
 ensure_package_token
+ensure_gateway_c37_118_onboarding_agent
 
 scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$lfr_frequency_provision_repository,$admin_username/$gateway_c37_118_onboarding_repository"
 if [ ! -f "$runner_layout_file" ] || [ "$(cat "$runner_layout_file")" != "$runner_layout" ]; then

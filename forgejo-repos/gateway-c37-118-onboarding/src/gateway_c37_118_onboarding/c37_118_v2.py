@@ -23,6 +23,7 @@ COMMAND_TURN_OFF = 0x0001
 COMMAND_TURN_ON = 0x0002
 COMMAND_REQUEST_CONFIGURATION_1 = 0x0004
 COMMAND_REQUEST_CONFIGURATION_2 = 0x0005
+PHUNIT_CURRENT = 0x0100_0000
 
 
 class C37_118V2Error(ValueError):
@@ -379,7 +380,7 @@ def _parse_pmu_configuration(cursor: _FrameCursor) -> PmuConfiguration:
     phasors = tuple(
         PhasorConfiguration(
             channel_name=channel_names[index],
-            is_current=bool(phasor_units[index] & 0x8000_0000),
+            is_current=bool(phasor_units[index] & PHUNIT_CURRENT),
             integer_scale=(phasor_units[index] & 0x00FF_FFFF) * 0.00001,
         )
         for index in range(phasor_count)

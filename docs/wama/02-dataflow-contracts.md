@@ -41,10 +41,17 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
   VictoriaMetrics. Trino provides read-only federation over Druid, the
   PostgreSQL Blobmeta projection, and registered immutable session artifacts in
   Iceberg. Grafana's selected-session dashboard queries that read-only Trino
-  path; alerting and broader cross-session analytics remain later work.
-6. **Export.** IEC 104 exporter (real-time) and File Export (xlsx/csv, on a
-   configured measurement session or manual selection). MQTT exporter for
-   OT/EAS.
+  path; its MRID selector and session link open a local confirmation UI that
+  submits only the selected interval and identifiers. Its session dashboard can
+  download the current immutable selection as CSV through a loopback-only,
+  fixed-query Trino exporter. Alerting and broader cross-session analytics
+  remain later work.
+    The root-owned gateway dashboard provisioner independently replays compacted
+    `Masterdata` to maintain Grafana's active-source fleet and Druid-backed
+    source pages; it does not use Trino or imply gateway deployment health.
+6. **Export.** IEC 104 exporter (real-time) and a Grafana-selected immutable
+  session CSV download. XLSX, configured/manual broad file export, and MQTT
+  exporter for OT/EAS remain future work.
 
 ## Kafka topics
 | Topic | Type | Contents |
@@ -197,6 +204,12 @@ The request contains a canonical UUID, requested/start/end timestamps, sorted
 unique MRIDs, and at most 32 sorted metadata entries. It represents the
 half-open interval $[started\_at, ended\_at)$ and is bounded by environment
 defaults of 32 MRIDs and 24 hours. It contains no raw samples.
+
+`measurement-session-api` is the root-owned local-PoC browser boundary for
+this contract. It normalizes a Grafana selection, creates or reuses a canonical
+session UUID, validates the request, and waits for Kafka acknowledgement before
+returning `202 Accepted`. It has no authority to query Druid or write session
+artifacts; the worker remains the sole materializer.
 
 The root-owned worker validates the request, streams Druid rows in timestamp and
 MRID order into a typed long-form Parquet artifact, stores it under

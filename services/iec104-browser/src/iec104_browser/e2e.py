@@ -28,15 +28,22 @@ async def run() -> None:
             try:
                 raw_message = await asyncio.wait_for(websocket.recv(), timeout=remaining)
             except TimeoutError as error:
-                raise ProbeError("browser stream did not receive all fixture values") from error
+                raise ProbeError(
+                    "browser stream did not receive all fixture values: "
+                    f"{messages[-12:]!r}"
+                ) from error
             payload = _payload(raw_message)
             if payload.get("kind") == "message":
                 messages.append(payload)
-                if _has_fixture_values(messages):
-                    validate_messages(messages)
+                fixture_messages = _matching_fixture_messages(messages)
+                if fixture_messages is not None:
+                    validate_messages(fixture_messages)
                     print("IEC 104 browser stream received all fixture values")
                     return
-    raise ProbeError("browser stream closed before receiving all fixture values")
+    raise ProbeError(
+        "browser stream closed before receiving all fixture values: "
+        f"{messages[-12:]!r}"
+    )
 
 
 def validate_messages(messages: list[dict[str, Any]]) -> None:
@@ -72,11 +79,63 @@ def validate_messages(messages: list[dict[str, Any]]) -> None:
 
 
 def _has_fixture_values(messages: list[dict[str, Any]]) -> bool:
-    return {message.get("type_id") for message in messages} >= {
-        "M_SP_NA_1",
-        "M_DP_NA_1",
-        "M_ME_NC_1",
-    }
+    return _matching_fixture_messages(messages) is not None
+
+
+def _matching_fixture_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """Return the expected fixture set without being distracted by stale records."""
+
+    expected = (
+        ("M_SP_NA_1", True, 32, ["substituted"]),
+        ("M_DP_NA_1", 2, 16, ["blocked"]),
+        ("M_ME_NC_1", 50.01, 1, ["overflow"]),
+    )
+    selected: list[dict[str, Any]] = []
+    for type_id, expected_value, quality_value, quality_flags in expected:
+        matching = next(
+            (
+                message
+                for message in reversed(messages)
+                if _matches_fixture_message(
+                    message,
+                    type_id,
+                    expected_value,
+                    quality_value,
+                    quality_flags,
+                )
+            ),
+            None,
+        )
+        if matching is None:
+            return None
+        selected.append(matching)
+    return selected
+
+
+def _matches_fixture_message(
+    message: dict[str, Any],
+    type_id: str,
+    expected_value: bool | int | float,
+    quality_value: int,
+    quality_flags: list[str],
+) -> bool:
+    if (
+        message.get("type_id") != type_id
+        or message.get("cause_code") != 3
+        or message.get("cause_name") != "SPONTANEOUS"
+        or message.get("quality_value") != quality_value
+        or message.get("quality_flags") != quality_flags
+    ):
+        return False
+    value = message.get("value")
+    if isinstance(expected_value, float):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isclose(
+            value,
+            expected_value,
+            rel_tol=0,
+            abs_tol=0.0001,
+        )
+    return value == expected_value
 
 
 def _payload(raw_message: str | bytes) -> dict[str, Any]:

@@ -1,0 +1,25 @@
+services:
+  gateway-dashboard-provisioner:
+    build:
+      context: ../..
+      dockerfile: services/gateway-dashboard-provisioner/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      GATEWAY_DASHBOARD_READY_FILE: /tmp/wama-gateway-dashboard-ready
+      GRAFANA_DASHBOARD_DIRECTORY: /var/lib/wama-gateway-dashboards
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_RETRY_INTERVAL_SECONDS: "${GATEWAY_DASHBOARD_KAFKA_RETRY_INTERVAL_SECONDS:-2}"
+      KAFKA_TOPIC: Masterdata
+    volumes:
+      - gateway-dashboard-data:/var/lib/wama-gateway-dashboards
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/wama-gateway-dashboard-ready"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped

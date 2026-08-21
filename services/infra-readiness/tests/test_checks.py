@@ -14,8 +14,10 @@ from infra_readiness.checks import (
     check_postgres,
     topic_configurations_from_responses,
     validate_grafana_dashboard,
+    validate_grafana_gateway_fleet_dashboard,
     validate_grafana_datasource,
     validate_grafana_pmu_dashboard,
+    validate_grafana_pmu_session_request_link,
     validate_grafana_pmu_query,
     validate_grafana_session_dashboard,
     validate_grafana_trino_datasource,
@@ -23,6 +25,8 @@ from infra_readiness.checks import (
     validate_forgejo_repository,
     validate_forgejo_runners,
     validate_iec104_browser_status,
+    validate_measurement_session_api_health,
+    validate_measurement_session_exporter_health,
     validate_live_measurement,
     validate_prometheus_up,
     validate_topic_configurations,
@@ -138,6 +142,20 @@ class ControlPlaneTests(unittest.TestCase):
             "live_measurements",
         )
 
+    def test_accepts_measurement_session_api_health(self) -> None:
+        validate_measurement_session_api_health({"status": "ok"})
+
+    def test_rejects_invalid_measurement_session_api_health(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "Measurement session API"):
+            validate_measurement_session_api_health({"status": "degraded"})
+
+    def test_accepts_measurement_session_exporter_health(self) -> None:
+        validate_measurement_session_exporter_health({"status": "ok"})
+
+    def test_rejects_invalid_measurement_session_exporter_health(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "Measurement session exporter"):
+            validate_measurement_session_exporter_health({"status": "degraded"})
+
     def test_accepts_provisioned_grafana_druid_measurement_views(self) -> None:
         validate_grafana_datasource(
             {
@@ -188,11 +206,39 @@ class ControlPlaneTests(unittest.TestCase):
                 "url": "http://trino:8080",
             }
         )
+
+    def test_accepts_provisioned_grafana_gateway_fleet_without_sources(self) -> None:
+        validate_grafana_gateway_fleet_dashboard(
+            {
+                "meta": {"provisioned": True, "folderTitle": "WAMA Gateways"},
+                "dashboard": {
+                    "uid": "wama-gateway-fleet",
+                    "panels": [
+                        {
+                            "title": "Active Gateway Sources",
+                            "type": "text",
+                        }
+                    ],
+                },
+            }
+        )
         validate_grafana_session_dashboard(
             {
                 "meta": {"provisioned": True, "folderTitle": "WAMA Measurements"},
                 "dashboard": {
                     "uid": "wama-measurement-sessions",
+                    "links": [
+                        {
+                            "title": "Export CSV",
+                            "asDropdown": False,
+                            "includeTimeRange": False,
+                            "includeVars": True,
+                            "url": (
+                                "http://localhost:3005/v1/measurement-sessions/export.csv?"
+                                "from=${__from}&to=${__to}"
+                            ),
+                        }
+                    ],
                     "panels": [
                         {
                             "title": title,
@@ -207,6 +253,33 @@ class ControlPlaneTests(unittest.TestCase):
     def test_accepts_unit_safe_grafana_pmu_dashboard(self) -> None:
         validate_grafana_pmu_dashboard(
             {"dashboard": {"panels": self._pmu_dashboard_panels()}}
+        )
+
+    def test_accepts_pmu_measurement_session_request_link(self) -> None:
+        validate_grafana_pmu_session_request_link(
+            {
+                "dashboard": {
+                    "links": [
+                        {
+                            "title": "Create measurement session",
+                            "url": (
+                                "http://localhost:3004/?from=${__from}&to=${__to}"
+                                "&mrids=${mrid:csv}"
+                            ),
+                            "targetBlank": True,
+                        }
+                    ],
+                    "templating": {
+                        "list": [
+                            {
+                                "name": "mrid",
+                                "type": "custom",
+                                "multi": True,
+                            }
+                        ]
+                    },
+                }
+            }
         )
 
     def test_rejects_grafana_pmu_dashboard_with_wrong_rocof_unit(self) -> None:

@@ -27,6 +27,7 @@ services:
       - ./provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./dashboards:/var/lib/grafana/dashboards:ro
       - ./measurement-dashboards:/var/lib/grafana/measurement-dashboards:ro
+      - gateway-dashboard-data:/var/lib/grafana/gateway-dashboards:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health"]
       interval: 10s

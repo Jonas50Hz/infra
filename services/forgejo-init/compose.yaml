@@ -1,6 +1,9 @@
 services:
   forgejo-init:
-    image: codeberg.org/forgejo/forgejo:16.0.2
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wama-forgejo-init:local
     depends_on:
       forgejo:
         condition: service_healthy
@@ -13,6 +16,8 @@ services:
       FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY: "${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
       FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY: "${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
       FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
+      FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME:-wama-gateway-c37-118-onboarding-agent}"
+      FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL:-wama-gateway-c37-118-onboarding-agent@local}"
       FORGEJO_RUNNER_URL: "${FORGEJO_RUNNER_URL:-http://host.docker.internal:3000/}"
       WAMA_FREQUENCY_SCALE_DEPLOY_ROOT: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
       WAMA_APPARENT_POWER_DEPLOY_ROOT: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"

@@ -22,6 +22,24 @@ connections for all five repositories on the one runner daemon. The generic
 labels remain `wama-processors-ci` and `wama-processors-deploy`; runner
 registration names include the owning repository.
 
+Bootstrap also creates or validates a restricted, non-admin
+`FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME` collaborator with `write`
+access only to the existing private `gateway-c37-118-onboarding` repository.
+Its generated API token remains in `forgejo-runner-data`; it is never placed in
+`.env`, Git remotes, or workflow environments. From the infrastructure root,
+install it only into the separate private checkout:
+
+```sh
+sh scripts/configure-forgejo-gateway-onboarding-agent.sh \
+	--checkout ../gateway-c37-118-onboarding
+```
+
+The installer rejects the parent checkout and tracked seed, preserves `origin`,
+and writes a mode-`0600` local credential file. Use
+`scripts/with-forgejo-gateway-onboarding-agent.sh` for REST calls so the token
+is exported only to the invoked command. Re-run the installer after
+`docker compose down -v`, which intentionally removes the generated token.
+
 `WAMA_FREQUENCY_SCALE_DEPLOY_ROOT`, `WAMA_APPARENT_POWER_DEPLOY_ROOT`, and
 `WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT`, and
 `WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT`, and
@@ -36,4 +54,5 @@ Run the focused bootstrap safety test from the infrastructure repository root:
 
 ```sh
 sh services/forgejo-init/tests/test_bootstrap_processors.sh
+sh services/forgejo-init/tests/test_gateway_onboarding_agent_credentials.sh
 ```

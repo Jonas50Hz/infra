@@ -14,10 +14,17 @@ tracked files in this directory:
 - **Druid** connects internally to `http://druid:8888` for **WAMA Measurements**.
 	**WAMA PMU Live Measurements** plots valid phase voltages, phase currents,
 	frequency, and ROCOF with separate unit-safe axes and recent PMU timestamp
-	evidence.
+	evidence. Its MRID selector and session link open the loopback-only
+	`measurement-session-api` confirmation page with the selected interval.
 - **Trino** connects internally to `http://trino:8080` for **WAMA Measurements**.
 	**WAMA Measurement Sessions** selects one immutable `blob_id` and queries its
-	registered Iceberg artifact without parsing object paths.
+	registered Iceberg artifact without parsing object paths. Its visible **Export
+	CSV** action sends the selected immutable chart values to the loopback-only
+	`measurement-session-exporter` fixed-query download surface.
+- The root-owned `gateway-dashboard-provisioner` supplies a separate file-backed
+	**WAMA Gateways** folder. **WAMA Gateway Fleet** remains available with no
+	active source, while every active Masterdata source has a Druid-backed,
+	generated live-value dashboard. Tombstones remove only generated gateway pages.
 
 Dashboard edits belong in the tracked JSON files rather than the UI. Common
 Format measurements remain in Druid and are never copied to VictoriaMetrics.
@@ -40,4 +47,5 @@ scripts/test-grafana-pmu-dashboard.sh
 
 No Grafana alert rules are provisioned in this PoC. The Trino datasource and
 dashboard remain read-only and do not grant Grafana access to the internal
-Iceberg writer.
+Iceberg writer. Gateway membership is driven directly by compacted Masterdata,
+not by Trino or Grafana UI edits.

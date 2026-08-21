@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from iec104_browser.e2e import ProbeError, validate_messages
+from iec104_browser.e2e import ProbeError, _matching_fixture_messages, validate_messages
 
 
 class BrowserProbeTests(unittest.TestCase):
@@ -20,6 +20,16 @@ class BrowserProbeTests(unittest.TestCase):
         messages[2]["value"] = 49.9
         with self.assertRaisesRegex(ProbeError, "short-float"):
             validate_messages(messages)
+
+    def test_selects_expected_fixture_values_after_stale_records(self) -> None:
+        expected = _messages()
+        stale = _messages()
+        stale[2]["value"] = 49.9
+
+        selected = _matching_fixture_messages(expected + stale)
+
+        self.assertIsNotNone(selected)
+        validate_messages(selected or [])
 
 
 def _messages() -> list[dict[str, object]]:

@@ -19,6 +19,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.druid_expected_double_value_tolerance, 0.01)
         self.assertEqual(settings.iec104_browser_url, "http://iec104-browser:8080")
         self.assertEqual(
+            settings.measurement_session_api_url,
+            "http://measurement-session-api:8080",
+        )
+        self.assertEqual(
+            settings.measurement_session_exporter_url,
+            "http://measurement-session-exporter:8080",
+        )
+        self.assertEqual(
             settings.forgejo_managed_repositories,
             (
                 "processor-frequency-scale",
@@ -33,6 +41,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.blobmeta_topic_partitions, 12)
         self.assertEqual(settings.s3_buckets, ("wama-raw", "wama-measurement-sessions"))
         self.assertEqual(settings.readiness_timeout_seconds, 180)
+        self.assertFalse(settings.require_live_measurement)
         self.assertEqual(settings.trino_url, "http://trino:8080")
         self.assertEqual(settings.trino_druid_catalog, "druid")
         self.assertEqual(settings.trino_blobmeta_catalog, "blobmeta")
@@ -43,6 +52,18 @@ class SettingsTests(unittest.TestCase):
     def test_rejects_non_positive_timeout(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "READINESS_TIMEOUT_SECONDS"):
             Settings.from_environment({"READINESS_TIMEOUT_SECONDS": "0"})
+
+    def test_parses_live_measurement_requirement(self) -> None:
+        self.assertTrue(
+            Settings.from_environment({"REQUIRE_LIVE_MEASUREMENT": "true"}).require_live_measurement
+        )
+        self.assertFalse(
+            Settings.from_environment({"REQUIRE_LIVE_MEASUREMENT": "false"}).require_live_measurement
+        )
+
+    def test_rejects_invalid_live_measurement_requirement(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "REQUIRE_LIVE_MEASUREMENT"):
+            Settings.from_environment({"REQUIRE_LIVE_MEASUREMENT": "yes"})
 
     def test_rejects_non_positive_worker_topic_partitions(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "MEASUREMENT_SESSION_TOPIC_PARTITIONS"):
@@ -67,6 +88,14 @@ class SettingsTests(unittest.TestCase):
             Settings.from_environment({"FORGEJO_URL": "forgejo:3000"})
         with self.assertRaisesRegex(ConfigurationError, "IEC104_BROWSER_URL"):
             Settings.from_environment({"IEC104_BROWSER_URL": "iec104-browser:8080"})
+        with self.assertRaisesRegex(ConfigurationError, "MEASUREMENT_SESSION_API_URL"):
+            Settings.from_environment(
+                {"MEASUREMENT_SESSION_API_URL": "measurement-session-api:8080"}
+            )
+        with self.assertRaisesRegex(ConfigurationError, "MEASUREMENT_SESSION_EXPORTER_URL"):
+            Settings.from_environment(
+                {"MEASUREMENT_SESSION_EXPORTER_URL": "measurement-session-exporter:8080"}
+            )
         with self.assertRaisesRegex(ConfigurationError, "TRINO_URL"):
             Settings.from_environment({"TRINO_URL": "trino:8080"})
 

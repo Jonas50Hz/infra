@@ -7,9 +7,25 @@ browser_stopped=false
 
 cd "$repository_root"
 
+wait_for_browser_health() {
+  local deadline=$((SECONDS + ${IEC104_BROWSER_START_TIMEOUT_SECONDS:-60}))
+
+  while ((SECONDS < deadline)); do
+    if curl --fail --silent \
+      http://127.0.0.1:${IEC104_BROWSER_PORT:-3003}/healthz >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf '%s\n' "Timed out waiting for the IEC 104 browser health endpoint." >&2
+  return 1
+}
+
 restore_browser() {
   if [[ "$browser_stopped" == true ]]; then
-    docker compose up -d --build --wait iec104-browser || true
+    docker compose up -d --build iec104-browser || true
+    wait_for_browser_health || true
   fi
 }
 
@@ -30,7 +46,8 @@ docker compose stop iec104-browser >/dev/null 2>&1 || true
 browser_stopped=true
 docker compose up -d --build --wait iec104-exporter
 docker compose --profile iec104-test run --rm --build iec104-receiver
-restore_browser
+docker compose up -d --build iec104-browser
+wait_for_browser_health
 browser_stopped=false
 
 trap - ERR

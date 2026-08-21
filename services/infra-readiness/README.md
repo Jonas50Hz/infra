@@ -4,11 +4,12 @@
 after the current infrastructure is ready for application processors. It has no
 host port and no persistent state.
 
-The service verifies the WAMA Kafka topic contract, consumes a fresh raw
-`MCCSMeasurementValue` from `LiveMeasurement` without committing an offset,
-checks the Druid Router and `live_measurements` supervisor, and queries the PMU
-frequency fixture through Druid SQL to require matching `__time` and
-`timestamp_mccs`. It checks read-only Trino catalog visibility for Druid,
+The service verifies the WAMA Kafka topic contract. When live-measurement
+checking is enabled, it consumes a fresh raw `MCCSMeasurementValue` from
+`LiveMeasurement` without committing an offset, checks the Druid Router and
+`live_measurements` supervisor, and queries the PMU frequency data through Druid
+SQL to require matching `__time` and `timestamp_mccs`. It checks read-only
+Trino catalog visibility for Druid,
 Blobmeta, and the initialized `sessions.wama.measurement_values` Iceberg table.
 It also checks PostgreSQL connectivity and identity, and
 performs signed temporary S3 put/get/delete operations in both SeaweedFS
@@ -18,9 +19,14 @@ provisioning, and VictoriaMetrics scrape health including Kafka exporter metrics
 for all WAMA topics. Grafana readiness requires the VictoriaMetrics datasource,
 the internal Druid datasource, the read-only internal Trino datasource, the
 **WAMA Measurements / WAMA PMU Live Measurements** and **WAMA Measurement
-Sessions** dashboards, a Druid PMU query, and a Trino metadata query proving the
-initialized Iceberg session table is visible. It also checks the IEC 104 browser HTTP health and accepts
-its idle or viewer-owned status without opening an IEC control-center connection.
+Sessions** dashboards, and a Trino metadata query proving the
+initialized Iceberg session table is visible. It also requires the provisioned
+**WAMA Gateways / WAMA Gateway Fleet** entry point, but does not require an
+active catalog source. It checks the local measurement-session API HTTP health
+and CSV exporter HTTP health, plus Grafana's selected-MRID session and CSV
+download links without publishing a request or exporting data. It checks the
+IEC 104 browser HTTP health and accepts its idle or viewer-owned status without
+opening an IEC control-center connection.
 
 The probe deliberately does not require PostgreSQL to have no application
 tables. The Blobmeta catalog is an app-owned schema and is verified by its own
@@ -49,7 +55,9 @@ It retries for up to 180 seconds by default to allow Grafana provisioning and
 VictoriaMetrics' 15-second scrape interval to settle. Set
 `INFRA_READINESS_TIMEOUT_SECONDS`, `INFRA_READINESS_RETRY_INTERVAL_SECONDS`, or
 `INFRA_READINESS_KAFKA_CONSUME_TIMEOUT_SECONDS` in the command environment to
-override those limits. Set `PMU_GATEWAY_EXPECTED_MRID_PREFIX` when a custom PMU
-fixture uses a different MRID namespace. `DRUID_ROUTER_URL`,
+override those limits. Set `INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT=true` to
+require an external `LiveMeasurement` producer and enable the Druid, Trino, and
+Grafana PMU data probes. Set `PMU_EXPECTED_MRID_PREFIX` when that producer uses
+a different MRID namespace. `DRUID_ROUTER_URL`,
 `DRUID_SUPERVISOR_ID`, `DRUID_DATASOURCE`, `DRUID_EXPECTED_MRID`, and
 `DRUID_EXPECTED_DOUBLE_VALUE` customize the Druid evidence check.

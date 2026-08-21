@@ -23,6 +23,12 @@ The explicitly declared C37.118 gateway-deployment-test seed is
 one-shot `masterdata-publisher` and guarded generated legacy-v2 adapters for
 active approved sources in this increment.
 
+This tracked directory is a seed only, not the deployed private repository or
+the development checkout. Work in the separate private
+`gateway-c37-118-onboarding` clone. The onboarding credential installer accepts
+that external clone only and rejects both this seed and the parent
+infrastructure checkout.
+
 `forgejo-init` seeds each repository only when its remote has no refs; an
 existing nonempty private repository is left unchanged. Processor workflows
 deploy only their one processor into their own marker-owned deployment root.

@@ -15,8 +15,7 @@ show_failure_diagnostics() {
     druid \
     druid-init \
     kafka \
-    kafka-init \
-    pmu-gateway || true
+    kafka-init || true
 }
 
 trap show_failure_diagnostics ERR
@@ -26,7 +25,6 @@ docker compose build grafana druid druid-init infra-readiness trino-session-init
 docker compose up -d --wait --wait-timeout "$wait_timeout_seconds" trino-session-writer
 docker compose run --rm --build --no-deps trino-session-init
 docker compose up -d --wait --wait-timeout "$wait_timeout_seconds" \
-  pmu-gateway \
   druid \
   grafana
 docker compose run --rm --no-deps druid-init

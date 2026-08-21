@@ -57,6 +57,13 @@ GRAFANA_TRINO_DATASOURCE_URL = "http://trino:8080"
 GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID = "wama-kafka-operations"
 GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID = "wama-pmu-live-measurements"
 GRAFANA_SESSION_MEASUREMENTS_DASHBOARD_UID = "wama-measurement-sessions"
+GRAFANA_GATEWAY_FLEET_DASHBOARD_UID = "wama-gateway-fleet"
+GRAFANA_PMU_SESSION_REQUEST_URL = (
+    "http://localhost:3004/?from=${__from}&to=${__to}&mrids=${mrid:csv}"
+)
+GRAFANA_SESSION_CSV_EXPORT_URL = (
+    "http://localhost:3005/v1/measurement-sessions/export.csv?from=${__from}&to=${__to}"
+)
 
 
 class ReadinessError(RuntimeError):
@@ -67,21 +74,24 @@ def check_all(settings: Settings) -> None:
     """Run every externally observable readiness check."""
 
     check_kafka_topics(settings)
-    check_live_measurement(settings)
-    try:
-        check_druid(settings)
-    except DruidReadinessError as error:
-        raise ReadinessError(str(error)) from error
+    if settings.require_live_measurement:
+        check_live_measurement(settings)
+        try:
+            check_druid(settings)
+        except DruidReadinessError as error:
+            raise ReadinessError(str(error)) from error
     check_postgres(settings)
     try:
-        check_trino(settings)
+        check_trino(settings, require_live_measurement=settings.require_live_measurement)
     except TrinoReadinessError as error:
         raise ReadinessError(str(error)) from error
     check_s3(settings)
     check_forgejo(settings)
     check_kafka_ui(settings)
+    check_measurement_session_api(settings)
+    check_measurement_session_exporter(settings)
     check_iec104_browser(settings)
-    check_grafana(settings)
+    check_grafana(settings, require_live_measurement=settings.require_live_measurement)
     check_victoria_metrics(settings)
 
 
@@ -462,6 +472,50 @@ def check_iec104_browser(settings: Settings) -> None:
     validate_iec104_browser_status(status)
 
 
+def check_measurement_session_api(settings: Settings) -> None:
+    """Require the local session request boundary without publishing a request."""
+
+    session = requests.Session()
+    try:
+        payload = _request_json(
+            session,
+            "Measurement session API health",
+            _url(settings.measurement_session_api_url, "/healthz"),
+        )
+    finally:
+        session.close()
+    validate_measurement_session_api_health(payload)
+
+
+def validate_measurement_session_api_health(payload: Any) -> None:
+    """Require the API health endpoint to expose its stable status shape."""
+
+    if not isinstance(payload, Mapping) or payload.get("status") != "ok":
+        raise ReadinessError("Measurement session API health endpoint did not report ok")
+
+
+def check_measurement_session_exporter(settings: Settings) -> None:
+    """Require the local CSV download surface without exporting any data."""
+
+    session = requests.Session()
+    try:
+        payload = _request_json(
+            session,
+            "Measurement session exporter health",
+            _url(settings.measurement_session_exporter_url, "/healthz"),
+        )
+    finally:
+        session.close()
+    validate_measurement_session_exporter_health(payload)
+
+
+def validate_measurement_session_exporter_health(payload: Any) -> None:
+    """Require the CSV exporter health endpoint to expose its stable status shape."""
+
+    if not isinstance(payload, Mapping) or payload.get("status") != "ok":
+        raise ReadinessError("Measurement session exporter health endpoint did not report ok")
+
+
 def validate_iec104_browser_status(payload: Any) -> None:
     """Accept no-viewer and browser-viewer states without retaining messages."""
 
@@ -480,7 +534,7 @@ def validate_iec104_browser_status(payload: Any) -> None:
         raise ReadinessError("IEC 104 browser idle state has an IEC connection")
 
 
-def check_grafana(settings: Settings) -> None:
+def check_grafana(settings: Settings, require_live_measurement: bool = True) -> None:
     """Require Grafana health plus provisioned infrastructure and measurement views."""
 
     session = requests.Session()
@@ -535,13 +589,24 @@ def check_grafana(settings: Settings) -> None:
             ),
             auth=auth,
         )
-        pmu_query = _post_json(
+        gateway_fleet_dashboard = _request_json(
             session,
-            "Grafana Druid PMU query",
-            _url(settings.grafana_url, "/api/ds/query"),
-            _grafana_pmu_query(settings),
+            "Grafana Gateway Fleet dashboard",
+            _url(
+                settings.grafana_url,
+                f"/api/dashboards/uid/{GRAFANA_GATEWAY_FLEET_DASHBOARD_UID}",
+            ),
             auth=auth,
         )
+        pmu_query = None
+        if require_live_measurement:
+            pmu_query = _post_json(
+                session,
+                "Grafana Druid PMU query",
+                _url(settings.grafana_url, "/api/ds/query"),
+                _grafana_pmu_query(settings),
+                auth=auth,
+            )
         trino_query = _post_json(
             session,
             "Grafana Trino session metadata query",
@@ -573,13 +638,16 @@ def check_grafana(settings: Settings) -> None:
         "PMU Live Measurements",
     )
     validate_grafana_pmu_dashboard(pmu_dashboard)
+    validate_grafana_pmu_session_request_link(pmu_dashboard)
     validate_grafana_session_dashboard(session_dashboard)
-    validate_grafana_pmu_query(
-        pmu_query,
-        settings.druid_expected_mrid,
-        settings.druid_expected_double_value,
-        settings.druid_expected_double_value_tolerance,
-    )
+    validate_grafana_gateway_fleet_dashboard(gateway_fleet_dashboard)
+    if require_live_measurement:
+        validate_grafana_pmu_query(
+            pmu_query,
+            settings.druid_expected_mrid,
+            settings.druid_expected_double_value,
+            settings.druid_expected_double_value_tolerance,
+        )
     validate_grafana_trino_query(trino_query)
 
 
@@ -639,6 +707,51 @@ def validate_grafana_session_dashboard(payload: Any) -> None:
             or datasource.get("type") != GRAFANA_TRINO_DATASOURCE_TYPE
         ):
             raise ReadinessError(f"Grafana Measurement Sessions panel {title!r} does not use Trino")
+    validate_grafana_session_csv_export_link(dashboard)
+
+
+def validate_grafana_session_csv_export_link(dashboard: Mapping[str, Any]) -> None:
+    """Require the visible fixed-query CSV download link on the session dashboard."""
+
+    links = dashboard.get("links")
+    if not isinstance(links, list):
+        raise ReadinessError("Grafana Measurement Sessions dashboard has no CSV export link")
+    for link in links:
+        if (
+            isinstance(link, Mapping)
+            and link.get("title") == "Export CSV"
+            and link.get("url") == GRAFANA_SESSION_CSV_EXPORT_URL
+            and link.get("includeTimeRange") is False
+            and link.get("includeVars") is True
+            and not link.get("asDropdown", False)
+        ):
+            return
+    raise ReadinessError("Grafana Measurement Sessions dashboard is missing its CSV export link")
+
+
+def validate_grafana_gateway_fleet_dashboard(payload: Any) -> None:
+    """Require a provisioned fleet entry point without requiring active sources."""
+
+    validate_grafana_dashboard(
+        payload,
+        GRAFANA_GATEWAY_FLEET_DASHBOARD_UID,
+        "WAMA Gateways",
+        "Gateway Fleet",
+    )
+    dashboard = payload.get("dashboard")
+    panels = dashboard.get("panels") if isinstance(dashboard, Mapping) else None
+    if not isinstance(panels, list):
+        raise ReadinessError("Grafana Gateway Fleet dashboard has no panels")
+    fleet_panel = next(
+        (
+            panel
+            for panel in panels
+            if isinstance(panel, Mapping) and panel.get("title") == "Active Gateway Sources"
+        ),
+        None,
+    )
+    if not isinstance(fleet_panel, Mapping) or fleet_panel.get("type") != "text":
+        raise ReadinessError("Grafana Gateway Fleet dashboard has no active-sources panel")
 
 
 def _grafana_pmu_query(settings: Settings) -> dict[str, Any]:
@@ -869,6 +982,35 @@ def validate_grafana_pmu_dashboard(payload: Any) -> None:
         defaults = field_config.get("defaults") if isinstance(field_config, Mapping) else None
         if not isinstance(defaults, Mapping) or defaults.get("unit") != expected_unit:
             raise ReadinessError(f"Grafana PMU dashboard {title!r} has an unexpected unit")
+
+
+def validate_grafana_pmu_session_request_link(payload: Any) -> None:
+    """Require the Grafana dashboard to carry selected range and MRIDs to the API."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError("Grafana PMU dashboard response is invalid")
+    dashboard = payload.get("dashboard")
+    if not isinstance(dashboard, Mapping):
+        raise ReadinessError("Grafana PMU dashboard has no body")
+    links = dashboard.get("links")
+    if not isinstance(links, list) or not any(
+        isinstance(link, Mapping)
+        and link.get("title") == "Create measurement session"
+        and link.get("url") == GRAFANA_PMU_SESSION_REQUEST_URL
+        and link.get("targetBlank") is True
+        for link in links
+    ):
+        raise ReadinessError("Grafana PMU dashboard has no measurement session request link")
+    templating = dashboard.get("templating")
+    variables = templating.get("list") if isinstance(templating, Mapping) else None
+    if not isinstance(variables, list) or not any(
+        isinstance(variable, Mapping)
+        and variable.get("name") == "mrid"
+        and variable.get("type") == "custom"
+        and variable.get("multi") is True
+        for variable in variables
+    ):
+        raise ReadinessError("Grafana PMU dashboard has no multi-select MRID variable")
 
 
 def check_victoria_metrics(settings: Settings) -> None:

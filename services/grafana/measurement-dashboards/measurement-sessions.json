@@ -4,7 +4,19 @@
   },
   "editable": false,
   "graphTooltip": 1,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "includeTimeRange": false,
+      "includeVars": true,
+      "keepTime": false,
+      "targetBlank": false,
+      "title": "Export CSV",
+      "tooltip": "Download the selected session measurements as CSV",
+      "type": "link",
+      "url": "http://localhost:3005/v1/measurement-sessions/export.csv?from=${__from}&to=${__to}"
+    }
+  ],
   "panels": [
     {
       "datasource": {

@@ -52,6 +52,14 @@ class SupervisorSpecificationTests(unittest.TestCase):
 
         self.assertEqual(loaded, specification)
 
+    def test_sets_an_hourly_row_limit_for_the_five_pmu_fixture(self) -> None:
+        specification = _live_measurement_specification()
+
+        self.assertGreaterEqual(
+            specification["spec"]["tuningConfig"]["maxRowsPerSegment"],
+            10_000_000,
+        )
+
 
 class SupervisorControlPlaneTests(unittest.TestCase):
     """Require idempotent supervisor submission and healthy task status."""

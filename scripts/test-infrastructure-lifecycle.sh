@@ -15,7 +15,6 @@ show_failure_diagnostics() {
     kafka \
     kafka-init \
     kafka-exporter \
-    pmu-gateway \
     iec104-exporter \
     iec104-browser \
     druid \
@@ -23,6 +22,8 @@ show_failure_diagnostics() {
     postgres \
     trino \
     trino-init \
+    trino-session-writer \
+    trino-session-init \
     seaweedfs \
     forgejo \
     forgejo-init \
@@ -68,7 +69,7 @@ start_and_verify() {
   local phase="$1"
 
   docker compose up -d
-  wait_for_readiness "$phase"
+  wait_for_readiness "$phase" || return 1
   verify_druid_live_measurement
 }
 

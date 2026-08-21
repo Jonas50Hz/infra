@@ -581,7 +581,7 @@ fn splitmix64(mut value: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_profile, WireVersion, MAX_LOGICAL_PMUS};
+    use super::{load_profile, parse_profile, WireVersion, MAX_LOGICAL_PMUS};
 
     fn profile(count: usize) -> String {
         format!(
@@ -636,6 +636,29 @@ mod tests {
         assert_eq!(&v2.station_name, b"WAMA-PMU-001    ");
         assert_eq!(v2.phunits[0], 1_000_000);
         assert_eq!(v2.phunits[3], 0x0101_86a0);
+    }
+
+    #[test]
+    fn loads_the_shipped_five_pmu_v2_profile() {
+        let compiled = load_profile(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/profiles/five-pmu-v2.yaml"
+        ))
+        .expect("five-PMU V2 profile must compile");
+
+        assert_eq!(compiled.endpoints.len(), 5);
+        assert!(
+            compiled
+                .endpoints
+                .iter()
+                .all(|endpoint| endpoint.wire_version == WireVersion::V2)
+        );
+        assert_eq!(compiled.endpoints[0].address.port(), 4712);
+        assert_eq!(compiled.endpoints[4].address.port(), 4716);
+        assert_eq!(compiled.endpoints[0].stream_id, 1001);
+        assert_eq!(compiled.endpoints[4].stream_id, 1005);
+        assert_eq!(compiled.endpoints[0].pmu_id, 1001);
+        assert_eq!(compiled.endpoints[4].pmu_id, 1005);
     }
 
     #[test]

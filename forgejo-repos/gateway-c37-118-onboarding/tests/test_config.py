@@ -14,6 +14,25 @@ from gateway_c37_118_onboarding.config import CatalogError, load_catalog
 class CatalogTests(unittest.TestCase):
     """Keep source identity and signal semantics deterministic before publication."""
 
+    def test_loads_every_shipped_catalog_source(self) -> None:
+        catalog_directory = Path(__file__).resolve().parents[1] / "catalog" / "sources"
+
+        catalog = load_catalog(catalog_directory, "wama-c37-118-onboarding", "abc123")
+
+        self.assertEqual(
+            [source.source_id for source in catalog.sources],
+            sorted(path.stem for path in catalog_directory.glob("*.yaml")),
+        )
+        self.assertTrue(catalog.sources)
+        self.assertTrue(all(source.wire_version == 2 for source in catalog.sources))
+        self.assertTrue(all(source.signals for source in catalog.sources))
+        mrids = {
+            signal.mrid
+            for source in catalog.sources
+            for signal in source.signals
+        }
+        self.assertEqual(sum(len(source.signals) for source in catalog.sources), len(mrids))
+
     def test_loads_sorted_valid_sources(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

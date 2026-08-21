@@ -169,8 +169,24 @@ fleet:
 ```
 
 Use `protocol_version: 2` for V2. The supplied profiles are
-`one-pmu-v2.yaml`, `ten-pmu-v2.yaml`, `twenty-five-pmu-v2.yaml`, and
+`one-pmu-v2.yaml`, `five-pmu-v2.yaml`, `ten-pmu-v2.yaml`, `twenty-five-pmu-v2.yaml`, and
 `one-hundred-pmu-v2.yaml`; the existing names without `-v2` remain V3.
+
+The Forgejo onboarding demonstration uses `five-pmu-v2.yaml`. It binds the
+root-owned simulator's stable `172.30.0.10` address to listeners `4712` through
+`4716`, with matching stream and PMU IDs `1001` through `1005`:
+
+```sh
+C37_118_SIMULATOR_PROFILE_SOURCE="$PWD/services/c37-118-simulator/profiles/five-pmu-v2.yaml" \
+  docker compose --profile c37-118 up -d --force-recreate c37-118-simulator
+
+docker compose --profile c37-118 exec c37-118-simulator \
+  c37-118-probe --wire-version 2 --host 172.30.0.10 --first-port 4712 \
+  --first-stream-id 1001 --count 5 --duration-seconds 1 --data-rate-hz 50
+```
+
+The C37.118 listeners are internal to `wama-infra`; the stable address exists
+for reviewed source adapters, not host or LAN clients.
 
 Values are derived analytically from the seed, endpoint index, channel index,
 and sample index. The service retains no sample history or random-event queue.

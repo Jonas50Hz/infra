@@ -1,0 +1,1 @@
+"""Read-only CSV export for immutable measurement-session artifacts."""

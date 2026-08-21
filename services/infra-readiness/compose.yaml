@@ -12,11 +12,15 @@ services:
         condition: service_started
       kafka-ui:
         condition: service_started
-      pmu-gateway:
-        condition: service_started
+      gateway-dashboard-provisioner:
+        condition: service_healthy
       iec104-exporter:
         condition: service_healthy
       iec104-browser:
+        condition: service_healthy
+      measurement-session-api:
+        condition: service_healthy
+      measurement-session-exporter:
         condition: service_healthy
       druid:
         condition: service_healthy
@@ -60,12 +64,15 @@ services:
       DRUID_ROUTER_URL: http://druid:8888
       DRUID_SUPERVISOR_ID: live_measurements
       IEC104_BROWSER_URL: http://iec104-browser:8080
+      MEASUREMENT_SESSION_API_URL: http://measurement-session-api:8080
+      MEASUREMENT_SESSION_EXPORTER_URL: http://measurement-session-exporter:8080
       BLOBMETA_TOPIC_PARTITIONS: "${BLOBMETA_TOPIC_PARTITIONS:-12}"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUME_TIMEOUT_SECONDS: "${INFRA_READINESS_KAFKA_CONSUME_TIMEOUT_SECONDS:-12}"
       KAFKA_TOPIC: LiveMeasurement
+      REQUIRE_LIVE_MEASUREMENT: "${INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT:-false}"
       MEASUREMENT_SESSION_TOPIC_PARTITIONS: "${MEASUREMENT_SESSION_TOPIC_PARTITIONS:-12}"
-      PMU_EXPECTED_MRID_PREFIX: "${PMU_GATEWAY_EXPECTED_MRID_PREFIX:-urn:wama:poc:pmu:}"
+      PMU_EXPECTED_MRID_PREFIX: "${PMU_EXPECTED_MRID_PREFIX:-urn:wama:poc:pmu:}"
       POSTGRES_DATABASE: wama
       POSTGRES_DSN: postgresql://wama:wama-postgres-password@postgres:5432/wama
       POSTGRES_USER: wama

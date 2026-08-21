@@ -4,7 +4,7 @@ include:
   - ./services/kafka-init/compose.yaml
   - ./services/kafka-exporter/compose.yaml
   - ./services/kafka-ui/compose.yaml
-  - ./services/pmu-gateway/compose.yaml
+  - ./services/gateway-dashboard-provisioner/compose.yaml
   - ./services/c37-118-simulator/compose.yaml
   - ./services/iec104-exporter/compose.yaml
   - ./services/iec104-receiver/compose.yaml
@@ -15,6 +15,8 @@ include:
   - ./services/trino-session-writer/compose.yaml
   - ./services/trino-session-init/compose.yaml
   - ./services/seaweedfs/compose.yaml
+  - ./services/measurement-session-api/compose.yaml
+  - ./services/measurement-session-exporter/compose.yaml
   - ./services/measurement-session-processor/compose.yaml
   - ./services/blobmeta-catalog/compose.yaml
   - ./services/measurement-session-query-indexer/compose.yaml
@@ -39,7 +41,12 @@ volumes:
   victoria-metrics-data:
   druid-data:
   grafana-data:
+  gateway-dashboard-data:
 
 networks:
   default:
     name: "${WAMA_INFRA_NETWORK:-wama-infra}"
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          ip_range: 172.30.0.128/25

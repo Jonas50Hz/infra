@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WAMA Measurement Session</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-lockup">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow">WAMA / Historical Capture</p>
+        <h1>Measurement Session</h1>
+      </div>
+    </div>
+    <p class="service-state" id="service-state" aria-live="polite">Review selection</p>
+  </header>
+
+  <main class="workspace">
+    <section class="request-surface" aria-labelledby="request-title">
+      <div class="section-heading">
+        <p class="eyebrow">Bounded request</p>
+        <h2 id="request-title">Session Selection</h2>
+      </div>
+
+      <form id="session-form" novalidate>
+        <div class="time-grid">
+          <label class="field">
+            <span>Start</span>
+            <input id="started-at" type="datetime-local" step="1" required>
+          </label>
+          <label class="field">
+            <span>End</span>
+            <input id="ended-at" type="datetime-local" step="1" required>
+          </label>
+        </div>
+        <p class="range-readout" id="range-readout" aria-live="polite"></p>
+
+        <label class="field">
+          <span>Measurement IDs</span>
+          <textarea id="mrids" rows="9" spellcheck="false" required></textarea>
+        </label>
+        <p class="field-note" id="mrid-count" aria-live="polite"></p>
+
+        <label class="field">
+          <span>Capture reason</span>
+          <input id="capture-reason" type="text" maxlength="256" autocomplete="off">
+        </label>
+
+        <div class="form-footer">
+          <p class="form-status" id="form-status" aria-live="polite"></p>
+          <button id="submit-button" class="primary-action" type="submit">Create session</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="result-surface" aria-labelledby="result-title">
+      <div class="section-heading">
+        <p class="eyebrow">Immutable result</p>
+        <h2 id="result-title">Not Submitted</h2>
+      </div>
+      <div id="result-content" class="result-content" aria-live="polite">
+        <p class="empty-state">A submitted request creates one immutable historical session.</p>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

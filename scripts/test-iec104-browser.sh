@@ -8,6 +8,21 @@ probe_pid=""
 
 cd "$repository_root"
 
+wait_for_browser_health() {
+  local deadline=$((SECONDS + ${IEC104_BROWSER_START_TIMEOUT_SECONDS:-60}))
+
+  while ((SECONDS < deadline)); do
+    if curl --fail --silent \
+      http://127.0.0.1:${IEC104_BROWSER_PORT:-3003}/healthz >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf '%s\n' "Timed out waiting for the IEC 104 browser health endpoint." >&2
+  return 1
+}
+
 cleanup() {
   if [[ -n "$probe_pid" ]] && kill -0 "$probe_pid" 2>/dev/null; then
     kill "$probe_pid" 2>/dev/null || true
@@ -32,7 +47,8 @@ trap cleanup EXIT
 trap show_failure_diagnostics ERR
 
 docker compose stop iec104-browser >/dev/null 2>&1 || true
-docker compose up -d --build --wait iec104-browser
+docker compose up -d --build iec104-browser
+wait_for_browser_health
 docker compose --profile iec104-test build iec104-receiver
 
 docker compose exec -T iec104-browser \

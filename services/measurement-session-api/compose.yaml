@@ -1,0 +1,33 @@
+services:
+  measurement-session-api:
+    build:
+      context: ../..
+      dockerfile: services/measurement-session-api/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      GRAFANA_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3001/}"
+      GRAFANA_SESSION_DASHBOARD_URL: "${GRAFANA_SESSION_DASHBOARD_URL:-}"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_PUBLISH_TIMEOUT_SECONDS: "${MEASUREMENT_SESSION_API_PUBLISH_TIMEOUT_SECONDS:-30}"
+      KAFKA_TOPIC: MeasurementSession
+      MEASUREMENT_SESSION_MAX_INTERVAL_HOURS: "${MEASUREMENT_SESSION_MAX_INTERVAL_HOURS:-24}"
+      MEASUREMENT_SESSION_MAX_MRIDS: "${MEASUREMENT_SESSION_MAX_MRIDS:-32}"
+    ports:
+      - "127.0.0.1:${MEASUREMENT_SESSION_API_PORT:-3004}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped

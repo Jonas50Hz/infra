@@ -20,7 +20,8 @@ and join this stack through the external `wama-infra` network.
 | [`kafka-init/`](kafka-init/) | `kafka-init` |
 | [`kafka-exporter/`](kafka-exporter/) | `kafka-exporter` |
 | [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
-| [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` |
+| [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` (deprecated reference fixture; excluded by default) |
+| [`gateway-dashboard-provisioner/`](gateway-dashboard-provisioner/) | `gateway-dashboard-provisioner` |
 | [`c37-118-simulator/`](c37-118-simulator/) | `c37-118-simulator` (profile `c37-118`) |
 | [`iec104-exporter/`](iec104-exporter/) | `iec104-exporter` |
 | [`iec104-receiver/`](iec104-receiver/) | `iec104-receiver` (profile `iec104-test`) |
@@ -33,6 +34,8 @@ and join this stack through the external `wama-infra` network.
 | [`trino-session-writer/`](trino-session-writer/) | `trino-session-writer` |
 | [`trino-session-init/`](trino-session-init/) | `trino-session-init` |
 | [`seaweedfs/`](seaweedfs/) | `seaweedfs` |
+| [`measurement-session-api/`](measurement-session-api/) | `measurement-session-api` |
+| [`measurement-session-exporter/`](measurement-session-exporter/) | `measurement-session-exporter` |
 | [`measurement-session-processor/`](measurement-session-processor/) | `measurement-session-processor` |
 | [`blobmeta-catalog/`](blobmeta-catalog/) | `blobmeta-catalog` |
 | [`measurement-session-query-indexer/`](measurement-session-query-indexer/) | `measurement-session-query-indexer` |

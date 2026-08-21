@@ -15,7 +15,7 @@ services:
       - ./etc/node.properties:/etc/trino/node.properties:ro
       - ./etc/catalog:/etc/trino/catalog:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/v1/info > /dev/null"]
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/v1/info | grep --quiet '\"starting\":false'"]
       interval: 10s
       timeout: 5s
       retries: 18

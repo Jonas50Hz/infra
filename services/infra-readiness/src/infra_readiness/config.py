@@ -31,6 +31,8 @@ class Settings:
     druid_router_url: str
     druid_supervisor_id: str
     iec104_browser_url: str
+    measurement_session_api_url: str
+    measurement_session_exporter_url: str
     forgejo_admin_password: str
     forgejo_admin_username: str
     forgejo_managed_repositories: tuple[str, ...]
@@ -44,6 +46,7 @@ class Settings:
     kafka_topic: str
     measurement_session_topic_partitions: int
     pmu_expected_mrid_prefix: str
+    require_live_measurement: bool
     postgres_database: str
     postgres_dsn: str
     postgres_user: str
@@ -94,6 +97,16 @@ class Settings:
                 "live_measurements",
             ),
             iec104_browser_url=_url(values, "IEC104_BROWSER_URL", "http://iec104-browser:8080"),
+            measurement_session_api_url=_url(
+                values,
+                "MEASUREMENT_SESSION_API_URL",
+                "http://measurement-session-api:8080",
+            ),
+            measurement_session_exporter_url=_url(
+                values,
+                "MEASUREMENT_SESSION_EXPORTER_URL",
+                "http://measurement-session-exporter:8080",
+            ),
             forgejo_admin_password=_required(
                 values,
                 "FORGEJO_ADMIN_PASSWORD",
@@ -138,6 +151,11 @@ class Settings:
                 "PMU_EXPECTED_MRID_PREFIX",
                 "urn:wama:poc:pmu:",
             ).strip(),
+            require_live_measurement=_boolean(
+                values,
+                "REQUIRE_LIVE_MEASUREMENT",
+                False,
+            ),
             postgres_database=_required(values, "POSTGRES_DATABASE", "wama"),
             postgres_dsn=_required(
                 values,
@@ -281,6 +299,13 @@ def _positive_integer(values: Mapping[str, str], name: str, default: int) -> int
     if value <= 0:
         raise ConfigurationError(f"{name} must be greater than zero")
     return value
+
+
+def _boolean(values: Mapping[str, str], name: str, default: bool) -> bool:
+    raw_value = values.get(name, str(default).lower()).strip().lower()
+    if raw_value not in {"true", "false"}:
+        raise ConfigurationError(f"{name} must be true or false")
+    return raw_value == "true"
 
 
 def _required(values: Mapping[str, str], name: str, default: str) -> str:

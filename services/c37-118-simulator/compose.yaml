@@ -16,6 +16,9 @@ services:
         read_only: true
     expose:
       - "4712-4811"
+    networks:
+      default:
+        ipv4_address: 172.30.0.10
     healthcheck:
       test: ["CMD", "c37-118-simulator", "healthcheck"]
       interval: 5s

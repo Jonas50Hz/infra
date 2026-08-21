@@ -16,7 +16,7 @@ onboarding -> config/CI -> live data (Common Format) -> Quixstreams processing
 |--------------------|-----------------|--------|
 | Strimzi (Kafka operator) | Plain Kafka, KRaft mode | Strimzi is K8s-only |
 | ArgoCD (GitOps CD) | Forgejo Actions `docker compose up -d` or Watchtower | ArgoCD needs a cluster |
-| Gateway via GitOps/K8s | Plain `pmu-gateway` container | No operator without K8s |
+| Gateway via GitOps/K8s | Deprecated `pmu-gateway` reference fixture | No operator without K8s; excluded from default Compose |
 | Kafka Connector -> PostgreSQL as platform service | Same, plain containers | No operators |
 
 ## Common Format
@@ -28,12 +28,14 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 ## Target compose services (full PoC)
 - `kafka` — Apache Kafka, KRaft, single broker.
 - `kafka-ui` — topic/message inspection.
-- `pmu-gateway` — fake PMU gateway: reads a startup YAML fixture and continuously
-   emits raw-Protobuf `MCCSMeasurementValue` records on `LiveMeasurement`.
+- `pmu-gateway` — deprecated fake PMU reference fixture, excluded from default
+   Compose startup. Live-measurement checks require an explicit producer.
 - `c37-118-simulator` — profile-gated standalone C37.118 TCP simulator with up
    to 100 independent PMU listeners. It has no Kafka, Common Format, or gateway
    dependency; its large fleet tests remain manually armed and isolated.
 - `processor-*` — Quixstreams pipelines (one service per processor).
+- `measurement-session-api` — root-owned local browser-confirmed request
+   publisher for bounded raw-Protobuf `MeasurementSession` commands.
 - `measurement-session-processor` — root-owned scalable Kafka worker that
    queries Druid for bounded requests and writes immutable Parquet artifacts.
 - `blobmeta-catalog` — compacted Blobmeta-to-PostgreSQL immutable metadata and
@@ -56,6 +58,8 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `cadvisor` — Docker-container metrics.
 - `grafana` — infrastructure dashboards over VictoriaMetrics and the
    Druid-backed `WAMA Measurements` PMU dashboard.
+- `gateway-dashboard-provisioner` — root-owned compacted-Masterdata consumer
+   that renders Grafana's `WAMA Gateways` fleet and active-source Druid pages.
 - `iec104-exporter` — root-owned one-way IEC 104 controlled station consuming
    typed raw-Protobuf `Export` records.
 - `iec104-receiver` — profile-gated test control center for the IEC 104 path.
@@ -81,12 +85,15 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    it never receives raw Protobuf or other WAMA data records.
 
 ### Measurement session materialization (available now)
-4. **Measurement Session Processor** — root-owned persistent workers consume
+4. **Measurement Session API** — root-owned local confirmation UI validates and
+   publishes the selected Grafana interval and MRIDs without receiving Druid or
+   object-store credentials.
+5. **Measurement Session Processor** — root-owned persistent workers consume
    raw-Protobuf requests, query Druid's no-rollup history, write typed Parquet
    artifacts and replay receipts to SeaweedFS, then publish compacted Blobmeta.
-5. **Blobmeta catalog** — commits immutable metadata and normalized MRID
+6. **Blobmeta catalog** — commits immutable metadata and normalized MRID
    coverage rows in PostgreSQL before each Kafka offset.
-6. **Query registration and request-flow test** — the persistent indexer
+7. **Query registration and request-flow test** — the persistent indexer
    validates Blobmeta evidence before exact-file Iceberg registration. A
    profile-gated verifier submits complete and partial requests, independently
    validates Kafka, PostgreSQL, SeaweedFS, Parquet, the registration ledger,
@@ -123,9 +130,10 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
 9. **Grafana data dashboards and read-only federation** — the PMU live dashboard
    over Druid and the selected-session dashboard over read-only Trino are
    available now. Trino federates Druid, PostgreSQL Blobmeta metadata, and
-   registered Iceberg session files. Alerting and broader cross-session analytics
-   remain deferred. This is separate from the already-provisioned VictoriaMetrics
-   infrastructure dashboards.
+   registered Iceberg session files. The session dashboard has a loopback-only
+   CSV download for its current immutable selection. Alerting and broader
+   cross-session analytics remain deferred. This is separate from the
+   already-provisioned VictoriaMetrics infrastructure dashboards.
 
 ### Phase 3 — Export (IEC 104 available now)
 10. **IEC 104 exporter** — root-owned controlled station consumes typed
@@ -138,7 +146,8 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    configured fake-PMU frequency-to-`M_ME_NC_1` PoC producer through its own
    Forgejo repository. `processor-lfr-frequency-provision` separately seeds the
    first multi-PMU per-second selection core; complete PMU-status evidence, IEC
-   104 LFR export, file/xlsx/csv export, and MQTT export remain future work.
+   104 LFR export, XLSX and broader file export, and MQTT export remain future
+   work.
 
 ### Phase 4 — Onboarding + config as data
 11. **C37.118 Masterdata via Git (available now)** — the private

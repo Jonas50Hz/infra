@@ -45,6 +45,19 @@ docker compose --profile c37-118 exec c37-118-simulator \
   --first-stream-id 1001 --count 10 --duration-seconds 1 --data-rate-hz 50
 ```
 
+For the five-PMU Forgejo onboarding demonstration, use the dedicated V2 profile.
+It exposes five internal endpoints at `172.30.0.10:4712` through
+`172.30.0.10:4716`, with matching stream and PMU IDs `1001` through `1005`:
+
+```sh
+C37_118_SIMULATOR_PROFILE_SOURCE="$PWD/services/c37-118-simulator/profiles/five-pmu-v2.yaml" \
+  docker compose --profile c37-118 up -d --force-recreate c37-118-simulator
+
+docker compose --profile c37-118 exec c37-118-simulator \
+  c37-118-probe --wire-version 2 --host 172.30.0.10 --first-port 4712 \
+  --first-stream-id 1001 --count 5 --duration-seconds 1 --data-rate-hz 50
+```
+
 No C37.118 port is mapped to the host. A test client on the Compose network can
 connect to `c37-118-simulator:4712` through `c37-118-simulator:4811`.
 

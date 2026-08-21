@@ -127,7 +127,7 @@ def _pmu_block(
 ) -> bytes:
     if phasor_units is None:
         phasor_units = tuple(
-            0x8000_0001 if channel_name.startswith("I") else 1
+            0x0100_0001 if channel_name.startswith("I") else 1
             for channel_name in phasor_names
         )
     block = bytearray()

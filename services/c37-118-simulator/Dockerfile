@@ -5,6 +5,7 @@ WORKDIR /build
 COPY services/c37-118-simulator/Cargo.toml /build/Cargo.toml
 COPY services/c37-118-simulator/Cargo.lock /build/Cargo.lock
 COPY services/c37-118-simulator/src /build/src
+COPY services/c37-118-simulator/profiles /build/profiles
 
 RUN cargo build --release --locked --bins
 

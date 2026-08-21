@@ -3,10 +3,11 @@
 Local Docker Compose backbone for the WAMA proof of concept. It runs one plain
 Apache Kafka broker in KRaft combined mode, initializes the WAMA topic
 contract, provides Kafka UI to inspect brokers, topics, consumer groups, and
-messages, runs a configurable fake PMU gateway, provides Forgejo with one
+messages, retains an optional legacy PMU fixture for reference, provides Forgejo with one
 Actions runner, includes SeaweedFS as authenticated S3-compatible blob storage,
-and materializes bounded measurement-session requests from Druid into
-integrity-checked Parquet artifacts. Compacted raw-Protobuf `Blobmeta` results
+and accepts browser-confirmed bounded measurement-session requests before
+materializing them from Druid into integrity-checked Parquet artifacts.
+Compacted raw-Protobuf `Blobmeta` results
 are projected into PostgreSQL for session, artifact, status, and MRID-coverage
 queries; individual samples remain in Druid and SeaweedFS. Grafana dashboards
 backed by VictoriaMetrics provide host and Docker container infrastructure
@@ -30,8 +31,9 @@ This checkout is the **infrastructure repository**. It owns the Compose stack,
 Kafka backbone, source gateway, Forgejo server and runner, storage, and
 monitoring. It is the ownership and deployment surface for all infrastructure,
 including the Druid image and supervisor,
-and every asset outside the narrow Forgejo deployment scope; in particular, the
-current `pmu-gateway` remains an infrastructure service here. This checkout is
+and every asset outside the narrow Forgejo deployment scope. The legacy
+`pmu-gateway` fixture is retained for reference but excluded from the default
+Compose stack. This checkout is
 never added as a Forgejo remote and is never pushed to Forgejo.
 
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
@@ -49,7 +51,7 @@ algorithm. The LFR seed evaluates configured multi-PMU frequency and voltage
 inputs per UTC second and writes its preferred frequency to `LiveMeasurement`;
 it does not yet produce IEC 104 export requests. A future gateway may use its
 own repository only as an explicit
-gateway-deployment test; it does not move the current `pmu-gateway` or any other
+gateway-deployment test; it does not move the deprecated `pmu-gateway` fixture or any other
 infrastructure service out of this checkout. Processor containers connect
 through the external `wama-infra` Docker network; they do not include, modify,
 or redeploy this Compose project.
@@ -58,7 +60,7 @@ or redeploy this Compose project.
 is the explicit C37.118 gateway-deployment-test seed. A reviewed legacy-v2
 source catalog reconciles raw-Protobuf Masterdata records and tombstones to
 Kafka, then reconciles one source-scoped adapter per active catalog source. It
-does not modify the current `pmu-gateway` or run root Compose services.
+does not modify the deprecated `pmu-gateway` fixture or run root Compose services.
 
 ## Repository layout
 
@@ -74,7 +76,8 @@ service owns its fragment, configuration, and scripts beneath
 | [services/kafka-init/](services/kafka-init/) | `kafka-init` | Compose fragment, topic bootstrap configuration, and script |
 | [services/kafka-exporter/](services/kafka-exporter/) | `kafka-exporter` | Compose fragment for internal Kafka broker, topic, and consumer-lag metrics |
 | [services/kafka-ui/](services/kafka-ui/) | `kafka-ui` | Compose fragment and Kafka UI environment configuration |
-| [services/pmu-gateway/](services/pmu-gateway/) | `pmu-gateway` | Compose fragment, configurable PMU fixture, image, source, and tests |
+| [services/pmu-gateway/](services/pmu-gateway/) | `pmu-gateway` (deprecated) | Retained reference fixture, image, source, and tests; excluded from default Compose |
+| [services/gateway-dashboard-provisioner/](services/gateway-dashboard-provisioner/) | `gateway-dashboard-provisioner` | Root-owned compacted-Masterdata consumer and generated Grafana gateway dashboards |
 | [services/c37-118-simulator/](services/c37-118-simulator/) | `c37-118-simulator` | Profile-gated standalone C37.118 TCP simulator and manual fleet-test tooling |
 | [services/iec104-exporter/](services/iec104-exporter/) | `iec104-exporter` | One-way IEC 104 controlled station consuming raw-Protobuf `Export` records |
 | [services/iec104-receiver/](services/iec104-receiver/) | `iec104-receiver` | Profile-gated test control center for IEC 104 protocol verification |
@@ -87,6 +90,8 @@ service owns its fragment, configuration, and scripts beneath
 | [services/trino-session-writer/](services/trino-session-writer/) | `trino-session-writer` | Internal-only Iceberg metadata writer for verified session artifacts |
 | [services/trino-session-init/](services/trino-session-init/) | `trino-session-init` | One-shot Iceberg schema/table initializer for session artifacts |
 | [services/seaweedfs/](services/seaweedfs/) | `seaweedfs` | Compose fragment and SeaweedFS S3/admin configuration |
+| [services/measurement-session-api/](services/measurement-session-api/) | `measurement-session-api` | Local browser-confirmed raw-Protobuf MeasurementSession request publisher |
+| [services/measurement-session-exporter/](services/measurement-session-exporter/) | `measurement-session-exporter` | Loopback-only read-only CSV download for selected immutable session values |
 | [services/measurement-session-processor/](services/measurement-session-processor/) | `measurement-session-processor` | Root-owned Druid-to-Parquet Kafka worker for bounded session requests |
 | [services/blobmeta-catalog/](services/blobmeta-catalog/) | `blobmeta-catalog` | Compacted Blobmeta-to-PostgreSQL immutable metadata materializer |
 | [services/measurement-session-query-indexer/](services/measurement-session-query-indexer/) | `measurement-session-query-indexer` | Root-owned verified Blobmeta-to-Iceberg query indexer |
@@ -112,7 +117,7 @@ directory. Provision each in its own separate processor repository seed.
 
 - Docker Engine with Docker Compose v2 or newer
 - Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8085`, `8333`,
-  `23646`, `3000`, `3001`, `3003`, `5432`, `8888`, `2222`, and
+  `23646`, `3000`, `3001`, `3003`, `3004`, `3005`, `5432`, `8888`, `2222`, and
   `127.0.0.1:2404` available
 
 ## Start and stop
@@ -156,14 +161,17 @@ docker compose logs infra-readiness
 ```
 
 `kafka`, `druid`, `postgres`, `seaweedfs`, `victoria-metrics`, `grafana`,
-`iec104-exporter`, and `iec104-browser` should be `healthy`; `kafka-init` and
+`iec104-exporter`, `iec104-browser`, `measurement-session-api`, and
+`measurement-session-exporter` should be `healthy`; `kafka-init` and
 `druid-init` should have exited with status `0`; and `kafka-ui`,
-`kafka-exporter`, `pmu-gateway`, `measurement-session-processor`,
+`kafka-exporter`, `measurement-session-processor`,
 `blobmeta-catalog`, `node-exporter`, `cadvisor`, `forgejo`, and
 `forgejo-runner` should be running.
 `forgejo-init` and `infra-readiness` should have exited with status `0`; the
-latter verifies the Kafka contract and PMU traffic, Druid supervisor and SQL
-query, PostgreSQL, SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener.
+latter verifies the Kafka contract, service control planes, PostgreSQL,
+SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener. Live PMU traffic
+and Druid/Grafana sample queries are opt-in through
+`INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT=true` with an external producer.
 The profile-gated measurement-session request-flow verifier and IEC 104 test
 receiver run only when explicitly invoked.
 
@@ -271,22 +279,39 @@ git clone "https://<forgejo-host>/<owner>/processor-frequency-scale.git"
 cd processor-frequency-scale
 ```
 
+For the existing private `gateway-c37-118-onboarding` checkout, bootstrap
+creates a restricted non-admin collaborator automatically. Install its local
+credential without creating or copying a token by hand:
+
+```sh
+sh scripts/configure-forgejo-gateway-onboarding-agent.sh \
+  --checkout ../gateway-c37-118-onboarding
+```
+
+The installer accepts only that external checkout, preserves its `origin`, and
+rejects this parent checkout and `forgejo-repos/gateway-c37-118-onboarding`.
+Normal Git pushes then use the local credential helper. For Forgejo REST calls,
+run the command through
+`scripts/with-forgejo-gateway-onboarding-agent.sh --checkout
+../gateway-c37-118-onboarding -- <command>`; the generated token is exported
+only to that child command. Re-run the installer after `docker compose down -v`.
+
 Each processor workflow validates pull requests. A trusted `main` push tests
 and publishes only its one processor image, then synchronizes only its checkout
 to its own deployment root and deploys only that service. A gateway may use
 Forgejo only in a deliberately declared gateway-deployment test; that exception
-must not deploy, modify, or take ownership of the current `pmu-gateway` or any
+must not deploy, modify, or take ownership of the deprecated `pmu-gateway` fixture or any
 root infrastructure service.
 
 The `gateway-c37-118-onboarding` workflow follows the same trusted
 `validate -> publish -> deploy` sequence. Its deploy step runs
 `masterdata-publisher` once through `docker compose run --rm`, then uses the
 marker-owned deployment guard to reconcile only generated legacy-v2 source
-adapters. It cannot control the root `pmu-gateway`, root Compose project, or
+adapters. It cannot control the deprecated root `pmu-gateway` fixture, root Compose project, or
 any adapter absent from its approved catalog.
 
 Validate the canonical Masterdata contract, onboarding seed, isolated Compose
-project, and Forgejo bootstrap guard together:
+project, Forgejo bootstrap guard, and onboarding credential bridge together:
 
 ```sh
 sh scripts/test-masterdata-onboarding.sh
@@ -307,13 +332,14 @@ Create or adapt processors only from the instructions in the individual
 [C37.118 onboarding README](forgejo-repos/gateway-c37-118-onboarding/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 
-## Fake PMU messages
+## Deprecated PMU fixture
 
 `pmu-gateway` loads
 [services/pmu-gateway/messages.yaml](services/pmu-gateway/messages.yaml) once
 at startup and continuously publishes its configured scalar PMU measurements in
-fixture order. The default fixture contains three-phase voltage and current,
-frequency, and ROCOF records.
+fixture order. It is excluded from the default Compose stack and retained only
+as a reference fixture. The default fixture contains three-phase voltage and
+current, frequency, and ROCOF records.
 
 Each entry needs an `mrid` and exactly one typed Common Format value. Supported
 value names are `double_value`, `int_value`, `uint_value`, `bool_value`,
@@ -327,10 +353,11 @@ so each publish cycle produces realistic variation around its nominal PMU
 value. Custom fixture values remain fixed unless their individual entries opt
 into jitter.
 
-Change the default fixture, then recreate the gateway to apply it:
+To run the retained fixture explicitly, include its service fragment and then
+recreate the gateway:
 
 ```sh
-docker compose up -d --force-recreate pmu-gateway
+docker compose -f docker-compose.yml -f services/pmu-gateway/compose.yaml up -d --build pmu-gateway
 ```
 
 To select a different fixture for startup, use an absolute host path:
@@ -338,7 +365,8 @@ To select a different fixture for startup, use an absolute host path:
 ```sh
 PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
   PMU_GATEWAY_PUBLISH_INTERVAL_MS=250 \
-  docker compose up -d --force-recreate pmu-gateway
+  docker compose -f docker-compose.yml -f services/pmu-gateway/compose.yaml \
+  up -d --build pmu-gateway
 ```
 
 ## C37.118 Simulator
@@ -374,6 +402,8 @@ run as part of normal infrastructure lifecycle validation.
 | Forgejo Git over SSH | `ssh://git@<host-ip>:2222/<owner>/<repository>.git` |
 | Grafana | `http://<host-ip>:3001` |
 | PMU live dashboard | `http://<host-ip>:3001/d/wama-pmu-live-measurements/wama-pmu-live-measurements` |
+| Measurement-session request | `http://localhost:3004` |
+| Measurement-session CSV export | `http://localhost:3005` |
 | Measurement session dashboard | `http://<host-ip>:3001/d/wama-measurement-sessions/wama-measurement-sessions` |
 | Trino SQL query API and web UI | `http://<host-ip>:8085` |
 | Druid Router API and web console | `http://<host-ip>:8888` |
@@ -417,13 +447,30 @@ Grafana also provisions the internal `Druid` datasource through
 **WAMA Measurements**:
 
 - **WAMA PMU Live Measurements**: valid PMU voltage, current, frequency, and
-  ROCOF values as separate unit-safe trends plus recent timestamp evidence.
+  ROCOF values as separate unit-safe trends plus recent timestamp evidence. Its
+  MRID selector and session link open the loopback-only confirmation page with
+  the current selected range and measurements.
 - **WAMA Measurement Sessions**: selected immutable session values through the
   internal read-only Trino datasource, with Blobmeta evidence and MRID coverage.
+  Its **Export CSV** dashboard action downloads the current selection through
+  the loopback-only fixed-query exporter.
+
+The root-owned `gateway-dashboard-provisioner` also consumes compacted
+`Masterdata` and provisions the **WAMA Gateways** folder:
+
+- **WAMA Gateway Fleet**: the active catalog sources and links to their pages.
+- **WAMA Gateway: <source>**: source provenance, endpoint metadata, unit-safe
+  Druid live-value trends, freshness, and latest valid records.
+
+Gateway dashboard membership follows active Masterdata records, including
+tombstones; it is not evidence of a running adapter or a substitute for gateway
+deployment health. The static PMU fixture dashboard remains available before
+any catalog source is published.
 
 No alert rules, contact points, or notification delivery are provisioned in
 this PoC slice. Set `GRAFANA_ROOT_URL=http://<host-ip>:3001/` when Grafana must
-generate external URLs for a LAN address.
+generate external URLs for a LAN address; completed measurement-session links
+use the same browser-reachable origin.
 
 The Druid and Trino plugins are pinned in the local Grafana image. Druid remains
 the live Common Format query source, while Trino serves only registered immutable
@@ -547,6 +594,12 @@ writer in `sessions.wama.measurement_values`; it never scans the directory that
 also holds the replay receipt. The host-exposed Trino coordinator and Grafana
 datasource remain read-only.
 
+`measurement-session-exporter` is a loopback-only download surface for the
+current Grafana session selection. It queries the public read-only Trino
+coordinator with a fixed statement over one canonical `blob_id`, selected MRIDs,
+value types, and time range, then streams the chart values as CSV. It has no
+direct object-store, PostgreSQL, Kafka, Druid, or internal Trino-writer access.
+
 Run the complete request-to-Blobmeta check after the normal stack is ready:
 
 ```sh
@@ -584,7 +637,8 @@ because the data-retention decision remains open.
 
 The request/Blobmeta contracts, v2 queryable Parquet artifact, and 12-partition
 worker topics replace the old finalized-session exporter, catalog API, browser,
-manifest, and CSV flow. This is an intentional clean PoC break: run
+and manifest flow. The current dashboard provides only the bounded selected
+session CSV download described above. This is an intentional clean PoC break: run
 `docker compose down -v` before starting an existing local stack. The default
 indexer starts at `earliest` and fails closed on pre-v2 evidence; no dual-publish,
 bridge, backfill, or migration is provided.

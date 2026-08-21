@@ -4,7 +4,7 @@ location:
   display_name: WAMA PoC Bay 01
 connection:
   protocol: c37_118_tcp
-  ip_address: 192.0.2.10
+  ip_address: 172.30.0.10
   port: 4712
   pmu_idcode: 1001
   wire_version: 2

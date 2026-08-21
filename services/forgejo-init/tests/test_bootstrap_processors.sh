@@ -23,10 +23,17 @@ EOF
   cat > "$fake_bin/forgejo" <<'EOF'
 #!/bin/sh
 set -eu
+printf '%s\n' "$*" >> "$BOOTSTRAP_TEST_FORGEJO_LOG"
 case "$*" in
   *"admin user list"*) printf '1 %s\n' "$FORGEJO_BOOTSTRAP_ADMIN_USERNAME" ;;
+  *"admin user create"*) : > "$BOOTSTRAP_TEST_AGENT_USER_FILE" ;;
   *"actions generate-secret"*) printf '%s\n' test-runner-secret ;;
-  *"admin user generate-access-token"*) printf '%s\n' test-package-token ;;
+  *"admin user generate-access-token"*)
+    case "$*" in
+      *"--username $FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME"*) printf '%s\n' test-gateway-onboarding-agent-token ;;
+      *) printf '%s\n' test-package-token ;;
+    esac
+    ;;
   *"actions register"*)
     while [ "$#" -gt 0 ]; do
       if [ "$1" = "--name" ]; then
@@ -36,6 +43,64 @@ case "$*" in
       shift
     done
     exit 1
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+  cat > "$fake_bin/curl" <<'EOF'
+#!/bin/sh
+set -eu
+output_file=/dev/null
+method=GET
+data=
+url=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output|-o) output_file="$2"; shift 2 ;;
+    --request|-X) method="$2"; shift 2 ;;
+    --data|--data-raw|--data-binary) data="$2"; shift 2 ;;
+    --user|--header|-H) shift 2 ;;
+    --fail|--silent|--show-error) shift ;;
+    http://*|https://*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+printf '%s %s %s\n' "$method" "$url" "$data" >> "$BOOTSTRAP_TEST_CURL_LOG"
+case "$url" in
+  */api/v1/admin/users?limit=100)
+    {
+      printf '%s' "[{\"username\":\"$FORGEJO_BOOTSTRAP_ADMIN_USERNAME\",\"is_admin\":true,\"restricted\":false}"
+      if [ -e "$BOOTSTRAP_TEST_AGENT_USER_FILE" ]; then
+        printf '%s' ",{\"username\":\"$FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME\",\"is_admin\":false,\"restricted\":true}"
+      fi
+      printf '%s\n' ']'
+    } > "$output_file"
+    ;;
+  */api/v1/user)
+    printf '%s\n' "{\"username\":\"$FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME\"}" > "$output_file"
+    ;;
+  */collaborators/"$FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME")
+    : > "$output_file"
+    ;;
+  *) exit 1 ;;
+esac
+if [ "$output_file" != /dev/null ] && [ ! -s "$output_file" ] && [ "$method" != PUT ]; then
+  printf '%s\n' "curl response was not written for $url" >&2
+  exit 1
+fi
+EOF
+  cat > "$fake_bin/jq" <<'EOF'
+#!/bin/sh
+set -eu
+case "$*" in
+  *'.[] | select('*)
+    if [ ! -e "$BOOTSTRAP_TEST_AGENT_USER_FILE" ]; then
+      exit 1
+    fi
+    printf '%s\n' "{\"username\":\"$FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME\",\"is_admin\":false,\"restricted\":true}"
+    ;;
+  *'.username == $username'*)
+    [ -e "$BOOTSTRAP_TEST_AGENT_USER_FILE" ]
     ;;
   *) exit 1 ;;
 esac
@@ -78,7 +143,7 @@ EOF
 #!/bin/sh
 exit 0
 EOF
-  chmod +x "$fake_bin/s6-setuidgid" "$fake_bin/forgejo" "$fake_bin/wget" "$fake_bin/git" "$fake_bin/chown"
+  chmod +x "$fake_bin/s6-setuidgid" "$fake_bin/forgejo" "$fake_bin/curl" "$fake_bin/jq" "$fake_bin/wget" "$fake_bin/git" "$fake_bin/chown"
 }
 
 setup_case() {
@@ -95,7 +160,9 @@ setup_case() {
   printf '%s\n' lfr-frequency-provision > "$case_directory/seeds/processor-lfr-frequency-provision/README.md"
   printf '%s\n' gateway-c37-118-onboarding > "$case_directory/seeds/gateway-c37-118-onboarding/README.md"
   : > "$case_directory/app.ini"
+  : > "$case_directory/forgejo.log"
   : > "$case_directory/git.log"
+  : > "$case_directory/curl.log"
   : > "$case_directory/wget.log"
   create_fake_commands "$case_directory/bin"
 }
@@ -108,12 +175,17 @@ run_bootstrap() {
     FORGEJO_API_URL=http://forgejo.test/api/v1 \
     FORGEJO_BOOTSTRAP_ADMIN_USERNAME=wama-admin \
     FORGEJO_BOOTSTRAP_ADMIN_PASSWORD=wama-admin \
+    FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME=wama-gateway-onboarding-agent \
+    FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL=wama-gateway-onboarding-agent@test \
     FORGEJO_RUNNER_URL=http://forgejo.test/ \
     WAMA_FREQUENCY_SCALE_DEPLOY_ROOT="$case_directory/frequency-deploy" \
     WAMA_APPARENT_POWER_DEPLOY_ROOT="$case_directory/apparent-deploy" \
     WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT="$case_directory/frequency-iec104-export-deploy" \
     WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT="$case_directory/lfr-frequency-provision-deploy" \
     WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT="$case_directory/gateway-c37-118-onboarding-deploy" \
+    BOOTSTRAP_TEST_AGENT_USER_FILE="$case_directory/gateway-onboarding-agent-user" \
+    BOOTSTRAP_TEST_CURL_LOG="$case_directory/curl.log" \
+    BOOTSTRAP_TEST_FORGEJO_LOG="$case_directory/forgejo.log" \
     BOOTSTRAP_TEST_GIT_LOG="$case_directory/git.log" \
     BOOTSTRAP_TEST_WGET_LOG="$case_directory/wget.log" \
     sh "$bootstrap_script"
@@ -149,6 +221,17 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains wama-gateway-c37-118-onboarding-ci: "$case_directory/runner/config.yaml"
   assert_contains wama-gateway-c37-118-onboarding-deploy: "$case_directory/runner/config.yaml"
   assert_contains ten-connections-v5 "$case_directory/runner/forgejo-managed-repositories.layout"
+  assert_contains 'PUT http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118-onboarding/collaborators/wama-gateway-onboarding-agent {"permission":"write"}' "$case_directory/curl.log"
+  assert_contains 'owner=wama-admin' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
+  assert_contains 'repository=gateway-c37-118-onboarding' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
+  assert_contains 'username=wama-gateway-onboarding-agent' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
+  test "$(stat -c '%a' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.token")" = 600
+  if grep -Fq test-gateway-onboarding-agent-token "$case_directory/bootstrap.log"; then
+    printf '%s\n' "Bootstrap wrote the gateway onboarding agent token to its log" >&2
+    exit 1
+  fi
+  run_bootstrap >> "$case_directory/bootstrap.log" 2>&1
+  test "$(grep -Fc -- "admin user create --username wama-gateway-onboarding-agent" "$case_directory/forgejo.log")" -eq 1
   test -f "$case_directory/frequency-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/apparent-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/frequency-iec104-export-deploy/.wama-forgejo-processor-root"

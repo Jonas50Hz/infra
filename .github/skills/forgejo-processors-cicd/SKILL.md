@@ -49,8 +49,16 @@ isolated deployment root.
    client, derive `FORGEJO_API_URL` from the public `FORGEJO_ROOT_URL`; the
    bootstrap container alone uses its internal `http://forgejo:3000/api/v1`
    endpoint. Confirm the server health and private repository before making a
-   change. Use a personal API token only through an environment variable or a
-   credential manager, never in a remote URL, commit, workflow file, or log.
+   change. For the local `gateway-c37-118-onboarding` route, do not ask for or
+   create a personal token: from the parent checkout run
+   `sh scripts/configure-forgejo-gateway-onboarding-agent.sh --checkout
+   ../gateway-c37-118-onboarding`. It installs the bootstrap-created restricted
+   collaborator credential only into the external private checkout and rejects
+   the parent and seed. Use
+   `scripts/with-forgejo-gateway-onboarding-agent.sh --checkout
+   ../gateway-c37-118-onboarding -- <command>` for REST calls. Other managed
+   repositories still use a personal token only through an environment variable
+   or credential manager, never in a remote URL, commit, workflow file, or log.
 
 2. For a new, empty Forgejo instance, let `forgejo-init` perform the idempotent
    API create-and-check operation for every approved processor repository and

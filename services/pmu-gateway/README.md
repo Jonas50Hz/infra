@@ -1,4 +1,7 @@
-# Fake PMU Gateway
+# Deprecated Fake PMU Gateway
+
+This reference fixture is excluded from the root Compose stack. Use an explicit
+Compose override only when a local producer is needed for data-dependent tests.
 
 `pmu-gateway` is a configurable stand-in for one PMU source. It reads its YAML
 fixture once at container startup, then repeatedly publishes the configured

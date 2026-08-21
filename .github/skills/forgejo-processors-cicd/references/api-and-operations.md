@@ -20,6 +20,39 @@ rewritten to `127.0.0.1:3000`; do not change that behavior in a workflow.
 
 ## Authentication
 
+### Local onboarding automation
+
+For the existing local private `gateway-c37-118-onboarding` checkout, do not
+request or create a personal API token. `forgejo-init` creates a restricted,
+non-admin collaborator with access only to that repository and keeps its token
+in the trusted runner volume. From the parent infrastructure checkout, install
+the local Git credential into the external clone:
+
+```sh
+sh scripts/configure-forgejo-gateway-onboarding-agent.sh \
+  --checkout ../gateway-c37-118-onboarding
+```
+
+The installer rejects the parent `infra` checkout and the tracked seed,
+preserves `origin`, and writes the credential with mode `0600` under
+`${XDG_CONFIG_HOME:-$HOME/.config}/wama-forgejo/`. Use the wrapper for REST
+calls so `FORGEJO_API_TOKEN` exists only in the child process:
+
+```sh
+sh scripts/with-forgejo-gateway-onboarding-agent.sh \
+  --checkout ../gateway-c37-118-onboarding -- \
+  sh -c 'curl --fail --silent --show-error \
+    --header "Authorization: token $FORGEJO_API_TOKEN" \
+    "$FORGEJO_API_URL/user"'
+```
+
+Re-run the installer after `docker compose down -v`. The normal checkout can
+then push its feature branch or use the wrapper to create, merge, or dispatch
+the existing guarded onboarding workflow. This route never creates another
+repository and never changes the parent checkout or seed.
+
+### Personal tokens
+
 Use a personal API token for routine API calls:
 
 ```sh

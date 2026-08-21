@@ -1,0 +1,2 @@
+kafka-python>=2.0,<3
+protobuf>=5.29,<7

@@ -12,3 +12,4 @@ cmp "$canonical_rtd_schema" "$seed_root/contracts/rtd_schema.proto"
 docker build --target test --file "$seed_root/Dockerfile" "$seed_root"
 docker compose -f "$seed_root/compose.yaml" config --quiet
 sh "$repository_root/services/forgejo-init/tests/test_bootstrap_processors.sh"
+sh "$repository_root/services/forgejo-init/tests/test_gateway_onboarding_agent_credentials.sh"
