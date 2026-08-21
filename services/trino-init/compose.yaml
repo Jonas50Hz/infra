@@ -1,0 +1,21 @@
+services:
+  trino-init:
+    image: postgres:17.6
+    depends_on:
+      postgres:
+        condition: service_healthy
+      blobmeta-catalog:
+        condition: service_started
+    env_file:
+      - ../trino/trino.env
+    environment:
+      PGDATABASE: wama
+      PGHOST: postgres
+      PGPASSWORD: wama-postgres-password
+      PGPORT: "5432"
+      PGUSER: wama
+      TRINO_INIT_TIMEOUT_SECONDS: "${TRINO_INIT_TIMEOUT_SECONDS:-180}"
+    volumes:
+      - ./bootstrap-reader.sh:/opt/wama/bootstrap-reader.sh:ro
+    entrypoint: ["/bin/bash", "/opt/wama/bootstrap-reader.sh"]
+    restart: "no"

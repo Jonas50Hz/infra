@@ -16,9 +16,16 @@ foundation matters once multiple use cases reuse and extend it.
 
 ## Core processes
 ### Onboarding a source
-- Minimal input: masterdata = **IP + location**, entered via Git.
-- Gateway container provisioned automatically; capabilities requested; stream started.
-- Decommissioning built in: stop command + container teardown on removal.
+- V1 masterdata is a reviewed Git record containing a stable source ID, site
+  ID, display name, literal IP address, TCP port, C37.118 PMU IDCODE, legacy
+  wire version 2, and explicit signal-to-MRID mappings.
+- The private `gateway-c37-118-onboarding` repository validates an approved
+  catalog revision, projects it as keyed raw-Protobuf `SourceMasterdata`
+  records on compacted `Masterdata`, and reconciles one isolated legacy-v2 TCP
+  adapter per active catalog source. The current root-owned `pmu-gateway` is
+  not controlled by that repository.
+- Removing a catalog source publishes a source-keyed Kafka tombstone and stops
+  only its matching previously managed adapter.
 
 ### Configuration & deployment
 - A Power User requests a change to live calculations, live values,
@@ -31,6 +38,9 @@ foundation matters once multiple use cases reuse and extend it.
   provide an audit-safe trace.
 - An accepted configuration is executed in the gateway, storage, and live-data
   processing components. The Power User receives the deployment outcome.
+- For source onboarding, the Systemexperte-approved `main` revision currently
+  performs only the Masterdata projection. It does not yet create a gateway
+  container or alter root infrastructure.
 
 ### Live data
 - Live data received from gateway → converted to **Common Format**
@@ -52,11 +62,14 @@ foundation matters once multiple use cases reuse and extend it.
 - A bounded `MeasurementSession` request identifies start point, end point, and
   sorted measurement MRIDs. The root-owned worker queries the historical Druid
   interval and records the resulting samples as an immutable Parquet artifact.
-- Compacted `Blobmeta` captures the artifact pointer, SHA-256, row counts, and
-  complete/partial/rejected status. PostgreSQL materializes that metadata for
-  queries; measurements remain in Druid and SeaweedFS.
+- Compacted `Blobmeta` captures the artifact pointer, Parquet schema version,
+  SHA-256, row counts, and complete/partial/rejected status. PostgreSQL
+  materializes that metadata, while the root-owned query indexer registers only
+  verified v2 artifacts in Iceberg for read-only Trino access.
 - The session is retained for long-term access and may result in an optional
-  alarm notification. Browser/file-export presentation remains future work.
+  alarm notification. Grafana supports selected-session presentation through
+  read-only Trino; browser workflow, file export, and broader analytics remain
+  future work.
 - Long-term measurement-session storage has no six-week deletion policy, unlike
   raw data.
 
@@ -71,11 +84,15 @@ foundation matters once multiple use cases reuse and extend it.
 ## Planned C37.118 source simulation
 
 The current `pmu-gateway` is a fast Common-Format fixture, not a C37.118
-endpoint. The planned memory-bounded C37.118 TCP simulator is specified in
-[05-c37-118-simulator.md](05-c37-118-simulator.md). It will exercise a future
-source-protocol gateway before that gateway publishes `LiveMeasurement` records.
+endpoint. The root-owned, memory-bounded C37.118 TCP simulator is specified in
+[05-c37-118-simulator.md](05-c37-118-simulator.md). It is a standalone source
+and protocol-test service; it does not implement, deploy, or validate a gateway
+or publish `LiveMeasurement` records.
 
 ## Governance (from the WAMA Platform deck)
 - Architecture owner + ADR process; technology-decision backlog.
 - Processors declare inputs/outputs; derived values published + stored; shared
   processing functions reused across use cases.
+- The deferred [processor authoring experience](07-processor-authoring.md)
+  describes how ordinary electrical calculations can become easier to create
+  without weakening the Common Format, review, or processor-delivery boundaries.

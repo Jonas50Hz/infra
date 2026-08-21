@@ -37,7 +37,7 @@ FROM runtime AS test
 COPY services/measurement-session-common/tests /app/common-tests
 COPY services/measurement-session-e2e/tests /app/tests
 RUN python -m unittest discover -s /app/common-tests -v \
-    && python -m unittest discover -s /app/tests -p 'test_request_flow.py' -v
+    && python -m unittest discover -s /app/tests -v
 
 FROM runtime
 

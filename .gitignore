@@ -1,6 +1,7 @@
 /.env
 /.forgejo/
 /services/forgejo-init/forgejo-init.env
+/services/c37-118-simulator/target/
 /forgejo-repos/*/.git/
 /forgejo-repos/*/.env
 __pycache__/

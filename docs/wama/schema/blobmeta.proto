@@ -44,4 +44,5 @@ message ObjectReference {
     string media_type = 3;
     uint64 byte_length = 4;
     bytes sha256 = 5;
+    uint32 parquet_schema_version = 6;
 }

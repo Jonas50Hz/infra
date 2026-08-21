@@ -29,6 +29,7 @@ class ObjectReference:
     bucket: str
     object_key: str
     media_type: str
+    parquet_schema_version: int
     byte_length: int
     sha256: bytes
 
@@ -63,6 +64,7 @@ class CatalogBlob:
                 bucket=message.object.bucket,
                 object_key=message.object.object_key,
                 media_type=message.object.media_type,
+                parquet_schema_version=message.object.parquet_schema_version,
                 byte_length=message.object.byte_length,
                 sha256=bytes(message.object.sha256),
             )
@@ -131,6 +133,7 @@ class PostgresCatalog:
                         object_bucket text,
                         object_key text,
                         object_media_type text,
+                        object_parquet_schema_version integer,
                         object_byte_length bigint,
                         object_sha256 bytea,
                         contract_sha256 bytea NOT NULL CHECK (octet_length(contract_sha256) = 32),
@@ -143,6 +146,7 @@ class PostgresCatalog:
                                 AND object_bucket IS NULL
                                 AND object_key IS NULL
                                 AND object_media_type IS NULL
+                                AND object_parquet_schema_version IS NULL
                                 AND object_byte_length IS NULL
                                 AND object_sha256 IS NULL)
                             OR
@@ -151,10 +155,17 @@ class PostgresCatalog:
                                 AND object_bucket IS NOT NULL
                                 AND object_key IS NOT NULL
                                 AND object_media_type IS NOT NULL
+                                AND object_parquet_schema_version > 0
                                 AND object_byte_length > 0
                                 AND octet_length(object_sha256) = 32)
                         )
                     );
+                    """
+                )
+                cursor.execute(
+                    """
+                    ALTER TABLE blobmeta_catalog.session_blobs
+                    ADD COLUMN IF NOT EXISTS object_parquet_schema_version integer;
                     """
                 )
                 cursor.execute(
@@ -222,13 +233,15 @@ class PostgresCatalog:
                         requested_at, started_at, ended_at, finalized_at,
                         measurement_count, status, rejection_reason, metadata,
                         object_bucket, object_key, object_media_type,
-                        object_byte_length, object_sha256, contract_sha256
+                        object_parquet_schema_version, object_byte_length,
+                        object_sha256, contract_sha256
                     ) VALUES (
                         %(blob_id)s, %(session_id)s, %(request_sha256)s,
                         %(requested_at)s, %(started_at)s, %(ended_at)s, %(finalized_at)s,
                         %(measurement_count)s, %(status)s, %(rejection_reason)s, %(metadata)s::jsonb,
                         %(object_bucket)s, %(object_key)s, %(object_media_type)s,
-                        %(object_byte_length)s, %(object_sha256)s, %(contract_sha256)s
+                        %(object_parquet_schema_version)s, %(object_byte_length)s,
+                        %(object_sha256)s, %(contract_sha256)s
                     ) ON CONFLICT (blob_id) DO NOTHING
                     RETURNING contract_sha256;
                     """,
@@ -284,6 +297,9 @@ def _insert_values(blob: CatalogBlob) -> dict[str, Any]:
         "object_bucket": object_reference.bucket if object_reference else None,
         "object_key": object_reference.object_key if object_reference else None,
         "object_media_type": object_reference.media_type if object_reference else None,
+        "object_parquet_schema_version": (
+            object_reference.parquet_schema_version if object_reference else None
+        ),
         "object_byte_length": object_reference.byte_length if object_reference else None,
         "object_sha256": object_reference.sha256 if object_reference else None,
         "contract_sha256": blob.contract_sha256,

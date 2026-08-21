@@ -18,11 +18,17 @@ Each active processor has its own seed and private Forgejo repository:
 - [`processor-lfr-frequency-provision/`](processor-lfr-frequency-provision/)
 	owns only `processor-lfr-frequency-provision`.
 
+The explicitly declared C37.118 gateway-deployment-test seed is
+[`gateway-c37-118-onboarding/`](gateway-c37-118-onboarding/). It owns only the
+one-shot `masterdata-publisher` and guarded generated legacy-v2 adapters for
+active approved sources in this increment.
+
 `forgejo-init` seeds each repository only when its remote has no refs; an
-existing nonempty private repository is left unchanged. Each workflow deploys
-only its one processor into its own marker-owned deployment root. A processor
-repository may contain a gateway only for an explicit gateway-deployment test.
-The parent `infra` repository retains all other assets, including the current
+existing nonempty private repository is left unchanged. Processor workflows
+deploy only their one processor into their own marker-owned deployment root.
+The onboarding workflow uses its separate marker-owned root to publish
+Masterdata once and reconcile only its catalog-derived source adapters. The
+parent `infra` repository retains all other assets, including the current
 `pmu-gateway` and every infrastructure service.
 
 `processor-frequency-iec104-export` deliberately copies the canonical

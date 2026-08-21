@@ -35,6 +35,7 @@ show_failure_diagnostics() {
   docker compose logs --tail 200 \
     measurement-session-processor \
     blobmeta-catalog \
+    measurement-session-query-indexer \
     measurement-session-e2e \
     kafka \
     postgres \
@@ -46,9 +47,11 @@ show_failure_diagnostics() {
 trap show_failure_diagnostics ERR
 
 docker compose config --quiet
-docker compose up -d --build --wait \
+docker compose up -d --build \
   measurement-session-processor \
-  blobmeta-catalog
+  blobmeta-catalog \
+  measurement-session-query-indexer \
+  trino
 docker compose --profile measurement-session-test run --rm --build measurement-session-e2e
 
 trap - ERR

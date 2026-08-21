@@ -18,6 +18,7 @@ from measurement_session_common.contract import (
     BLOBMETA_MEDIA_TYPE,
     DEFAULT_SESSION_BUCKET,
     PARQUET_MEDIA_TYPE,
+    SESSION_PARQUET_SCHEMA_VERSION,
     ContractValidationError,
     rejected_blob_id,
     rejected_receipt_key,
@@ -129,17 +130,20 @@ class SessionWorker:
         if existing is not None:
             return self._publish(existing)
 
+        blob_id = successful_blob_id(request.session_id)
         with TemporaryDirectory(prefix="wama-measurement-session-") as temporary_directory:
             artifact_path = Path(temporary_directory) / "measurements.parquet"
             stats = write_session_parquet(
                 artifact_path,
                 self._druid.iter_rows(request),
                 tuple(request.mrids),
+                blob_id,
+                request.session_id,
                 self._settings.max_rows,
                 self._settings.parquet_batch_rows,
                 self._settings.max_artifact_bytes,
             )
-            result = self._completed_result(request, digest, stats)
+            result = self._completed_result(request, digest, blob_id, stats)
             validate_blobmeta(result)
             payload = result.SerializeToString(deterministic=True)
             self._storage.put_or_verify_file(
@@ -228,10 +232,11 @@ class SessionWorker:
         self,
         request: MeasurementSessionRequest,
         digest: bytes,
+        blob_id: str,
         stats: ArtifactStats,
     ) -> Blobmeta:
         result = Blobmeta(
-            blob_id=successful_blob_id(request.session_id),
+            blob_id=blob_id,
             session_id=request.session_id,
             request_sha256=digest,
             mrids=request.mrids,
@@ -255,6 +260,7 @@ class SessionWorker:
         result.object.media_type = PARQUET_MEDIA_TYPE
         result.object.byte_length = stats.size_bytes
         result.object.sha256 = stats.sha256
+        result.object.parquet_schema_version = SESSION_PARQUET_SCHEMA_VERSION
         return result
 
     def _copy_timestamps(

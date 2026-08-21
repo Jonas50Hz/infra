@@ -21,15 +21,21 @@ and join this stack through the external `wama-infra` network.
 | [`kafka-exporter/`](kafka-exporter/) | `kafka-exporter` |
 | [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
 | [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` |
+| [`c37-118-simulator/`](c37-118-simulator/) | `c37-118-simulator` (profile `c37-118`) |
 | [`iec104-exporter/`](iec104-exporter/) | `iec104-exporter` |
 | [`iec104-receiver/`](iec104-receiver/) | `iec104-receiver` (profile `iec104-test`) |
 | [`iec104-browser/`](iec104-browser/) | `iec104-browser` |
 | [`druid/`](druid/) | `druid` |
 | [`druid-init/`](druid-init/) | `druid-init` |
 | [`postgres/`](postgres/) | `postgres` |
+| [`trino-init/`](trino-init/) | `trino-init` |
+| [`trino/`](trino/) | `trino` |
+| [`trino-session-writer/`](trino-session-writer/) | `trino-session-writer` |
+| [`trino-session-init/`](trino-session-init/) | `trino-session-init` |
 | [`seaweedfs/`](seaweedfs/) | `seaweedfs` |
 | [`measurement-session-processor/`](measurement-session-processor/) | `measurement-session-processor` |
 | [`blobmeta-catalog/`](blobmeta-catalog/) | `blobmeta-catalog` |
+| [`measurement-session-query-indexer/`](measurement-session-query-indexer/) | `measurement-session-query-indexer` |
 | [`measurement-session-e2e/`](measurement-session-e2e/) | `measurement-session-e2e` |
 | [`forgejo/`](forgejo/) | `forgejo` |
 | [`forgejo-init/`](forgejo-init/) | `forgejo-init` |

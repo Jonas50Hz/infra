@@ -19,12 +19,13 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.druid_expected_double_value_tolerance, 0.01)
         self.assertEqual(settings.iec104_browser_url, "http://iec104-browser:8080")
         self.assertEqual(
-            settings.forgejo_processor_repositories,
+            settings.forgejo_managed_repositories,
             (
                 "processor-frequency-scale",
                 "processor-apparent-power",
                 "processor-frequency-iec104-export",
                 "processor-lfr-frequency-provision",
+                "gateway-c37-118-onboarding",
             ),
         )
         self.assertEqual(settings.kafka_bootstrap_servers, "kafka:9092")
@@ -32,6 +33,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.blobmeta_topic_partitions, 12)
         self.assertEqual(settings.s3_buckets, ("wama-raw", "wama-measurement-sessions"))
         self.assertEqual(settings.readiness_timeout_seconds, 180)
+        self.assertEqual(settings.trino_url, "http://trino:8080")
+        self.assertEqual(settings.trino_druid_catalog, "druid")
+        self.assertEqual(settings.trino_blobmeta_catalog, "blobmeta")
+        self.assertEqual(settings.trino_session_catalog, "sessions")
+        self.assertEqual(settings.trino_session_schema, "wama")
+        self.assertEqual(settings.trino_session_table, "measurement_values")
 
     def test_rejects_non_positive_timeout(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "READINESS_TIMEOUT_SECONDS"):
@@ -45,11 +52,11 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigurationError, "S3_BUCKETS"):
             Settings.from_environment({"S3_BUCKETS": " , "})
 
-    def test_rejects_repeated_processor_repositories(self) -> None:
+    def test_rejects_repeated_managed_repositories(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "must not repeat"):
             Settings.from_environment(
                 {
-                    "FORGEJO_PROCESSOR_REPOSITORIES": (
+                    "FORGEJO_MANAGED_REPOSITORIES": (
                         "processor-frequency-scale,processor-frequency-scale"
                     )
                 }
@@ -60,6 +67,8 @@ class SettingsTests(unittest.TestCase):
             Settings.from_environment({"FORGEJO_URL": "forgejo:3000"})
         with self.assertRaisesRegex(ConfigurationError, "IEC104_BROWSER_URL"):
             Settings.from_environment({"IEC104_BROWSER_URL": "iec104-browser:8080"})
+        with self.assertRaisesRegex(ConfigurationError, "TRINO_URL"):
+            Settings.from_environment({"TRINO_URL": "trino:8080"})
 
     def test_rejects_non_finite_druid_expected_value(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "DRUID_EXPECTED_DOUBLE_VALUE"):

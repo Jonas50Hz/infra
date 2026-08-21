@@ -1,0 +1,23 @@
+services:
+  trino-session-writer:
+    image: trinodb/trino:483
+    depends_on:
+      postgres:
+        condition: service_healthy
+      trino-init:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_healthy
+    env_file:
+      - ../trino/trino.env
+    volumes:
+      - ./etc/config.properties:/etc/trino/config.properties:ro
+      - ./etc/node.properties:/etc/trino/node.properties:ro
+      - ./etc/catalog:/etc/trino/catalog:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/v1/info > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    restart: unless-stopped

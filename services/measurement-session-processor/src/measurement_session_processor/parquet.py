@@ -10,6 +10,10 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from measurement_session_common.contract import (
+    SESSION_PARQUET_FIELD_IDS,
+    SESSION_PARQUET_SCHEMA_VERSION,
+)
 from measurement_session_processor.druid import MeasurementRow
 
 
@@ -17,25 +21,45 @@ class SessionArtifactError(RuntimeError):
     """Raised when a bounded request cannot produce a safe Parquet artifact."""
 
 
+PARQUET_SCHEMA_VERSION = SESSION_PARQUET_SCHEMA_VERSION
+
+
+def _field(
+    name: str,
+    data_type: pa.DataType,
+    *,
+    nullable: bool = True,
+) -> pa.Field:
+    return pa.field(
+        name,
+        data_type,
+        nullable=nullable,
+        metadata={b"PARQUET:field_id": str(SESSION_PARQUET_FIELD_IDS[name]).encode("ascii")},
+    )
+
+
 PARQUET_SCHEMA = pa.schema(
     [
-        pa.field("timestamp_mccs", pa.timestamp("us", tz="UTC"), nullable=False),
-        pa.field("mrid", pa.string(), nullable=False),
-        pa.field("value_type", pa.string(), nullable=False),
-        pa.field("double_value", pa.float64()),
-        pa.field("int_value", pa.int64()),
-        pa.field("uint_value", pa.uint32()),
-        pa.field("bool_value", pa.bool_()),
-        pa.field("string_value", pa.string()),
-        pa.field("timestamp_value", pa.timestamp("us", tz="UTC")),
-        pa.field("timestamp_field", pa.timestamp("us", tz="UTC")),
-        pa.field("timestamp_gateway", pa.timestamp("us", tz="UTC")),
-        pa.field("quality_valid", pa.bool_()),
-        pa.field("quality_substituted", pa.bool_()),
-        pa.field("quality_operator_blocked", pa.bool_()),
-        pa.field("quality_overflow", pa.bool_()),
-        pa.field("quality_old_data", pa.bool_()),
-    ]
+        _field("blob_id", pa.string(), nullable=False),
+        _field("session_id", pa.string(), nullable=False),
+        _field("timestamp_mccs", pa.timestamp("us", tz="UTC"), nullable=False),
+        _field("mrid", pa.string(), nullable=False),
+        _field("value_type", pa.string(), nullable=False),
+        _field("double_value", pa.float64()),
+        _field("int_value", pa.int64()),
+        _field("uint_value", pa.int64()),
+        _field("bool_value", pa.bool_()),
+        _field("string_value", pa.string()),
+        _field("timestamp_value", pa.timestamp("us", tz="UTC")),
+        _field("timestamp_field", pa.timestamp("us", tz="UTC")),
+        _field("timestamp_gateway", pa.timestamp("us", tz="UTC")),
+        _field("quality_valid", pa.bool_()),
+        _field("quality_substituted", pa.bool_()),
+        _field("quality_operator_blocked", pa.bool_()),
+        _field("quality_overflow", pa.bool_()),
+        _field("quality_old_data", pa.bool_()),
+    ],
+    metadata={b"wama.parquet.schema_version": str(PARQUET_SCHEMA_VERSION).encode("ascii")},
 )
 
 
@@ -53,12 +77,18 @@ def write_session_parquet(
     destination: Path,
     rows: Iterable[MeasurementRow],
     requested_mrids: tuple[str, ...],
+    blob_id: str,
+    session_id: str,
     max_rows: int,
     batch_rows: int,
     max_artifact_bytes: int,
 ) -> ArtifactStats:
     """Write sorted rows in batches and calculate immutable artifact evidence."""
 
+    if not blob_id:
+        raise SessionArtifactError("measurement session Parquet requires a blob_id")
+    if not session_id:
+        raise SessionArtifactError("measurement session Parquet requires a session_id")
     coverage = {mrid: 0 for mrid in requested_mrids}
     count = 0
     batch: list[dict[str, object]] = []
@@ -78,7 +108,13 @@ def write_session_parquet(
                 if count > max_rows:
                     raise SessionArtifactError("measurement session exceeds configured maximum row count")
                 coverage[row.mrid] += 1
-                batch.append(row.as_parquet_row())
+                batch.append(
+                    {
+                        "blob_id": blob_id,
+                        "session_id": session_id,
+                        **row.as_parquet_row(),
+                    }
+                )
                 if len(batch) == batch_rows:
                     _write_batch(writer, batch)
                     batch.clear()

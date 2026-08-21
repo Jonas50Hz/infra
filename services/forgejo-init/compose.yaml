@@ -12,11 +12,13 @@ services:
       FORGEJO_APPARENT_POWER_REPOSITORY: "${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
       FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY: "${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
       FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY: "${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
+      FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
       FORGEJO_RUNNER_URL: "${FORGEJO_RUNNER_URL:-http://host.docker.internal:3000/}"
       WAMA_FREQUENCY_SCALE_DEPLOY_ROOT: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
       WAMA_APPARENT_POWER_DEPLOY_ROOT: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
       WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
       WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+      WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
       WAMA_INFRA_NETWORK: "${WAMA_INFRA_NETWORK:-wama-infra}"
     volumes:
       - forgejo-data:/data
@@ -39,6 +41,10 @@ services:
         target: /opt/wama/seeds/processor-lfr-frequency-provision
         read_only: true
       - type: bind
+        source: ../../forgejo-repos/gateway-c37-118-onboarding
+        target: /opt/wama/seeds/gateway-c37-118-onboarding
+        read_only: true
+      - type: bind
         source: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
         target: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
       - type: bind
@@ -50,6 +56,9 @@ services:
       - type: bind
         source: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
         target: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+      - type: bind
+        source: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
+        target: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     entrypoint: ["/bin/sh", "/opt/wama/bootstrap.sh"]

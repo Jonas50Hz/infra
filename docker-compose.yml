@@ -5,13 +5,19 @@ include:
   - ./services/kafka-exporter/compose.yaml
   - ./services/kafka-ui/compose.yaml
   - ./services/pmu-gateway/compose.yaml
+  - ./services/c37-118-simulator/compose.yaml
   - ./services/iec104-exporter/compose.yaml
   - ./services/iec104-receiver/compose.yaml
   - ./services/iec104-browser/compose.yaml
   - ./services/postgres/compose.yaml
+  - ./services/trino-init/compose.yaml
+  - ./services/trino/compose.yaml
+  - ./services/trino-session-writer/compose.yaml
+  - ./services/trino-session-init/compose.yaml
   - ./services/seaweedfs/compose.yaml
   - ./services/measurement-session-processor/compose.yaml
   - ./services/blobmeta-catalog/compose.yaml
+  - ./services/measurement-session-query-indexer/compose.yaml
   - ./services/measurement-session-e2e/compose.yaml
   - ./services/forgejo/compose.yaml
   - ./services/forgejo-init/compose.yaml

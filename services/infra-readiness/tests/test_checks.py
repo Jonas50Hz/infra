@@ -17,6 +17,9 @@ from infra_readiness.checks import (
     validate_grafana_datasource,
     validate_grafana_pmu_dashboard,
     validate_grafana_pmu_query,
+    validate_grafana_session_dashboard,
+    validate_grafana_trino_datasource,
+    validate_grafana_trino_query,
     validate_forgejo_repository,
     validate_forgejo_runners,
     validate_iec104_browser_status,
@@ -177,6 +180,30 @@ class ControlPlaneTests(unittest.TestCase):
                 "PMU Live Measurements",
             )
 
+    def test_accepts_provisioned_grafana_trino_session_views(self) -> None:
+        validate_grafana_trino_datasource(
+            {
+                "uid": "trino",
+                "type": "trino-datasource",
+                "url": "http://trino:8080",
+            }
+        )
+        validate_grafana_session_dashboard(
+            {
+                "meta": {"provisioned": True, "folderTitle": "WAMA Measurements"},
+                "dashboard": {
+                    "uid": "wama-measurement-sessions",
+                    "panels": [
+                        {
+                            "title": title,
+                            "datasource": {"uid": "trino", "type": "trino-datasource"},
+                        }
+                        for title in ("Session Measurements", "Session Evidence", "MRID Coverage")
+                    ],
+                },
+            }
+        )
+
     def test_accepts_unit_safe_grafana_pmu_dashboard(self) -> None:
         validate_grafana_pmu_dashboard(
             {"dashboard": {"panels": self._pmu_dashboard_panels()}}
@@ -242,6 +269,23 @@ class ControlPlaneTests(unittest.TestCase):
             "urn:wama:poc:pmu:bay-01:frequency",
             50.01,
             0.01,
+        )
+
+    def test_accepts_grafana_trino_session_metadata_query_frame(self) -> None:
+        validate_grafana_trino_query(
+            {
+                "results": {
+                    "A": {
+                        "status": 200,
+                        "frames": [
+                            {
+                                "schema": {"fields": [{"name": "Table"}]},
+                                "data": {"values": [["measurement_values"]]},
+                            }
+                        ],
+                    }
+                }
+            }
         )
 
     def test_rejects_grafana_druid_pmu_query_with_wrong_value(self) -> None:
@@ -350,17 +394,17 @@ class ControlPlaneTests(unittest.TestCase):
                 "live_measurements",
             )
 
-    def test_accepts_private_seeded_processor_repository(self) -> None:
+    def test_accepts_private_seeded_managed_repository(self) -> None:
         validate_forgejo_repository(
             {
                 "private": True,
                 "empty": False,
                 "default_branch": "main",
             },
-            "processor-frequency-scale",
+            "gateway-c37-118-onboarding",
         )
 
-    def test_rejects_unseeded_processor_repository(self) -> None:
+    def test_rejects_unseeded_managed_repository(self) -> None:
         with self.assertRaisesRegex(ReadinessError, "private and seeded"):
             validate_forgejo_repository(
                 {

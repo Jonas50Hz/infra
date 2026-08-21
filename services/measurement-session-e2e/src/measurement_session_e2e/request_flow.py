@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -17,13 +18,13 @@ from google.protobuf.message import DecodeError
 from google.protobuf.timestamp_pb2 import Timestamp
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError
-import psycopg
 import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
 
 from measurement_session_common.contract import (
     DEFAULT_SESSION_BUCKET,
+    SESSION_PARQUET_SCHEMA_VERSION,
     ContractValidationError,
     validate_blobmeta,
     validate_kafka_key,
@@ -43,13 +44,13 @@ class Settings:
 
     blobmeta_topic: str
     complete_session_id: str
-    druid_datasource: str
-    druid_router_url: str
+    grafana_password: str
+    grafana_url: str
+    grafana_username: str
     kafka_bootstrap_servers: str
     kafka_consume_timeout_seconds: int
     missing_mrid: str
     partial_session_id: str
-    postgres_dsn: str
     s3_access_key_id: str
     s3_bucket: str
     s3_endpoint_url: str
@@ -58,6 +59,15 @@ class Settings:
     session_topic: str
     test_mrid: str
     timeout_seconds: int
+    trino_druid_catalog: str
+    trino_druid_schema: str
+    trino_druid_table: str
+    trino_blobmeta_catalog: str
+    trino_blobmeta_schema: str
+    trino_query_index_schema: str
+    trino_query_index_table: str
+    trino_url: str
+    trino_user: str
 
     @classmethod
     def from_environment(cls, environment: dict[str, str] | None = None) -> "Settings":
@@ -74,8 +84,9 @@ class Settings:
         return cls(
             blobmeta_topic=_required(values, "BLOBMETA_TOPIC", "Blobmeta"),
             complete_session_id=complete_session_id,
-            druid_datasource=_identifier(values, "DRUID_DATASOURCE", "live_measurements"),
-            druid_router_url=_url(values, "DRUID_ROUTER_URL", "http://druid:8888"),
+            grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
+            grafana_url=_url(values, "GRAFANA_URL", "http://grafana:3000"),
+            grafana_username=_required(values, "GF_SECURITY_ADMIN_USER", "wama-admin"),
             kafka_bootstrap_servers=_required(values, "KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
             kafka_consume_timeout_seconds=_positive_integer(
                 values,
@@ -88,11 +99,6 @@ class Settings:
                 "urn:wama:poc:missing",
             ),
             partial_session_id=partial_session_id,
-            postgres_dsn=_required(
-                values,
-                "POSTGRES_DSN",
-                "postgresql://wama:wama-postgres-password@postgres:5432/wama",
-            ),
             s3_access_key_id=_required(values, "S3_ACCESS_KEY_ID", "wama-s3-admin"),
             s3_bucket=bucket,
             s3_endpoint_url=_url(values, "S3_ENDPOINT_URL", "http://seaweedfs:8333"),
@@ -109,6 +115,35 @@ class Settings:
                 "urn:wama:poc:pmu:bay-01:frequency",
             ),
             timeout_seconds=_positive_integer(values, "TIMEOUT_SECONDS", 60),
+            trino_druid_catalog=_identifier(values, "TRINO_DRUID_CATALOG", "druid"),
+            trino_druid_schema=_identifier(values, "TRINO_DRUID_SCHEMA", "druid"),
+            trino_druid_table=_identifier(
+                values,
+                "TRINO_DRUID_TABLE",
+                "live_measurements",
+            ),
+            trino_blobmeta_catalog=_identifier(
+                values,
+                "TRINO_BLOBMETA_CATALOG",
+                "blobmeta",
+            ),
+            trino_blobmeta_schema=_identifier(
+                values,
+                "TRINO_BLOBMETA_SCHEMA",
+                "blobmeta_catalog",
+            ),
+            trino_query_index_schema=_identifier(
+                values,
+                "TRINO_QUERY_INDEX_SCHEMA",
+                "session_query_index",
+            ),
+            trino_query_index_table=_identifier(
+                values,
+                "TRINO_QUERY_INDEX_TABLE",
+                "registrations",
+            ),
+            trino_url=_url(values, "TRINO_URL", "http://trino:8080"),
+            trino_user=_required(values, "TRINO_USER", "measurement-session-e2e"),
         )
 
 
@@ -142,12 +177,12 @@ def main() -> None:
             raise RequestFlowError("Partial request did not produce PARTIAL Blobmeta")
         wait_for_catalog(settings, (complete, partial))
         verify_artifacts(settings, (complete, partial))
+        wait_for_query_index(settings, (complete, partial))
     except (
         ContractValidationError,
         DecodeError,
         KafkaError,
         OSError,
-        psycopg.Error,
         RequestFlowError,
         ValueError,
         requests.RequestException,
@@ -181,27 +216,20 @@ def build_request(
 
 
 def latest_measurement_timestamp(settings: Settings) -> datetime:
-    """Find one Druid-visible value to ensure the complete request has data."""
+    """Find one Trino-visible Druid value to ensure the complete request has data."""
 
     escaped_mrid = settings.test_mrid.replace("'", "''")
-    response = requests.post(
-        f"{settings.druid_router_url}/druid/v2/sql",
-        json={
-            "query": (
-                'SELECT "__time" FROM '
-                f'"{settings.druid_datasource}" '
-                f"WHERE \"mrid\" = '{escaped_mrid}' "
-                'ORDER BY "__time" DESC LIMIT 1'
-            ),
-            "resultFormat": "object",
-        },
-        timeout=10,
+    rows = _execute_trino(
+        settings,
+        'SELECT CAST("__time" AS VARCHAR) '
+        f"FROM {settings.trino_druid_catalog}.{settings.trino_druid_schema}."
+        f"{settings.trino_druid_table} "
+        f"WHERE mrid = '{escaped_mrid}' "
+        'ORDER BY "__time" DESC LIMIT 1',
     )
-    response.raise_for_status()
-    payload = response.json()
-    if not isinstance(payload, list) or not payload or not isinstance(payload[0], dict):
-        raise RequestFlowError("Druid has no queryable test measurement")
-    return _parse_timestamp(payload[0].get("__time"), "Druid measurement timestamp")
+    if len(rows) != 1 or len(rows[0]) != 1:
+        raise RequestFlowError("Trino Druid catalog has no queryable test measurement")
+    return _parse_timestamp(rows[0][0], "Trino Druid measurement timestamp")
 
 
 def publish_and_consume(
@@ -274,39 +302,21 @@ def validate_blobmeta_record(record: Any) -> Blobmeta:
 
 
 def wait_for_catalog(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
-    """Require every Kafka result to reach its metadata-only PostgreSQL projection."""
+    """Require every Kafka result to reach its metadata projection through Trino."""
 
     expected = {result.blob_id: result for result in results}
     deadline = _deadline(settings.timeout_seconds)
     while not _expired(deadline):
         try:
-            with psycopg.connect(settings.postgres_dsn, connect_timeout=5) as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute(
-                        """
-                        SELECT blob_id, status, measurement_count
-                        FROM blobmeta_catalog.session_blobs
-                        WHERE blob_id = ANY(%s);
-                        """,
-                        (list(expected),),
-                    )
-                    rows = {
-                        str(blob_id): (str(status), int(count))
-                        for blob_id, status, count in cursor.fetchall()
-                    }
-                    if len(rows) == len(expected) and all(
-                        rows[blob_id] == (
-                            Blobmeta.Status.Name(result.status),
-                            result.measurement_count,
-                        )
-                        for blob_id, result in expected.items()
-                    ):
-                        _verify_catalog_coverage(cursor, expected)
-                        return
-        except psycopg.Error:
+            blob_rows = _execute_trino(settings, _blobmeta_rows_query(settings, expected))
+            validate_catalog_rows(_catalog_rows(blob_rows), expected)
+            coverage_rows = _execute_trino(settings, _blobmeta_coverage_query(settings, expected))
+            validate_catalog_coverage(_catalog_coverage(coverage_rows), expected)
+            return
+        except (RequestFlowError, ValueError, requests.RequestException):
             pass
         Event().wait(0.5)
-    raise RequestFlowError("Blobmeta catalog did not materialize before timeout")
+    raise RequestFlowError("Blobmeta catalog did not materialize through Trino before timeout")
 
 
 def verify_artifacts(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
@@ -324,6 +334,8 @@ def verify_artifacts(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
         if not result.HasField("object"):
             raise RequestFlowError("Completed Blobmeta has no Parquet object")
         reference = result.object
+        if reference.parquet_schema_version != SESSION_PARQUET_SCHEMA_VERSION:
+            raise RequestFlowError("Blobmeta has an unsupported Parquet schema version")
         head = client.head_object(Bucket=reference.bucket, Key=reference.object_key)
         response = client.get_object(Bucket=reference.bucket, Key=reference.object_key)
         body = response["Body"]
@@ -338,8 +350,16 @@ def verify_artifacts(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
         ):
             raise RequestFlowError("SeaweedFS object integrity does not match Blobmeta")
         table = pq.read_table(pa.BufferReader(payload))
+        if table.schema.metadata.get(b"wama.parquet.schema_version") != str(
+            SESSION_PARQUET_SCHEMA_VERSION
+        ).encode("ascii"):
+            raise RequestFlowError("Parquet schema version does not match Blobmeta")
         if table.num_rows != result.measurement_count:
             raise RequestFlowError("Parquet row count does not match Blobmeta")
+        if table.column("blob_id").to_pylist() != [result.blob_id] * table.num_rows:
+            raise RequestFlowError("Parquet blob_id values do not match Blobmeta")
+        if table.column("session_id").to_pylist() != [result.session_id] * table.num_rows:
+            raise RequestFlowError("Parquet session_id values do not match Blobmeta")
         expected_coverage = {
             coverage.mrid: coverage.measurement_count
             for coverage in result.mrid_coverage
@@ -352,25 +372,322 @@ def verify_artifacts(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
             raise RequestFlowError("Parquet MRID coverage does not match Blobmeta")
 
 
-def _verify_catalog_coverage(cursor: Any, expected: dict[str, Blobmeta]) -> None:
-    cursor.execute(
-        """
-        SELECT blob_id, mrid, measurement_count
-        FROM blobmeta_catalog.session_blob_mrids
-        WHERE blob_id = ANY(%s);
-        """,
-        (list(expected),),
+def wait_for_query_index(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
+    """Require every canonical artifact to reach the ledger and public Iceberg reader."""
+
+    expected = {
+        result.blob_id: (result.session_id, result.measurement_count)
+        for result in results
+    }
+    deadline = _deadline(settings.timeout_seconds)
+    while not _expired(deadline):
+        try:
+            _verify_query_ledger(settings, results)
+            query_rows = _query_indexed_rows(settings, expected)
+            validate_query_index_rows(query_rows, expected)
+            _verify_grafana_session_query(settings, results[0])
+            return
+        except (RequestFlowError, ValueError, requests.RequestException):
+            Event().wait(0.5)
+    raise RequestFlowError("MeasurementSession artifacts did not reach the query index")
+
+
+def validate_query_index_rows(
+    actual: dict[str, tuple[str, int]],
+    expected: dict[str, tuple[str, int]],
+) -> None:
+    """Require public Iceberg rows to preserve Blobmeta identity and count evidence."""
+
+    if actual != expected:
+        raise RequestFlowError("Iceberg query rows do not match Blobmeta evidence")
+
+
+def _verify_query_ledger(settings: Settings, results: tuple[Blobmeta, ...]) -> None:
+    expected = {
+        result.blob_id: (
+            result.session_id,
+            f"s3://{result.object.bucket}/{result.object.object_key}",
+            bytes(result.object.sha256).hex(),
+            result.object.byte_length,
+            result.measurement_count,
+        )
+        for result in results
+    }
+    rows = _execute_trino(settings, _query_index_ledger_query(settings, expected))
+    validate_query_ledger_rows(_query_ledger_rows(rows), expected)
+
+
+def _query_indexed_rows(
+    settings: Settings,
+    expected: dict[str, tuple[str, int]],
+) -> dict[str, tuple[str, int]]:
+    blob_ids = ", ".join(_sql_literal(blob_id) for blob_id in expected)
+    rows = _execute_trino(
+        settings,
+        "SELECT blob_id, session_id, count(*) "
+        "FROM sessions.wama.measurement_values "
+        f"WHERE blob_id IN ({blob_ids}) "
+        "GROUP BY blob_id, session_id",
     )
-    actual: dict[str, dict[str, int]] = {}
-    for blob_id, mrid, count in cursor.fetchall():
-        actual.setdefault(str(blob_id), {})[str(mrid)] = int(count)
-    for blob_id, result in expected.items():
-        expected_coverage = {
+    actual: dict[str, tuple[str, int]] = {}
+    for row in rows:
+        if (
+            len(row) != 3
+            or not isinstance(row[0], str)
+            or not isinstance(row[1], str)
+            or isinstance(row[2], bool)
+            or not isinstance(row[2], int)
+        ):
+            raise RequestFlowError("Iceberg query returned an invalid row")
+        actual[row[0]] = (row[1], row[2])
+    return actual
+
+
+def validate_catalog_rows(
+    actual: dict[str, tuple[str, int, int]],
+    expected: dict[str, Blobmeta],
+) -> None:
+    """Require Trino Blobmeta rows to preserve immutable result evidence."""
+
+    expected_rows = {
+        blob_id: (
+            Blobmeta.Status.Name(result.status),
+            result.measurement_count,
+            result.object.parquet_schema_version,
+        )
+        for blob_id, result in expected.items()
+    }
+    if actual != expected_rows:
+        raise RequestFlowError("Trino Blobmeta rows do not match immutable evidence")
+
+
+def validate_catalog_coverage(
+    actual: dict[str, dict[str, int]],
+    expected: dict[str, Blobmeta],
+) -> None:
+    """Require Trino Blobmeta coverage rows to preserve all MRID counts."""
+
+    expected_coverage = {
+        blob_id: {
             coverage.mrid: coverage.measurement_count
             for coverage in result.mrid_coverage
         }
-        if actual.get(blob_id, {}) != expected_coverage:
-            raise RequestFlowError("PostgreSQL MRID coverage does not match Blobmeta")
+        for blob_id, result in expected.items()
+    }
+    if actual != expected_coverage:
+        raise RequestFlowError("Trino Blobmeta MRID coverage does not match immutable evidence")
+
+
+def validate_query_ledger_rows(
+    actual: dict[str, tuple[str, str, str, int, int]],
+    expected: dict[str, tuple[str, str, str, int, int]],
+) -> None:
+    """Require Trino query-index ledger rows to preserve Blobmeta identity."""
+
+    if actual != expected:
+        raise RequestFlowError("Trino query index ledger does not match Blobmeta evidence")
+
+
+def _blobmeta_rows_query(settings: Settings, expected: dict[str, Blobmeta]) -> str:
+    blob_ids = _sql_literals(expected)
+    return (
+        "SELECT blob_id, status, measurement_count, object_parquet_schema_version "
+        f"FROM {settings.trino_blobmeta_catalog}.{settings.trino_blobmeta_schema}.session_blobs "
+        f"WHERE blob_id IN ({blob_ids})"
+    )
+
+
+def _blobmeta_coverage_query(settings: Settings, expected: dict[str, Blobmeta]) -> str:
+    blob_ids = _sql_literals(expected)
+    return (
+        "SELECT blob_id, mrid, measurement_count "
+        f"FROM {settings.trino_blobmeta_catalog}.{settings.trino_blobmeta_schema}.session_blob_mrids "
+        f"WHERE blob_id IN ({blob_ids})"
+    )
+
+
+def _query_index_ledger_query(
+    settings: Settings,
+    expected: dict[str, tuple[str, str, str, int, int]],
+) -> str:
+    blob_ids = _sql_literals(expected)
+    return (
+        "SELECT blob_id, CAST(session_id AS VARCHAR), object_uri, to_hex(object_sha256), "
+        "object_byte_length, measurement_count "
+        f"FROM {settings.trino_blobmeta_catalog}.{settings.trino_query_index_schema}."
+        f"{settings.trino_query_index_table} "
+        f"WHERE blob_id IN ({blob_ids})"
+    )
+
+
+def _catalog_rows(rows: list[tuple[Any, ...]]) -> dict[str, tuple[str, int, int]]:
+    actual: dict[str, tuple[str, int, int]] = {}
+    for row in rows:
+        if (
+            len(row) != 4
+            or not isinstance(row[0], str)
+            or not isinstance(row[1], str)
+            or isinstance(row[2], bool)
+            or not isinstance(row[2], int)
+            or isinstance(row[3], bool)
+            or not isinstance(row[3], int)
+            or row[0] in actual
+        ):
+            raise RequestFlowError("Trino Blobmeta rows have an invalid shape")
+        actual[row[0]] = (row[1], row[2], row[3])
+    return actual
+
+
+def _catalog_coverage(rows: list[tuple[Any, ...]]) -> dict[str, dict[str, int]]:
+    actual: dict[str, dict[str, int]] = {}
+    for row in rows:
+        if (
+            len(row) != 3
+            or not isinstance(row[0], str)
+            or not isinstance(row[1], str)
+            or isinstance(row[2], bool)
+            or not isinstance(row[2], int)
+            or row[1] in actual.get(row[0], {})
+        ):
+            raise RequestFlowError("Trino Blobmeta coverage rows have an invalid shape")
+        actual.setdefault(row[0], {})[row[1]] = row[2]
+    return actual
+
+
+def _query_ledger_rows(rows: list[tuple[Any, ...]]) -> dict[str, tuple[str, str, str, int, int]]:
+    actual: dict[str, tuple[str, str, str, int, int]] = {}
+    for row in rows:
+        if (
+            len(row) != 6
+            or not all(isinstance(value, str) for value in row[:4])
+            or isinstance(row[4], bool)
+            or not isinstance(row[4], int)
+            or isinstance(row[5], bool)
+            or not isinstance(row[5], int)
+            or row[0] in actual
+        ):
+            raise RequestFlowError("Trino query index ledger rows have an invalid shape")
+        actual[row[0]] = (row[1], row[2], row[3].lower(), row[4], row[5])
+    return actual
+
+
+def _execute_trino(settings: Settings, statement: str) -> list[tuple[Any, ...]]:
+    response = requests.post(
+        f"{settings.trino_url}/v1/statement",
+        data=statement,
+        headers={"X-Trino-User": settings.trino_user},
+        timeout=10,
+    )
+    response.raise_for_status()
+    payload: Any = response.json()
+    rows: list[tuple[Any, ...]] = []
+    for _ in range(100):
+        if not isinstance(payload, Mapping):
+            raise RequestFlowError("Trino statement response is not an object")
+        error = payload.get("error")
+        if error is not None:
+            raise RequestFlowError(f"Trino statement failed: {error}")
+        values = payload.get("data")
+        if values is not None:
+            if not isinstance(values, list) or any(not isinstance(row, list) for row in values):
+                raise RequestFlowError("Trino statement response has invalid rows")
+            rows.extend(tuple(row) for row in values)
+        next_uri = payload.get("nextUri")
+        if next_uri is None:
+            return rows
+        if not isinstance(next_uri, str) or not next_uri.startswith(("http://", "https://")):
+            raise RequestFlowError("Trino statement response has an invalid nextUri")
+        response = requests.get(next_uri, headers={"X-Trino-User": settings.trino_user}, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+    raise RequestFlowError("Trino statement exceeded the supported result page limit")
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _sql_literals(values: Mapping[str, object]) -> str:
+    return ", ".join(_sql_literal(value) for value in values)
+
+
+def _verify_grafana_session_query(settings: Settings, result: Blobmeta) -> None:
+    response = requests.post(
+        f"{settings.grafana_url}/api/ds/query",
+        json={
+            "from": "now-24h",
+            "to": "now",
+            "queries": [
+                {
+                    "refId": "A",
+                    "datasource": {"uid": "trino", "type": "trino-datasource"},
+                    "rawSQL": (
+                        "SELECT timestamp_mccs AS time, double_value AS value, mrid AS metric "
+                        "FROM sessions.wama.measurement_values "
+                        f"WHERE blob_id = {_sql_literal(result.blob_id)} "
+                        "AND double_value IS NOT NULL "
+                        "AND $__timeFilter(timestamp_mccs) ORDER BY time ASC"
+                    ),
+                    "format": 0,
+                    "intervalMs": 1_000,
+                    "maxDataPoints": 1_000,
+                }
+            ],
+        },
+        auth=(settings.grafana_username, settings.grafana_password),
+        timeout=15,
+    )
+    response.raise_for_status()
+    validate_grafana_session_query(response.json())
+
+
+def validate_grafana_session_query(payload: Any) -> None:
+    """Require Grafana's Trino datasource to return one selected session frame."""
+
+    if not isinstance(payload, Mapping):
+        raise RequestFlowError("Grafana session query did not return an object")
+    results = payload.get("results")
+    if not isinstance(results, Mapping):
+        raise RequestFlowError("Grafana session query has no results")
+    result = results.get("A")
+    if not isinstance(result, Mapping) or result.get("status") != 200:
+        raise RequestFlowError("Grafana session query did not succeed")
+    frames = result.get("frames")
+    if not isinstance(frames, list) or not frames or not isinstance(frames[0], Mapping):
+        raise RequestFlowError("Grafana session query returned no data frames")
+    frame = frames[0]
+    schema = frame.get("schema")
+    data = frame.get("data")
+    if not isinstance(schema, Mapping) or not isinstance(data, Mapping):
+        raise RequestFlowError("Grafana session query frame is invalid")
+    fields = schema.get("fields")
+    values = data.get("values")
+    if not isinstance(fields, list) or not isinstance(values, list) or len(fields) != len(values):
+        raise RequestFlowError("Grafana session query frame has invalid fields")
+    field_names = [field.get("name") if isinstance(field, Mapping) else None for field in fields]
+    try:
+        time_index = field_names.index("time")
+        value_index = field_names.index("value")
+    except ValueError as error:
+        raise RequestFlowError("Grafana session query frame is missing required columns") from error
+    time_values = values[time_index]
+    measurement_values = values[value_index]
+    if (
+        not isinstance(time_values, list)
+        or not isinstance(measurement_values, list)
+        or not time_values
+        or len(time_values) != len(measurement_values)
+    ):
+        raise RequestFlowError("Grafana session query frame has no aligned values")
+    if "metric" in field_names:
+        metric_values = values[field_names.index("metric")]
+        if not isinstance(metric_values, list) or len(metric_values) != len(time_values):
+            raise RequestFlowError("Grafana session query frame has invalid metric values")
+        return
+    value_field = fields[value_index]
+    labels = value_field.get("labels") if isinstance(value_field, Mapping) else None
+    if not isinstance(labels, Mapping) or not isinstance(labels.get("metric"), str):
+        raise RequestFlowError("Grafana session query frame has no metric label")
 
 
 def _normalized_parquet_coverage(
@@ -441,7 +758,7 @@ def _parse_timestamp(value: Any, location: str) -> datetime:
     except ValueError as error:
         raise RequestFlowError(f"{location} is malformed") from error
     if parsed.tzinfo is None:
-        raise RequestFlowError(f"{location} has no timezone")
+        return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
 
 

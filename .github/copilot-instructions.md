@@ -32,6 +32,13 @@ This is NOT the production target (production is Kubernetes-based).
   `docker compose up -d` or Watchtower on new application image tags. Forgejo
   must never deploy, modify, or trigger deployment of the root infrastructure
   Compose project.
+- `gateway-c37-118-onboarding` is the one declared gateway-deployment test.
+  Its scope is one-shot publication of raw-Protobuf `Masterdata` from reviewed
+  legacy C37.118 version-2 PMU catalog files plus source-scoped adapters
+  rendered by its guarded, marker-owned deployment root. It may start, recreate,
+  or remove only a `c37-118-gateway-<source-id>` derived from the approved
+  catalog; a tombstone may remove only its matching previously managed adapter.
+  It must not control the root `pmu-gateway`, simulator, or any other gateway.
 - The root `docker-compose.yml` runs and deploys infrastructure services. The
   current `pmu-gateway`, all infrastructure gateways, and every asset outside
   the explicit Forgejo deployment scope belong in this repository, never in an
@@ -54,6 +61,10 @@ This is NOT the production target (production is Kubernetes-based).
   the root README, and these instructions in the same change.
 - The current Phase 1 source gateway is `pmu-gateway`; it publishes configured
   fake PMU scalar measurements as raw `MCCSMeasurementValue` Protobuf records.
+- `c37-118-simulator` owns `services/c37-118-simulator/`. It is an opt-in,
+  root-owned standalone C37.118 TCP source simulator with no Kafka, Common
+  Format, gateway, or Forgejo dependency. Its large fleet checks stay manually
+  armed and isolated from `wama-infra`.
 - Druid owns `services/druid/` and persists its single-server state in
   `druid-data`; `druid-init` owns `services/druid-init/` and must idempotently
   initialize the raw-Protobuf `LiveMeasurement` supervisor. Druid's Router is
@@ -67,13 +78,24 @@ This is NOT the production target (production is Kubernetes-based).
   records. `blobmeta-catalog` may create only its immutable `blobmeta_catalog`
   schema; Kafka remains the source of truth. A future Kafka Connect mirror of
   `Masterdata` and `Schema` remains separate.
+- Trino owns `services/trino/`, internal-only
+  `services/trino-session-writer/`, and one-shot `services/trino-init/` plus
+  `services/trino-session-init/`.
+  The host-exposed coordinator is a root-owned, read-only trusted-PoC
+  federation service over Druid, the PostgreSQL Blobmeta projection, and
+  registered immutable session Parquet artifacts in SeaweedFS. The writer has
+  no host mapping and is reserved for root-owned verified Iceberg registration;
+  neither service may modify canonical session artifacts.
 - SeaweedFS owns `services/seaweedfs/` and provides the PoC's authenticated
   S3-compatible raw/waveform and long-term measurement-session storage.
 - Measurement-session services own `services/measurement-session-processor/`,
-  `services/blobmeta-catalog/`, and `services/measurement-session-e2e/`. They
-  are root-owned, not Forgejo deployment targets. The processor alone accesses
-  Druid and SeaweedFS to create Parquet artifacts; the catalog holds no S3
-  credentials and projects only Blobmeta metadata to PostgreSQL.
+  `services/blobmeta-catalog/`, `services/measurement-session-query-indexer/`,
+  and `services/measurement-session-e2e/`. They are root-owned, not Forgejo
+  deployment targets. The processor accesses Druid and SeaweedFS to create
+  Parquet artifacts; the catalog holds no S3 credentials and projects only
+  Blobmeta metadata to PostgreSQL. The query indexer verifies canonical
+  artifacts and registers their exact Parquet object URI through the
+  internal-only Trino writer; it owns only mutable query-registration state.
 - IEC 104 services own `services/iec104-exporter/`,
   `services/iec104-receiver/`, and `services/iec104-browser/`. The exporter is
   a root-owned one-way controlled station that consumes typed raw-Protobuf
@@ -92,9 +114,10 @@ This is NOT the production target (production is Kubernetes-based).
 - This repository is never pushed to Forgejo. Each tracked seed at
   `forgejo-repos/processor-*/` is an independent Forgejo-pushable processor
   repository. It owns one internal `processor-*` service, its workflow, code,
-  app Compose fragment, and deployment script. A repository may contain a
-  gateway only for an explicitly declared gateway-deployment test. All other
-  assets remain in this repository. Every processor seed connects to
+  app Compose fragment, and deployment script. The independent
+  `forgejo-repos/gateway-c37-118-onboarding/` seed owns the explicit C37.118
+  Masterdata publication and catalog-derived legacy-v2 adapter test only. All
+  other assets remain in this repository. Every managed seed connects to
   infrastructure only through the external `wama-infra` Docker network.
 - Infrastructure monitoring services own `services/victoria-metrics/`,
   `services/node-exporter/`, `services/cadvisor/`, `services/kafka-exporter/`,

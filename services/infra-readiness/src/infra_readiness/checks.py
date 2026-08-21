@@ -22,6 +22,7 @@ import requests
 from infra_readiness.config import Settings
 from infra_readiness.druid import DruidReadinessError, check_druid
 from infra_readiness.generated import rtd_schema_pb2
+from infra_readiness.trino import TrinoReadinessError, check_trino
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,8 +51,12 @@ GRAFANA_VICTORIA_METRICS_DATASOURCE_TYPE = "prometheus"
 GRAFANA_DRUID_DATASOURCE_UID = "druid"
 GRAFANA_DRUID_DATASOURCE_TYPE = "grafadruid-druid-datasource"
 GRAFANA_DRUID_DATASOURCE_URL = "http://druid:8888"
+GRAFANA_TRINO_DATASOURCE_UID = "trino"
+GRAFANA_TRINO_DATASOURCE_TYPE = "trino-datasource"
+GRAFANA_TRINO_DATASOURCE_URL = "http://trino:8080"
 GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID = "wama-kafka-operations"
 GRAFANA_PMU_MEASUREMENTS_DASHBOARD_UID = "wama-pmu-live-measurements"
+GRAFANA_SESSION_MEASUREMENTS_DASHBOARD_UID = "wama-measurement-sessions"
 
 
 class ReadinessError(RuntimeError):
@@ -68,6 +73,10 @@ def check_all(settings: Settings) -> None:
     except DruidReadinessError as error:
         raise ReadinessError(str(error)) from error
     check_postgres(settings)
+    try:
+        check_trino(settings)
+    except TrinoReadinessError as error:
+        raise ReadinessError(str(error)) from error
     check_s3(settings)
     check_forgejo(settings)
     check_kafka_ui(settings)
@@ -327,25 +336,25 @@ def _check_s3_bucket(client: Any, bucket: str, payload: bytes) -> None:
 
 
 def check_forgejo(settings: Settings) -> None:
-    """Verify Forgejo, its private processor repositories, and their runners."""
+    """Verify Forgejo, its private managed repositories, and their runners."""
 
     session = requests.Session()
     try:
         _request_json(session, "Forgejo health", _url(settings.forgejo_url, "/api/healthz"))
         encoded_owner = quote(settings.forgejo_admin_username, safe="")
         auth = (settings.forgejo_admin_username, settings.forgejo_admin_password)
-        for repository_name in settings.forgejo_processor_repositories:
+        for repository_name in settings.forgejo_managed_repositories:
             encoded_repository = quote(repository_name, safe="")
             repository = _request_json(
                 session,
-                f"Forgejo processor repository {repository_name}",
+                f"Forgejo managed repository {repository_name}",
                 _url(settings.forgejo_url, f"/api/v1/repos/{encoded_owner}/{encoded_repository}"),
                 auth=auth,
             )
             validate_forgejo_repository(repository, repository_name)
             runners = _request_json(
                 session,
-                f"Forgejo processor runners {repository_name}",
+                f"Forgejo managed repository runners {repository_name}",
                 _url(
                     settings.forgejo_url,
                     f"/api/v1/repos/{encoded_owner}/{encoded_repository}/actions/runners",
@@ -358,7 +367,7 @@ def check_forgejo(settings: Settings) -> None:
 
 
 def validate_forgejo_repository(payload: Any, repository_name: str) -> None:
-    """Require one processor repository to be private and seeded on main."""
+    """Require one managed repository to be private and seeded on main."""
 
     if (
         not isinstance(payload, Mapping)
@@ -367,7 +376,7 @@ def validate_forgejo_repository(payload: Any, repository_name: str) -> None:
         or payload.get("default_branch") != "main"
     ):
         raise ReadinessError(
-            f"Forgejo processor repository {repository_name!r} must be private and seeded on main"
+            f"Forgejo managed repository {repository_name!r} must be private and seeded on main"
         )
 
 
@@ -472,7 +481,7 @@ def validate_iec104_browser_status(payload: Any) -> None:
 
 
 def check_grafana(settings: Settings) -> None:
-    """Require Grafana health plus provisioned infrastructure and PMU views."""
+    """Require Grafana health plus provisioned infrastructure and measurement views."""
 
     session = requests.Session()
     auth = (settings.grafana_username, settings.grafana_password)
@@ -493,6 +502,12 @@ def check_grafana(settings: Settings) -> None:
             _url(settings.grafana_url, f"/api/datasources/uid/{GRAFANA_DRUID_DATASOURCE_UID}"),
             auth=auth,
         )
+        trino_datasource = _request_json(
+            session,
+            "Grafana Trino datasource",
+            _url(settings.grafana_url, f"/api/datasources/uid/{GRAFANA_TRINO_DATASOURCE_UID}"),
+            auth=auth,
+        )
         dashboard = _request_json(
             session,
             "Grafana Kafka Operations dashboard",
@@ -511,11 +526,27 @@ def check_grafana(settings: Settings) -> None:
             ),
             auth=auth,
         )
+        session_dashboard = _request_json(
+            session,
+            "Grafana Measurement Sessions dashboard",
+            _url(
+                settings.grafana_url,
+                f"/api/dashboards/uid/{GRAFANA_SESSION_MEASUREMENTS_DASHBOARD_UID}",
+            ),
+            auth=auth,
+        )
         pmu_query = _post_json(
             session,
             "Grafana Druid PMU query",
             _url(settings.grafana_url, "/api/ds/query"),
             _grafana_pmu_query(settings),
+            auth=auth,
+        )
+        trino_query = _post_json(
+            session,
+            "Grafana Trino session metadata query",
+            _url(settings.grafana_url, "/api/ds/query"),
+            _grafana_trino_query(),
             auth=auth,
         )
     finally:
@@ -528,6 +559,7 @@ def check_grafana(settings: Settings) -> None:
         "VictoriaMetrics",
     )
     validate_grafana_druid_datasource(druid_datasource)
+    validate_grafana_trino_datasource(trino_datasource)
     validate_grafana_dashboard(
         dashboard,
         GRAFANA_KAFKA_OPERATIONS_DASHBOARD_UID,
@@ -541,12 +573,14 @@ def check_grafana(settings: Settings) -> None:
         "PMU Live Measurements",
     )
     validate_grafana_pmu_dashboard(pmu_dashboard)
+    validate_grafana_session_dashboard(session_dashboard)
     validate_grafana_pmu_query(
         pmu_query,
         settings.druid_expected_mrid,
         settings.druid_expected_double_value,
         settings.druid_expected_double_value_tolerance,
     )
+    validate_grafana_trino_query(trino_query)
 
 
 def validate_grafana_druid_datasource(payload: Any) -> None:
@@ -561,6 +595,50 @@ def validate_grafana_druid_datasource(payload: Any) -> None:
     json_data = payload.get("jsonData")
     if not isinstance(json_data, Mapping) or json_data.get("connection.url") != GRAFANA_DRUID_DATASOURCE_URL:
         raise ReadinessError("Grafana Druid datasource does not use the internal Router URL")
+
+
+def validate_grafana_trino_datasource(payload: Any) -> None:
+    """Require the Trino plugin datasource to use the public read-only coordinator."""
+
+    validate_grafana_datasource(
+        payload,
+        GRAFANA_TRINO_DATASOURCE_UID,
+        GRAFANA_TRINO_DATASOURCE_TYPE,
+        "Trino",
+    )
+    if payload.get("url") != GRAFANA_TRINO_DATASOURCE_URL:
+        raise ReadinessError("Grafana Trino datasource does not use the internal coordinator URL")
+
+
+def validate_grafana_session_dashboard(payload: Any) -> None:
+    """Require the provisioned selected-session dashboard to use Trino panels."""
+
+    validate_grafana_dashboard(
+        payload,
+        GRAFANA_SESSION_MEASUREMENTS_DASHBOARD_UID,
+        "WAMA Measurements",
+        "Measurement Sessions",
+    )
+    dashboard = payload.get("dashboard")
+    panels = dashboard.get("panels") if isinstance(dashboard, Mapping) else None
+    if not isinstance(panels, list):
+        raise ReadinessError("Grafana Measurement Sessions dashboard has no panels")
+    expected_titles = {"Session Measurements", "Session Evidence", "MRID Coverage"}
+    matching = {
+        panel.get("title"): panel
+        for panel in panels
+        if isinstance(panel, Mapping) and panel.get("title") in expected_titles
+    }
+    if set(matching) != expected_titles:
+        raise ReadinessError("Grafana Measurement Sessions dashboard is missing required panels")
+    for title, panel in matching.items():
+        datasource = panel.get("datasource")
+        if (
+            not isinstance(datasource, Mapping)
+            or datasource.get("uid") != GRAFANA_TRINO_DATASOURCE_UID
+            or datasource.get("type") != GRAFANA_TRINO_DATASOURCE_TYPE
+        ):
+            raise ReadinessError(f"Grafana Measurement Sessions panel {title!r} does not use Trino")
 
 
 def _grafana_pmu_query(settings: Settings) -> dict[str, Any]:
@@ -590,6 +668,26 @@ def _grafana_pmu_query(settings: Settings) -> dict[str, Any]:
                     "contextParameters": [],
                     "format": "long",
                 },
+                "intervalMs": 1_000,
+                "maxDataPoints": 1_000,
+            }
+        ],
+    }
+
+
+def _grafana_trino_query() -> dict[str, Any]:
+    return {
+        "from": "now-1h",
+        "to": "now",
+        "queries": [
+            {
+                "refId": "A",
+                "datasource": {
+                    "uid": GRAFANA_TRINO_DATASOURCE_UID,
+                    "type": GRAFANA_TRINO_DATASOURCE_TYPE,
+                },
+                "rawSQL": "SHOW TABLES FROM sessions.wama",
+                "format": 1,
                 "intervalMs": 1_000,
                 "maxDataPoints": 1_000,
             }
@@ -660,6 +758,39 @@ def validate_grafana_pmu_query(
             return
         raise ReadinessError("Grafana Druid PMU double_value is outside the expected range")
     raise ReadinessError("Grafana Druid PMU frame did not return the expected MRID")
+
+
+def validate_grafana_trino_query(payload: Any) -> None:
+    """Require Grafana's Trino datasource to expose the initialized session table."""
+
+    if not isinstance(payload, Mapping):
+        raise ReadinessError("Grafana Trino query did not return an object")
+    results = payload.get("results")
+    if not isinstance(results, Mapping):
+        raise ReadinessError("Grafana Trino query has no results")
+    result = results.get("A")
+    if not isinstance(result, Mapping) or result.get("status") != 200:
+        raise ReadinessError("Grafana Trino query did not succeed")
+    frames = result.get("frames")
+    if not isinstance(frames, list) or not frames or not isinstance(frames[0], Mapping):
+        raise ReadinessError("Grafana Trino query returned no data frames")
+    frame = frames[0]
+    schema = frame.get("schema")
+    data = frame.get("data")
+    if not isinstance(schema, Mapping) or not isinstance(data, Mapping):
+        raise ReadinessError("Grafana Trino query frame is invalid")
+    fields = schema.get("fields")
+    values = data.get("values")
+    if not isinstance(fields, list) or not isinstance(values, list) or len(fields) != len(values):
+        raise ReadinessError("Grafana Trino query frame has invalid fields")
+    field_names = [field.get("name") if isinstance(field, Mapping) else None for field in fields]
+    try:
+        table_index = field_names.index("Table")
+    except ValueError as error:
+        raise ReadinessError("Grafana Trino query frame is missing the table column") from error
+    table_values = values[table_index]
+    if not isinstance(table_values, list) or "measurement_values" not in table_values:
+        raise ReadinessError("Grafana Trino query did not return measurement_values")
 
 
 def validate_grafana_datasource(

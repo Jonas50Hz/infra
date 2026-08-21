@@ -24,6 +24,12 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      trino-init:
+        condition: service_completed_successfully
+      trino:
+        condition: service_healthy
+      trino-session-init:
+        condition: service_completed_successfully
       seaweedfs:
         condition: service_healthy
       forgejo:
@@ -45,7 +51,7 @@ services:
     environment:
       FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_PROCESSOR_REPOSITORIES: "${FORGEJO_PROCESSOR_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-lfr-frequency-provision}"
+      FORGEJO_MANAGED_REPOSITORIES: "${FORGEJO_MANAGED_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-lfr-frequency-provision,gateway-c37-118-onboarding}"
       FORGEJO_URL: http://forgejo:3000
       DRUID_DATASOURCE: live_measurements
       DRUID_EXPECTED_DOUBLE_VALUE: "${DRUID_EXPECTED_DOUBLE_VALUE:-50.01}"
@@ -65,6 +71,15 @@ services:
       POSTGRES_USER: wama
       READINESS_RETRY_INTERVAL_SECONDS: "${INFRA_READINESS_RETRY_INTERVAL_SECONDS:-2}"
       READINESS_TIMEOUT_SECONDS: "${INFRA_READINESS_TIMEOUT_SECONDS:-180}"
+      TRINO_BLOBMETA_CATALOG: blobmeta
+      TRINO_BLOBMETA_SCHEMA: blobmeta_catalog
+      TRINO_DRUID_CATALOG: druid
+      TRINO_DRUID_SCHEMA: druid
+      TRINO_SESSION_CATALOG: sessions
+      TRINO_SESSION_SCHEMA: wama
+      TRINO_SESSION_TABLE: measurement_values
+      TRINO_URL: http://trino:8080
+      TRINO_USER: wama
       S3_ACCESS_KEY_ID: wama-s3-admin
       S3_BUCKETS: wama-raw,wama-measurement-sessions
       S3_ENDPOINT_URL: http://seaweedfs:8333

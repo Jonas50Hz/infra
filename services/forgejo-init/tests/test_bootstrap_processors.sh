@@ -87,11 +87,13 @@ setup_case() {
     "$case_directory/seeds/processor-frequency-scale" \
     "$case_directory/seeds/processor-apparent-power" \
     "$case_directory/seeds/processor-frequency-iec104-export" \
-    "$case_directory/seeds/processor-lfr-frequency-provision"
+    "$case_directory/seeds/processor-lfr-frequency-provision" \
+    "$case_directory/seeds/gateway-c37-118-onboarding"
   printf '%s\n' frequency > "$case_directory/seeds/processor-frequency-scale/README.md"
   printf '%s\n' apparent > "$case_directory/seeds/processor-apparent-power/README.md"
   printf '%s\n' frequency-iec104-export > "$case_directory/seeds/processor-frequency-iec104-export/README.md"
   printf '%s\n' lfr-frequency-provision > "$case_directory/seeds/processor-lfr-frequency-provision/README.md"
+  printf '%s\n' gateway-c37-118-onboarding > "$case_directory/seeds/gateway-c37-118-onboarding/README.md"
   : > "$case_directory/app.ini"
   : > "$case_directory/git.log"
   : > "$case_directory/wget.log"
@@ -111,6 +113,7 @@ run_bootstrap() {
     WAMA_APPARENT_POWER_DEPLOY_ROOT="$case_directory/apparent-deploy" \
     WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT="$case_directory/frequency-iec104-export-deploy" \
     WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT="$case_directory/lfr-frequency-provision-deploy" \
+    WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT="$case_directory/gateway-c37-118-onboarding-deploy" \
     BOOTSTRAP_TEST_GIT_LOG="$case_directory/git.log" \
     BOOTSTRAP_TEST_WGET_LOG="$case_directory/wget.log" \
     sh "$bootstrap_script"
@@ -134,6 +137,7 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains processor-apparent-power.git "$case_directory/git.log"
   assert_contains processor-frequency-iec104-export.git "$case_directory/git.log"
   assert_contains processor-lfr-frequency-provision.git "$case_directory/git.log"
+  assert_contains gateway-c37-118-onboarding.git "$case_directory/git.log"
   assert_contains wama-processor-frequency-scale-ci: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-frequency-scale-deploy: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-apparent-power-ci: "$case_directory/runner/config.yaml"
@@ -142,11 +146,14 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains wama-processor-frequency-iec104-export-deploy: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-lfr-frequency-provision-ci: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-lfr-frequency-provision-deploy: "$case_directory/runner/config.yaml"
-  assert_contains eight-connections-v4 "$case_directory/runner/forgejo-processor-repositories.layout"
+  assert_contains wama-gateway-c37-118-onboarding-ci: "$case_directory/runner/config.yaml"
+  assert_contains wama-gateway-c37-118-onboarding-deploy: "$case_directory/runner/config.yaml"
+  assert_contains ten-connections-v5 "$case_directory/runner/forgejo-managed-repositories.layout"
   test -f "$case_directory/frequency-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/apparent-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/frequency-iec104-export-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/lfr-frequency-provision-deploy/.wama-forgejo-processor-root"
+  test -f "$case_directory/gateway-c37-118-onboarding-deploy/.wama-forgejo-gateway-onboarding-root"
 }
 
 test_skips_nonempty_repositories() {
@@ -162,6 +169,7 @@ test_skips_nonempty_repositories() {
   assert_contains "processor-apparent-power already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "processor-frequency-iec104-export already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "processor-lfr-frequency-provision already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
+  assert_contains "gateway-c37-118-onboarding already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
 }
 
 test_rejects_unmarked_nonempty_processor_root() {
@@ -203,8 +211,22 @@ test_rejects_unmarked_nonempty_lfr_frequency_provision_root() {
   assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
 }
 
+test_rejects_unmarked_nonempty_gateway_onboarding_root() {
+  setup_case reject-gateway-root
+  mkdir "$case_directory/gateway-c37-118-onboarding-deploy"
+  printf '%s\n' unmanaged > "$case_directory/gateway-c37-118-onboarding-deploy/file"
+  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
+  export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
+  if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
+    printf '%s\n' "Bootstrap accepted an unmarked nonempty gateway-onboarding root" >&2
+    exit 1
+  fi
+  assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
+}
+
 test_seeds_and_registers_all_processor_repositories
 test_skips_nonempty_repositories
 test_rejects_unmarked_nonempty_processor_root
 test_rejects_unmarked_nonempty_frequency_iec104_export_root
 test_rejects_unmarked_nonempty_lfr_frequency_provision_root
+test_rejects_unmarked_nonempty_gateway_onboarding_root

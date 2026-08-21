@@ -21,6 +21,8 @@ show_failure_diagnostics() {
     druid \
     druid-init \
     postgres \
+    trino \
+    trino-init \
     seaweedfs \
     forgejo \
     forgejo-init \

@@ -21,8 +21,8 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 | Time-series store | Druid | Live + historical query on Common Format |
 | Operational observability | Grafana + VictoriaMetrics | Host and container health metrics and dashboards |
 | Raw / waveform store | SeaweedFS | Blob for raw samples, waveforms, and measurement sessions |
-| Config store | PostgreSQL | Root-owned compacted Blobmeta projection; Masterdata/Schema mirror later |
-| Visualisation | Grafana (+ Trino later) | Dashboards; federated query later |
+| Config store | PostgreSQL | Git-authoritative C37.118 Masterdata projected to Kafka now; root-owned Blobmeta projection in PostgreSQL; Masterdata/Schema mirror later |
+| Visualisation | Grafana + Trino | Dashboards and read-only federation |
 | Export | IEC 104 + file export service | Real-time and batch/file export |
 
 ## Architecture at a glance
@@ -30,15 +30,18 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 - **Kafka** is the backbone. Stream topics: `LiveMeasurement`,
   `MeasurementSession`, `Alarm`, `Export`. Compacted topics: `Masterdata`,
   `Schema`, `Blobmeta` (single source of truth).
+- **Masterdata** is a raw-Protobuf source catalog projection keyed by stable
+  source ID. Git holds the reviewed authority; the compacted Kafka topic holds
+  current runtime state and source tombstones.
 - **PostgreSQL** holds the immutable `blobmeta_catalog` projection. Kafka
   remains the source of truth; a future connector may mirror compacted
   `Masterdata` and `Schema` records separately.
 - **Quixstreams** processors read the stream, write derived values back to
   Kafka, and emit their configured records.
 - **Measurement-session services** consume bounded raw-Protobuf requests,
-  query Druid, create immutable Parquet artifacts in SeaweedFS, publish
-  compacted raw-Protobuf `Blobmeta`, and materialize metadata-only PostgreSQL
-  rows.
+  query Druid, create immutable v2 Parquet artifacts in SeaweedFS, publish
+  compacted raw-Protobuf `Blobmeta`, materialize metadata-only PostgreSQL rows,
+  and register verified exact artifact files in Iceberg.
 - **Druid** directly ingests raw-Protobuf `LiveMeasurement` records from Kafka
   for live query through its Router API.
 - **SeaweedFS** holds raw measurements and long-term measurement sessions (off
@@ -46,9 +49,11 @@ path with Forgejo Actions and application-local `docker compose up -d`.
 - **VictoriaMetrics** directly collects host, Docker-container, Kafka
   broker/topic metadata, and monitoring-service telemetry for operational
   health.
-- **Grafana** uses VictoriaMetrics for operational dashboards and its provisioned
-  Druid datasource for live PMU measurement trends; **Trino** remains later for
-  federated query.
+- **Grafana** uses VictoriaMetrics for operational dashboards, Druid for live
+  PMU measurement trends, and read-only Trino for selected immutable
+  measurement-session artifacts. **Trino** federates Druid, PostgreSQL Blobmeta
+  metadata, and the Iceberg session table; its internal writer is not exposed to
+  Grafana or the host.
 - **Export:** root-owned `iec104-exporter` sends supported real-time monitor
   ASDUs from typed `Export` records to one control center. File (xlsx/csv) and
   MQTT export remain later work.
@@ -71,11 +76,13 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
   regardless of protocol. Raw data kept OFF Kafka on a separate path.
 
 ### Git + Forgejo + ArgoCD (target)
-- Git = single source of truth for config, schema, masterdata, processing logic.
+- Git = reviewed authority for config, schema, masterdata, and processing logic.
 - Forgejo Actions run CI: test + containerize.
 - Approved configuration moves through infrastructure Git; ArgoCD watches it
   and auto-deploys to Kubernetes.
-- Onboarding a source is automatic once masterdata is created.
+- The current C37.118 onboarding slice validates Git masterdata, publishes it
+  to Kafka, and reconciles one isolated legacy-v2 TCP adapter per approved
+  source. It remains separate from the root-owned `pmu-gateway` and simulator.
 
 ### Compose PoC delivery
 - The infrastructure repository provisions Forgejo, Kafka, and the external
@@ -90,6 +97,13 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 - Processor pull requests validate only their own code and local tooling. A
   trusted processor `main` push publishes only that processor OCI image and
   deploys only its one Compose service from an isolated deployment root.
+- `forgejo-repos/gateway-c37-118-onboarding/` is the one explicitly declared
+  gateway-deployment-test repository. Its one-shot `masterdata-publisher`
+  validates C37.118 PMU catalog files and reconciles raw-Protobuf `Masterdata`
+  records over the external `wama-infra` network. Its guarded deployment helper
+  then renders and reconciles only source-scoped legacy-v2 adapters from that
+  same approved catalog. It cannot deploy the root `pmu-gateway`, run the root
+  Compose project, or control any unlisted gateway.
 - Processor authors edit Python/Quixstreams code in their processor repository;
   YAML is optional service configuration, not a substitute for the pipeline.
 - `iec104-exporter` and its profile-gated `iec104-receiver` control-center test
@@ -163,8 +177,8 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
   waveforms, measurement sessions, alarms, and Kafka message payloads do not enter
   VictoriaMetrics.
 - Druid data is queryable through the Router and Grafana's PMU dashboard now.
-  Grafana adds further measurement dashboards, alerting, and later Trino
-  separately.
+  Trino also provides read-only Druid, Blobmeta, and selected-session Iceberg
+  federation. Grafana adds alerting and broader analytic dashboards separately.
 
 ### SeaweedFS (raw/blob)
 - S3-compatible object store for raw/waveform (PMU samples now; COMTRADE/WMU later)
@@ -175,6 +189,7 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
 - Druid single-server throughput and its production-scale topology.
 - Druid retention, deletion, compaction, and aggregation policy.
 - Alerting path: internal to start; PagerDuty possible later.
-- When Trino / federated query lands.
+- How the current selected-session Trino federation evolves into broader
+  cross-session analytics and query access controls.
 - Stream-processing engine for heavy jobs (Quixstreams vs Beam/Flink).
 - Whether Apache Spark is needed for future batch or heavy workloads.

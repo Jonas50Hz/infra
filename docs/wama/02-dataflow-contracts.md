@@ -38,7 +38,10 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
   Grafana-over-VictoriaMetrics infrastructure dashboards. Kafka exporter sends
   only operational broker/topic metadata there; no measurement, waveform,
   measurement-session, alarm, or Kafka message records are sent to
-  VictoriaMetrics. Trino federation and Grafana alerting remain later work.
+  VictoriaMetrics. Trino provides read-only federation over Druid, the
+  PostgreSQL Blobmeta projection, and registered immutable session artifacts in
+  Iceberg. Grafana's selected-session dashboard queries that read-only Trino
+  path; alerting and broader cross-session analytics remain later work.
 6. **Export.** IEC 104 exporter (real-time) and File Export (xlsx/csv, on a
    configured measurement session or manual selection). MQTT exporter for
    OT/EAS.
@@ -50,7 +53,7 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 | `MeasurementSession` | stream | Raw-Protobuf bounded historical extraction requests |
 | `Alarm` | stream | Alarm records raised from measurement sessions |
 | `Export` | stream | Typed raw-Protobuf `ExportRecord` values for one-way IEC 104 export; file/MQTT payloads remain future work |
-| `Masterdata` | compacted | Source masterdata (IP + location, capabilities) |
+| `Masterdata` | compacted | Raw-Protobuf `SourceMasterdata` source endpoint, location, PMU identity, and signal-to-MRID mappings |
 | `Schema` | compacted | Common-Format schema definitions |
 | `Blobmeta` | compacted | Raw-Protobuf immutable Parquet pointers, status, and MRID coverage |
 
@@ -58,6 +61,49 @@ PostgreSQL receives the immutable `blobmeta_catalog` projection from the
 compacted `Blobmeta` topic. Kafka remains the source of truth. A future Kafka
 Connector may mirror `Masterdata` and `Schema` separately; it is not part of
 this PoC.
+
+## Masterdata source contract
+**`SourceMasterdata`**, proto3 package `wama.masterdata.v1`. Canonical file:
+[`schema/masterdata.proto`](schema/masterdata.proto). The Kafka key is the
+exact UTF-8 `source_id`; non-null values are deterministic raw-Protobuf source
+records and a null-valued record with the same key is a decommissioning
+tombstone.
+
+The private `gateway-c37-118-onboarding` Git catalog is the reviewed authority.
+Its Systemexperte-approved `main` revision publishes a `catalog_id`, Git
+revision, and publication timestamp with every source projection. V1 supports
+one legacy C37.118 wire-version-2 TCP PMU endpoint per source: literal
+IPv4/IPv6 address, explicit TCP port, and PMU IDCODE. A source includes stable
+site ID/display name and one or more stable logical signals. Each signal maps a
+source channel and explicit v2 selector to an immutable MRID, Common Format
+scalar kind, quantity, and unit.
+
+The V1 catalog allows only `voltage`/`V`, `current`/`A`, `frequency`/`Hz`, and
+`rocof`/`Hz/s` as `double_value` mappings. Voltage/current selectors name a
+fixed CFG-2 phasor magnitude channel; frequency and ROCOF use their singleton
+v2 source values. It rejects duplicate source IDs, source channels, selectors,
+or MRIDs; malformed endpoints; a non-v2 wire version; a selector whose channel
+or quantity does not agree; and an attempt to mutate a published
+`(source_id, signal_id)` MRID. Endpoint and location changes remain valid
+configuration updates. No device credentials or secrets enter Git, Kafka, or
+the record contract; a future protocol extension may carry only a secret
+reference.
+
+The current publisher reads the compacted topic through its end offsets before
+writing. It rejects a source key owned by another catalog or an MRID owned by
+another active source, writes active records in deterministic source order, and
+tombstones only sources previously owned by its catalog. The approved
+onboarding deployment then renders one isolated adapter per active source and
+removes only a matching previously managed adapter after its tombstone.
+
+Each adapter requests C37.118 v2 CFG-2, derives its field mapping from that
+configuration, consumes bounded TCP frames, and publishes raw-Protobuf
+`MCCSMeasurementValue` records to `LiveMeasurement` keyed by MRID. It carries
+the source timestamp as `timestamp_field` and receipt time as both gateway and
+MCCS timestamps. Its conservative generic quality mapping sets `valid=false`
+for non-good or unsynchronized v2 `STAT`, and sets `substituted=true` only for
+test/inserted data. It does not retain raw `STAT` or time-quality evidence and
+therefore does not satisfy the later LFR audit contract by itself.
 
 ## Common Format — the contract
 **`MCCSMeasurementValue`**, proto3, package `rtd_schema.v1`. Canonical file:
@@ -161,21 +207,29 @@ for idempotent replay. It then publishes **`Blobmeta`**, proto3 package
 topic keyed by immutable `blob_id`.
 
 `Blobmeta` records the request digest, session interval, copied context,
-per-MRID row counts, total count, Parquet object identity, media type, length,
-and SHA-256. `COMPLETE` requires every requested MRID to have rows; `PARTIAL`
-preserves zero counts for missing MRIDs; bounded request validation failures
-publish auditable `REJECTED` evidence without a Parquet object. The
-`blobmeta-catalog` validates raw bytes and Kafka key, commits immutable
-PostgreSQL metadata and coverage rows before its Kafka offset, and accepts only
-digest-identical replays for a `blob_id`.
+per-MRID row counts, total count, Parquet object identity, schema version, media
+type, length, and SHA-256. V2 Parquet rows include the immutable `blob_id` and
+`session_id`, with stable footer field IDs. `COMPLETE` requires every requested
+MRID to have rows; `PARTIAL` preserves zero counts for missing MRIDs; bounded
+request validation failures publish auditable `REJECTED` evidence without a
+Parquet object. The `blobmeta-catalog` validates raw bytes and Kafka key,
+commits immutable PostgreSQL metadata and coverage rows before its Kafka offset,
+and accepts only digest-identical replays for a `blob_id`.
 
 ## Measurement session & alarm flow
 - A producer submits a bounded `MeasurementSession` request with start/end
-  context and MRIDs → the root-owned worker queries Druid, writes immutable
+  context and MRIDs → the root-owned worker queries Druid, writes immutable v2
   Parquet to SeaweedFS, then publishes compacted `Blobmeta` evidence.
+- The root-owned query indexer verifies the exact Parquet object against
+  Blobmeta and registers that file in Iceberg. It commits its Kafka offset only
+  after mutable registration-ledger and public read-only Trino evidence agree.
+- Grafana selects `blob_id` and queries the registered Iceberg artifact through
+  the read-only Trino datasource; object-key parsing and the internal writer are
+  never exposed to the dashboard.
 - Decision: should an alarm be sent? If yes → `Alarm` + Power-User notification.
-- PostgreSQL provides direct metadata/coverage queries; browser/file-export
-  presentation, live lifecycle updates, and Kubernetes delivery remain excluded.
+- PostgreSQL provides direct metadata/coverage queries; selected-session Grafana
+  presentation is available. File export, live lifecycle updates, cross-session
+  analytics, and Kubernetes delivery remain excluded.
 
 ## Live-data retention
 - The target policy is medium-term live storage followed by aggregation and

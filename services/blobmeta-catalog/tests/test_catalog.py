@@ -12,6 +12,7 @@ from blobmeta_catalog.catalog import CatalogBlob
 from measurement_session_common.contract import (
     DEFAULT_SESSION_BUCKET,
     PARQUET_MEDIA_TYPE,
+    SESSION_PARQUET_SCHEMA_VERSION,
     request_sha256,
     session_parquet_key,
     successful_blob_id,
@@ -33,6 +34,10 @@ class CatalogBlobTests(unittest.TestCase):
         self.assertEqual(blob.contract_sha256, sha256(payload).digest())
         self.assertEqual(blob.mrids, (("urn:wama:poc:a", 2),))
         self.assertEqual(blob.object.object_key if blob.object else None, session_parquet_key(request.session_id))
+        self.assertEqual(
+            blob.object.parquet_schema_version if blob.object else None,
+            SESSION_PARQUET_SCHEMA_VERSION,
+        )
 
 
 def _request() -> MeasurementSessionRequest:
@@ -71,6 +76,7 @@ def _blobmeta(request: MeasurementSessionRequest) -> Blobmeta:
     message.object.bucket = DEFAULT_SESSION_BUCKET
     message.object.object_key = session_parquet_key(request.session_id)
     message.object.media_type = PARQUET_MEDIA_TYPE
+    message.object.parquet_schema_version = SESSION_PARQUET_SCHEMA_VERSION
     message.object.byte_length = 64
     message.object.sha256 = b"x" * 32
     return message

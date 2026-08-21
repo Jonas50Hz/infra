@@ -9,6 +9,8 @@ services:
         condition: service_healthy
       druid:
         condition: service_healthy
+      trino:
+        condition: service_healthy
     env_file:
       - ./grafana.env
     environment:

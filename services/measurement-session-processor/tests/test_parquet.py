@@ -10,7 +10,11 @@ import unittest
 import pyarrow.parquet as pq
 
 from measurement_session_processor.druid import MeasurementRow
-from measurement_session_processor.parquet import SessionArtifactError, write_session_parquet
+from measurement_session_processor.parquet import (
+    PARQUET_SCHEMA_VERSION,
+    SessionArtifactError,
+    write_session_parquet,
+)
 
 
 class ParquetArtifactTests(unittest.TestCase):
@@ -23,6 +27,8 @@ class ParquetArtifactTests(unittest.TestCase):
                 path,
                 [_row("urn:wama:poc:a"), _row("urn:wama:poc:a"), _row("urn:wama:poc:b")],
                 ("urn:wama:poc:a", "urn:wama:poc:b"),
+                "sessions/4ff0a4c6-1ae4-4f51-b1b7-d7762a7c4237/measurements",
+                "4ff0a4c6-1ae4-4f51-b1b7-d7762a7c4237",
                 max_rows=10,
                 batch_rows=2,
                 max_artifact_bytes=1_000_000,
@@ -31,6 +37,20 @@ class ParquetArtifactTests(unittest.TestCase):
 
         self.assertEqual(stats.measurement_count, 3)
         self.assertEqual(stats.coverage, (("urn:wama:poc:a", 2), ("urn:wama:poc:b", 1)))
+        self.assertEqual(
+            table.column("blob_id").to_pylist(),
+            ["sessions/4ff0a4c6-1ae4-4f51-b1b7-d7762a7c4237/measurements"] * 3,
+        )
+        self.assertEqual(
+            table.column("session_id").to_pylist(),
+            ["4ff0a4c6-1ae4-4f51-b1b7-d7762a7c4237"] * 3,
+        )
+        self.assertEqual(
+            table.schema.field("blob_id").metadata,
+            {b"PARQUET:field_id": b"1"},
+        )
+        self.assertEqual(table.schema.metadata[b"wama.parquet.schema_version"], b"2")
+        self.assertEqual(PARQUET_SCHEMA_VERSION, 2)
         self.assertEqual(table.schema.field("value_type").type.__str__(), "string")
         self.assertEqual(table.num_rows, 3)
 
@@ -41,6 +61,8 @@ class ParquetArtifactTests(unittest.TestCase):
                     Path(directory) / "session.parquet",
                     [_row("urn:wama:poc:a"), _row("urn:wama:poc:a")],
                     ("urn:wama:poc:a",),
+                    "sessions/4ff0a4c6-1ae4-4f51-b1b7-d7762a7c4237/measurements",
+                    "4ff0a4c6-1ae4-4f51-b1b7-d7762a7c4237",
                     max_rows=1,
                     batch_rows=10,
                     max_artifact_bytes=1_000_000,

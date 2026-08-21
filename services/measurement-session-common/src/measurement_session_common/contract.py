@@ -12,6 +12,28 @@ from measurement_session_common.generated.measurement_session_pb2 import Measure
 
 DEFAULT_SESSION_BUCKET = "wama-measurement-sessions"
 PARQUET_MEDIA_TYPE = "application/vnd.apache.parquet"
+SESSION_PARQUET_SCHEMA_VERSION = 2
+SESSION_PARQUET_FIELDS = (
+    ("blob_id", 1),
+    ("session_id", 2),
+    ("timestamp_mccs", 3),
+    ("mrid", 4),
+    ("value_type", 5),
+    ("double_value", 6),
+    ("int_value", 7),
+    ("uint_value", 8),
+    ("bool_value", 9),
+    ("string_value", 10),
+    ("timestamp_value", 11),
+    ("timestamp_field", 12),
+    ("timestamp_gateway", 13),
+    ("quality_valid", 14),
+    ("quality_substituted", 15),
+    ("quality_operator_blocked", 16),
+    ("quality_overflow", 17),
+    ("quality_old_data", 18),
+)
+SESSION_PARQUET_FIELD_IDS = dict(SESSION_PARQUET_FIELDS)
 BLOBMETA_MEDIA_TYPE = "application/vnd.wama.blobmeta+protobuf;version=1"
 MAX_METADATA_ENTRIES = 32
 MAX_METADATA_VALUE_BYTES = 256
@@ -190,6 +212,10 @@ def _validate_object_reference(result: Blobmeta) -> None:
     _safe_object_key(reference.object_key, "object.object_key")
     if reference.media_type != PARQUET_MEDIA_TYPE:
         raise ContractValidationError("object.media_type must be the canonical Parquet media type")
+    if reference.parquet_schema_version != SESSION_PARQUET_SCHEMA_VERSION:
+        raise ContractValidationError(
+            f"object.parquet_schema_version must be {SESSION_PARQUET_SCHEMA_VERSION}"
+        )
     if reference.byte_length == 0 or reference.byte_length > MAX_OBJECT_BYTES:
         raise ContractValidationError("object.byte_length is outside the supported range")
     if len(reference.sha256) != 32:

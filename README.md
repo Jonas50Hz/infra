@@ -54,6 +54,12 @@ infrastructure service out of this checkout. Processor containers connect
 through the external `wama-infra` Docker network; they do not include, modify,
 or redeploy this Compose project.
 
+[`forgejo-repos/gateway-c37-118-onboarding/`](forgejo-repos/gateway-c37-118-onboarding/)
+is the explicit C37.118 gateway-deployment-test seed. A reviewed legacy-v2
+source catalog reconciles raw-Protobuf Masterdata records and tombstones to
+Kafka, then reconciles one source-scoped adapter per active catalog source. It
+does not modify the current `pmu-gateway` or run root Compose services.
+
 ## Repository layout
 
 The root [docker-compose.yml](docker-compose.yml) uses Compose `include` to
@@ -69,16 +75,22 @@ service owns its fragment, configuration, and scripts beneath
 | [services/kafka-exporter/](services/kafka-exporter/) | `kafka-exporter` | Compose fragment for internal Kafka broker, topic, and consumer-lag metrics |
 | [services/kafka-ui/](services/kafka-ui/) | `kafka-ui` | Compose fragment and Kafka UI environment configuration |
 | [services/pmu-gateway/](services/pmu-gateway/) | `pmu-gateway` | Compose fragment, configurable PMU fixture, image, source, and tests |
+| [services/c37-118-simulator/](services/c37-118-simulator/) | `c37-118-simulator` | Profile-gated standalone C37.118 TCP simulator and manual fleet-test tooling |
 | [services/iec104-exporter/](services/iec104-exporter/) | `iec104-exporter` | One-way IEC 104 controlled station consuming raw-Protobuf `Export` records |
 | [services/iec104-receiver/](services/iec104-receiver/) | `iec104-receiver` | Profile-gated test control center for IEC 104 protocol verification |
 | [services/iec104-browser/](services/iec104-browser/) | `iec104-browser` | On-demand browser control center for wire-received IEC 104 values |
 | [services/druid/](services/druid/) | `druid` | Persistent single-server Druid image, canonical Protobuf descriptor build, and Router API |
 | [services/druid-init/](services/druid-init/) | `druid-init` | Idempotent `LiveMeasurement` Kafka supervisor initializer and tests |
 | [services/postgres/](services/postgres/) | `postgres` | Compose fragment, trusted local credentials, and persistent prepared database |
+| [services/trino-init/](services/trino-init/) | `trino-init` | Idempotent PostgreSQL reader-role bootstrap for federation |
+| [services/trino/](services/trino/) | `trino` | Read-only Druid, Blobmeta, and Iceberg session SQL federation coordinator |
+| [services/trino-session-writer/](services/trino-session-writer/) | `trino-session-writer` | Internal-only Iceberg metadata writer for verified session artifacts |
+| [services/trino-session-init/](services/trino-session-init/) | `trino-session-init` | One-shot Iceberg schema/table initializer for session artifacts |
 | [services/seaweedfs/](services/seaweedfs/) | `seaweedfs` | Compose fragment and SeaweedFS S3/admin configuration |
 | [services/measurement-session-processor/](services/measurement-session-processor/) | `measurement-session-processor` | Root-owned Druid-to-Parquet Kafka worker for bounded session requests |
 | [services/blobmeta-catalog/](services/blobmeta-catalog/) | `blobmeta-catalog` | Compacted Blobmeta-to-PostgreSQL immutable metadata materializer |
-| [services/measurement-session-e2e/](services/measurement-session-e2e/) | `measurement-session-e2e` | Profile-gated complete/partial request-to-Blobmeta verifier |
+| [services/measurement-session-query-indexer/](services/measurement-session-query-indexer/) | `measurement-session-query-indexer` | Root-owned verified Blobmeta-to-Iceberg query indexer |
+| [services/measurement-session-e2e/](services/measurement-session-e2e/) | `measurement-session-e2e` | Profile-gated complete/partial request-to-Blobmeta and Iceberg query-index verifier |
 | [services/forgejo/](services/forgejo/) | `forgejo` | Compose fragment and Forgejo server configuration |
 | [services/forgejo-init/](services/forgejo-init/) | `forgejo-init` | Compose fragment and empty-instance bootstrap script |
 | [services/forgejo-runner/](services/forgejo-runner/) | `forgejo-runner` | Compose fragment for the single Forgejo Actions runner |
@@ -99,8 +111,9 @@ directory. Provision each in its own separate processor repository seed.
 ## Prerequisites
 
 - Docker Engine with Docker Compose v2 or newer
-- Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8333`, `23646`,
-  `3000`, `3001`, `3003`, `5432`, `8888`, `2222`, and `127.0.0.1:2404` available
+- Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8085`, `8333`,
+  `23646`, `3000`, `3001`, `3003`, `5432`, `8888`, `2222`, and
+  `127.0.0.1:2404` available
 
 ## Start and stop
 
@@ -242,15 +255,16 @@ at the same time because the exporter permits one control center.
 `forgejo-init` creates the configured administrator, private
 `<owner>/processor-frequency-scale`, `<owner>/processor-apparent-power`, and
 `<owner>/processor-frequency-iec104-export`, and
-`<owner>/processor-lfr-frequency-provision` repositories, their initial `main`
-commits, and a
-`.wama-forgejo-processor-root` marker in each isolated deployment root. It
-skips seeding without modifying any existing repository that already has refs,
-and it fails without mutation if an existing repository is not private. Its
-generated runner credentials remain in the `forgejo-runner-data` volume.
+`<owner>/processor-lfr-frequency-provision`, and
+`<owner>/gateway-c37-118-onboarding` repositories. The four processor roots
+use `.wama-forgejo-processor-root`; the onboarding root uses
+`.wama-forgejo-gateway-onboarding-root`. Bootstrap skips seeding without
+modifying any existing repository that already has refs, and it fails without
+mutation if an existing repository is not private. Its generated runner
+credentials remain in the `forgejo-runner-data` volume.
 
-After bootstrap, clone the individual processor repository you intend to work
-on. These commands must never be run from this infrastructure checkout:
+After bootstrap, clone the individual managed repository you intend to work on.
+These commands must never be run from this infrastructure checkout:
 
 ```sh
 git clone "https://<forgejo-host>/<owner>/processor-frequency-scale.git"
@@ -264,19 +278,33 @@ Forgejo only in a deliberately declared gateway-deployment test; that exception
 must not deploy, modify, or take ownership of the current `pmu-gateway` or any
 root infrastructure service.
 
-Each processor has distinct repository-scoped CI and deployment runner
+The `gateway-c37-118-onboarding` workflow follows the same trusted
+`validate -> publish -> deploy` sequence. Its deploy step runs
+`masterdata-publisher` once through `docker compose run --rm`, then uses the
+marker-owned deployment guard to reconcile only generated legacy-v2 source
+adapters. It cannot control the root `pmu-gateway`, root Compose project, or
+any adapter absent from its approved catalog.
+
+Validate the canonical Masterdata contract, onboarding seed, isolated Compose
+project, and Forgejo bootstrap guard together:
+
+```sh
+sh scripts/test-masterdata-onboarding.sh
+```
+
+Each managed repository has distinct repository-scoped CI and deployment runner
 connections, all handled by the same capacity-one runner daemon. The deployment
 connection runs in the runner container with the host Docker socket and its
 matching deployment root mounted at the same path. This is trusted local-PoC
-access: processor-repository workflow authors can control the Docker host. Do
-not expose this runner to untrusted repositories, users, or production
-workloads.
+access: managed-repository workflow authors can control the Docker host. Do not
+expose this runner to untrusted repositories, users, or production workloads.
 
 Create or adapt processors only from the instructions in the individual
 [frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
 [apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
 [frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
-[LFR frequency provision README](forgejo-repos/processor-lfr-frequency-provision/README.md).
+[LFR frequency provision README](forgejo-repos/processor-lfr-frequency-provision/README.md), or
+[C37.118 onboarding README](forgejo-repos/gateway-c37-118-onboarding/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 
 ## Fake PMU messages
@@ -313,6 +341,23 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
   docker compose up -d --force-recreate pmu-gateway
 ```
 
+## C37.118 Simulator
+
+The profile-gated [C37.118 simulator](services/c37-118-simulator/) is a
+standalone C37.118.2-2011 V2 and C37.118.2-2024 V3 TCP source and protocol test
+service. It neither implements nor validates a gateway, and it has no Kafka,
+Common Format, or Druid dependency. V2 performs HDR -> CFG-1 -> CFG-2 -> start
+-> periodic data -> stop; V3 performs capability -> stream configuration ->
+start -> periodic data -> stop.
+
+```sh
+docker compose --profile c37-118 up -d --build c37-118-simulator
+```
+
+Its regular Docker test target covers the C37.118 frame/profile/server/probe
+slice. The 25-PMU and 100-PMU tests are separately armed manual soaks and never
+run as part of normal infrastructure lifecycle validation.
+
 ## Access
 
 | Purpose | Address |
@@ -329,6 +374,8 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 | Forgejo Git over SSH | `ssh://git@<host-ip>:2222/<owner>/<repository>.git` |
 | Grafana | `http://<host-ip>:3001` |
 | PMU live dashboard | `http://<host-ip>:3001/d/wama-pmu-live-measurements/wama-pmu-live-measurements` |
+| Measurement session dashboard | `http://<host-ip>:3001/d/wama-measurement-sessions/wama-measurement-sessions` |
+| Trino SQL query API and web UI | `http://<host-ip>:8085` |
 | Druid Router API and web console | `http://<host-ip>:8888` |
 | VictoriaMetrics API and VMUI | `http://127.0.0.1:8428` |
 | IEC 104 controlled station | `tcp://127.0.0.1:2404` |
@@ -343,6 +390,12 @@ VictoriaMetrics is available only from the Docker host, and node-exporter plus
 cAdvisor expose no host ports. Druid exposes only its Router on port 8888 to all
 host interfaces; its Coordinator, Overlord, Broker, Historical, task runner,
 and in-container coordination endpoints have no host mappings.
+
+Trino is LAN-accessible on port 8085 without authentication in this trusted
+PoC. Its global read-only access control and dedicated PostgreSQL reader roles
+permit Druid, Blobmeta metadata, and registered measurement-session artifact
+queries. The separate `trino-session-writer` coordinator has no host port and
+is reserved for root-owned registration of verified canonical Parquet files.
 
 ## Infrastructure monitoring
 
@@ -365,15 +418,17 @@ Grafana also provisions the internal `Druid` datasource through
 
 - **WAMA PMU Live Measurements**: valid PMU voltage, current, frequency, and
   ROCOF values as separate unit-safe trends plus recent timestamp evidence.
+- **WAMA Measurement Sessions**: selected immutable session values through the
+  internal read-only Trino datasource, with Blobmeta evidence and MRID coverage.
 
 No alert rules, contact points, or notification delivery are provisioned in
 this PoC slice. Set `GRAFANA_ROOT_URL=http://<host-ip>:3001/` when Grafana must
 generate external URLs for a LAN address.
 
-The Druid plugin is pinned in the local Grafana image and is used only for
-Common Format measurement queries. VictoriaMetrics remains infrastructure-only;
-Common Format records are not copied into it. Alerting and Trino federation
-remain deferred.
+The Druid and Trino plugins are pinned in the local Grafana image. Druid remains
+the live Common Format query source, while Trino serves only registered immutable
+measurement-session artifacts and Blobmeta metadata. VictoriaMetrics remains
+infrastructure-only; alerting and broader cross-session analytics remain deferred.
 
 ## Druid live measurements
 
@@ -478,11 +533,19 @@ Parquet artifact to `wama-measurement-sessions`, stores an immutable replay
 receipt, then publishes keyed raw-Protobuf
 [`Blobmeta`](docs/wama/schema/blobmeta.proto).
 
-`Blobmeta` identifies the artifact, SHA-256, byte size, request digest,
-completion status, and per-MRID row coverage. `COMPLETE` means each requested
-MRID has data; `PARTIAL` records missing MRIDs; bounded validation failures
-produce `REJECTED` evidence. `blobmeta-catalog` projects only this metadata to
-PostgreSQL; it never copies individual measurements there.
+`Blobmeta` identifies the artifact, Parquet schema version, SHA-256, byte size,
+request digest, completion status, and per-MRID row coverage. `COMPLETE` means
+each requested MRID has data; `PARTIAL` records missing MRIDs; bounded validation
+failures produce `REJECTED` evidence. `blobmeta-catalog` projects only this
+metadata to PostgreSQL; it never copies individual measurements there.
+
+V2 artifacts include immutable `blob_id` and `session_id` in every Parquet row.
+`measurement-session-query-indexer` verifies object metadata and bytes, the
+Parquet v2 footer/schema/field IDs, row identities, count, and MRID coverage. It
+then registers the exact `measurements.parquet` object URI through the internal
+writer in `sessions.wama.measurement_values`; it never scans the directory that
+also holds the replay receipt. The host-exposed Trino coordinator and Grafana
+datasource remain read-only.
 
 Run the complete request-to-Blobmeta check after the normal stack is ready:
 
@@ -492,7 +555,13 @@ scripts/test-measurement-session-flow.sh
 
 The script submits unique complete and partial requests, independently validates
 their raw Kafka Blobmeta records, waits for PostgreSQL materialization, and
-verifies SeaweedFS hashes plus Parquet row coverage.
+verifies SeaweedFS hashes plus Parquet row coverage. It then requires each exact
+artifact to appear in `session_query_index.registrations`, be queryable with the
+same Blobmeta identity and row count through
+`sessions.wama.measurement_values` on public read-only Trino, and return a
+selected-session frame through Grafana's Trino datasource.
+Its query-side assertions route through public Trino; direct SeaweedFS reads
+remain only for immutable-object hash, schema, and row-identity verification.
 
 ## Initialized topic contract
 
@@ -502,7 +571,7 @@ verifies SeaweedFS hashes plus Parquet row coverage.
 | `MeasurementSession` | stream | `delete` | Raw-Protobuf bounded historical session requests |
 | `Alarm` | stream | `delete` | Alarm records |
 | `Export` | stream | `delete` | Records for real-time and file export |
-| `Masterdata` | compacted | `compact` | Source masterdata and capabilities |
+| `Masterdata` | compacted | `compact` | Raw-Protobuf C37.118 source, endpoint, and signal-to-MRID masterdata |
 | `Schema` | compacted | `compact` | Common Format schema definitions |
 | `Blobmeta` | compacted | `compact` | Raw-Protobuf immutable Parquet pointers, status, and MRID coverage |
 
@@ -513,10 +582,12 @@ topic has one replica because this is a single-broker PoC. Automatic topic
 creation is disabled. No retention period is set beyond Kafka's broker default
 because the data-retention decision remains open.
 
-The request/Blobmeta contracts and 12-partition worker topics replace the old
-finalized-session exporter, catalog API, browser, manifest, and CSV flow. This
-is an intentional clean PoC break: run `docker compose down -v` before starting
-an existing local stack. No dual-publish, bridge, or migration is provided.
+The request/Blobmeta contracts, v2 queryable Parquet artifact, and 12-partition
+worker topics replace the old finalized-session exporter, catalog API, browser,
+manifest, and CSV flow. This is an intentional clean PoC break: run
+`docker compose down -v` before starting an existing local stack. The default
+indexer starts at `earliest` and fails closed on pre-v2 evidence; no dual-publish,
+bridge, backfill, or migration is provided.
 
 `LiveMeasurement` uses raw Protobuf. `pmu-gateway` serializes
 `MCCSMeasurementValue` records directly from

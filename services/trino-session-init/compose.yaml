@@ -1,0 +1,12 @@
+services:
+  trino-session-init:
+    build:
+      context: ../..
+      dockerfile: services/trino-session-init/Dockerfile
+    depends_on:
+      trino-session-writer:
+        condition: service_healthy
+    environment:
+      TRINO_SESSION_INIT_URL: http://trino-session-writer:8080
+      TRINO_SESSION_INIT_USER: wama-session-init
+    restart: "no"

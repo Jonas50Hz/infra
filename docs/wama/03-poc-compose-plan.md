@@ -30,13 +30,21 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `kafka-ui` — topic/message inspection.
 - `pmu-gateway` — fake PMU gateway: reads a startup YAML fixture and continuously
    emits raw-Protobuf `MCCSMeasurementValue` records on `LiveMeasurement`.
+- `c37-118-simulator` — profile-gated standalone C37.118 TCP simulator with up
+   to 100 independent PMU listeners. It has no Kafka, Common Format, or gateway
+   dependency; its large fleet tests remain manually armed and isolated.
 - `processor-*` — Quixstreams pipelines (one service per processor).
 - `measurement-session-processor` — root-owned scalable Kafka worker that
    queries Druid for bounded requests and writes immutable Parquet artifacts.
 - `blobmeta-catalog` — compacted Blobmeta-to-PostgreSQL immutable metadata and
    per-MRID coverage materializer.
+- `measurement-session-query-indexer` — root-owned Blobmeta consumer that
+   verifies and registers exact v2 session Parquet files in Iceberg.
 - `postgres` — persistent Blobmeta catalog plus a prepared future target for
    compacted Masterdata/Schema records.
+- `trino` — host-exposed read-only federation coordinator; internal-only
+   `trino-session-writer` plus one-shot `trino-session-init` own Iceberg table
+   initialization and exact-file registration.
 - `kafka-connect` — mirrors compacted topics to PostgreSQL.
 - `druid` — persistent single-server time-series store with direct raw-Protobuf
    Kafka ingest from `LiveMeasurement`.
@@ -78,8 +86,11 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    artifacts and replay receipts to SeaweedFS, then publish compacted Blobmeta.
 5. **Blobmeta catalog** — commits immutable metadata and normalized MRID
    coverage rows in PostgreSQL before each Kafka offset.
-6. **Request-flow test** — a profile-gated verifier submits complete and partial
-   requests, independently validates Kafka, PostgreSQL, SeaweedFS, and Parquet.
+6. **Query registration and request-flow test** — the persistent indexer
+   validates Blobmeta evidence before exact-file Iceberg registration. A
+   profile-gated verifier submits complete and partial requests, independently
+   validates Kafka, PostgreSQL, SeaweedFS, Parquet, the registration ledger,
+   public Trino, and Grafana's Trino datasource.
 
 ### Metadata persistence (available now)
 - **PostgreSQL** — Kafka remains the source of truth. `blobmeta-catalog` owns
@@ -109,10 +120,12 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    Keep raw values off Kafka.
 8. **Kafka Connect -> PostgreSQL** — mirror compacted Masterdata/Schema later;
    Blobmeta is materialized by the root-owned catalog now.
-9. **Grafana data dashboards** — the PMU live dashboard over Druid is available
-   now. Additional measurement dashboards and internal alerting remain deferred.
-   This is separate from the already-provisioned VictoriaMetrics infrastructure
-   dashboards.
+9. **Grafana data dashboards and read-only federation** — the PMU live dashboard
+   over Druid and the selected-session dashboard over read-only Trino are
+   available now. Trino federates Druid, PostgreSQL Blobmeta metadata, and
+   registered Iceberg session files. Alerting and broader cross-session analytics
+   remain deferred. This is separate from the already-provisioned VictoriaMetrics
+   infrastructure dashboards.
 
 ### Phase 3 — Export (IEC 104 available now)
 10. **IEC 104 exporter** — root-owned controlled station consumes typed
@@ -128,25 +141,35 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    104 LFR export, file/xlsx/csv export, and MQTT export remain future work.
 
 ### Phase 4 — Onboarding + config as data
-11. **Masterdata via Git** — masterdata = IP + location committed to Git;
-   gateway provisioned from it into the `Masterdata` compacted topic.
-12. **Config & deploy flow** — config change -> Git -> automated quality and
-   security tests -> Systemexperte decision -> auditable deployment.
+11. **C37.118 Masterdata via Git (available now)** — the private
+   `gateway-c37-118-onboarding` repository holds stable source location,
+   literal endpoint/port, PMU IDCODE, legacy wire version 2, and immutable
+   signal-to-MRID mappings. Its one-shot publisher projects reviewed
+   raw-Protobuf records to compacted `Masterdata`; deleting a source emits its
+   tombstone and removes only its matching managed adapter.
+12. **Config & deploy flow** — config change -> Git -> automated catalog,
+   contract, and deployment-guard tests -> Systemexperte decision -> audited
+   Masterdata and source-gateway reconciliation. The guarded adapter path is
+   limited to reviewed legacy-v2 C37.118 TCP sources.
 
 ### Phase 5 — CI/CD loop (automates deploy)
 13. **Forgejo + Actions runner + registry** — infrastructure provisions
    private seeded `processor-frequency-scale`, `processor-apparent-power`, and
    `processor-frequency-iec104-export`, and
-   `processor-lfr-frequency-provision` repositories and eight
-   repository-scoped runner connections on one daemon. Each separate
-   `forgejo-repos/processor-*/` seed owns CI: test + build image + push for
-   exactly one processor. The LFR seed currently publishes its configured
-   preferred frequency to `LiveMeasurement`; its IEC 104 export stage remains
-   deferred.
-14. **CD trigger** — each processor's Forgejo Actions job synchronizes only its
-   checkout to its isolated deployment root and runs that processor's
-   `docker compose up -d` on the external infrastructure network. It never
-   deploys or modifies the infrastructure Compose project.
+   `processor-lfr-frequency-provision`, plus the explicit
+   `gateway-c37-118-onboarding` test repository and ten repository-scoped
+   runner connections on one daemon. Each processor seed owns CI: test + build
+   image + push for exactly one processor. The gateway-onboarding seed owns
+   catalog validation, a one-shot Masterdata publisher, and source-scoped v2
+   adapters generated from its reviewed catalog. The LFR seed currently
+   publishes its configured preferred frequency to `LiveMeasurement`; its IEC
+   104 export stage remains deferred.
+14. **CD trigger** — processor jobs synchronize only their checkout to their
+   isolated deployment root and run their one-service `docker compose up -d`.
+   The onboarding job synchronizes only to its separately marked root, runs
+   `masterdata-publisher` once, then reconciles only generated adapters for
+   active source IDs. Neither path deploys or modifies the root infrastructure
+   Compose project.
 
 ### Phase 6 — End-to-end pilot
 15. Run one real source through the whole path:
@@ -160,15 +183,17 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
 
 ## Measurement session & alarm path (Phase 2+)
 Bounded raw-Protobuf `MeasurementSession` request -> Druid historical query ->
-immutable Parquet + receipt in SeaweedFS -> compacted raw-Protobuf `Blobmeta`
--> immutable PostgreSQL metadata/coverage catalog. The worker pool scales over
-the 12 `MeasurementSession` partitions; `Blobmeta` also has 12 partitions.
-Live lifecycle updates, alarm integration, analytics dashboards, and browser
-presentation remain excluded from this slice.
+immutable v2 Parquet + receipt in SeaweedFS -> compacted raw-Protobuf `Blobmeta`
+-> immutable PostgreSQL metadata/coverage catalog -> verified exact-file Iceberg
+registration -> read-only Trino/Grafana selected-session query. The worker pool
+scales over the 12 `MeasurementSession` partitions; `Blobmeta` also has 12
+partitions. Live lifecycle updates, alarm integration, file export, and
+cross-session analytics remain excluded from this slice.
 
 ## Open risks to validate early
 - Quixstreams throughput / heavy waveform at target load (unproven).
 - Whether a JVM engine (Flink/Beam) is needed for heavy signal processing.
 - Druid single-server throughput, production topology, and retention/aggregation
-   policy; alerting path (PagerDuty later?); when Trino lands.
+   policy; alerting path (PagerDuty later?); how Trino federation expands beyond
+   the current read-only Druid and Blobmeta slice.
 - Whether Apache Spark is needed for future batch or heavy workloads.

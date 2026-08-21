@@ -8,15 +8,18 @@ The service verifies the WAMA Kafka topic contract, consumes a fresh raw
 `MCCSMeasurementValue` from `LiveMeasurement` without committing an offset,
 checks the Druid Router and `live_measurements` supervisor, and queries the PMU
 frequency fixture through Druid SQL to require matching `__time` and
-`timestamp_mccs`. It also checks PostgreSQL connectivity and identity, and
+`timestamp_mccs`. It checks read-only Trino catalog visibility for Druid,
+Blobmeta, and the initialized `sessions.wama.measurement_values` Iceberg table.
+It also checks PostgreSQL connectivity and identity, and
 performs signed temporary S3 put/get/delete operations in both SeaweedFS
-buckets. It checks every configured private seeded Forgejo processor repository
+buckets. It checks every configured private seeded Forgejo managed repository
 and its separate CI/deployment Actions runner connections, Kafka UI, Grafana
 provisioning, and VictoriaMetrics scrape health including Kafka exporter metrics
 for all WAMA topics. Grafana readiness requires the VictoriaMetrics datasource,
-the internal Druid datasource, the **WAMA Measurements / WAMA PMU Live
-Measurements** dashboard, and a Grafana datasource query returning the expected
-PMU frequency value. It also checks the IEC 104 browser HTTP health and accepts
+the internal Druid datasource, the read-only internal Trino datasource, the
+**WAMA Measurements / WAMA PMU Live Measurements** and **WAMA Measurement
+Sessions** dashboards, a Druid PMU query, and a Trino metadata query proving the
+initialized Iceberg session table is visible. It also checks the IEC 104 browser HTTP health and accepts
 its idle or viewer-owned status without opening an IEC control-center connection.
 
 The probe deliberately does not require PostgreSQL to have no application

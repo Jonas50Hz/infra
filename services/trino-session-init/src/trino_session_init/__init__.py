@@ -1,0 +1,1 @@
+"""Idempotent Iceberg table initialization for MeasurementSession artifacts."""

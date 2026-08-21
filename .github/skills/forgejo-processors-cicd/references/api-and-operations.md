@@ -111,7 +111,9 @@ developer checkout is not the replacement path.
 
 ## Actions and Deployment
 
-Each checked-in workflow is `.forgejo/workflows/processor.yaml`:
+Processor repositories use `.forgejo/workflows/processor.yaml`; the explicit
+`gateway-c37-118-onboarding` repository uses
+`.forgejo/workflows/gateway.yaml`. Both follow this lifecycle:
 
 | Event or ref | Jobs that may run | Result |
 | --- | --- | --- |
@@ -146,7 +148,7 @@ curl --fail --silent --show-error --request POST \
   --header "Authorization: token $FORGEJO_API_TOKEN" \
   --header "Content-Type: application/json" \
   --data '{"ref":"main"}' \
-  "$FORGEJO_API_URL/repos/$FORGEJO_OWNER/$FORGEJO_REPOSITORY/actions/workflows/processor.yaml/dispatches"
+  "$FORGEJO_API_URL/repos/$FORGEJO_OWNER/$FORGEJO_REPOSITORY/actions/workflows/<workflow-file>/dispatches"
 ```
 
 Follow the run in the Forgejo Actions UI. For a failed deployment, fix the
@@ -156,8 +158,8 @@ run the parent infrastructure Compose project from Forgejo.
 
 ## Deployment Safety Contract
 
-Each repository-local `scripts/deploy_processor.py` enforces the parts that a
-workflow must preserve:
+Each processor-local `scripts/deploy_processor.py` enforces the parts that a
+processor workflow must preserve:
 
 - `WAMA_PROCESSOR_DEPLOY_ROOT` is absolute, not `/`, not a symlink, outside the
   Forgejo workspace, and contains `.wama-forgejo-processor-root`.
@@ -171,3 +173,15 @@ workflow must preserve:
 
 Any proposal that violates this contract belongs in the parent infrastructure
 repository, not this Forgejo workflow.
+
+`gateway-c37-118-onboarding` instead uses
+`scripts/reconcile_masterdata.py`. Its `WAMA_GATEWAY_ONBOARDING_DEPLOY_ROOT`
+must be absolute, marker-owned by `.wama-forgejo-gateway-onboarding-root`, and
+outside the workspace. It renders `masterdata-publisher` plus only generated
+`c37-118-gateway-<source-id>` services derived from safe approved catalog
+filenames, uses only the existing external `wama-infra` network, verifies the
+image and every running adapter revision, and invokes
+`docker compose run --rm --no-deps masterdata-publisher` before reconciling
+adapters. Tombstones remove only a previously recorded matching adapter. It must
+not run root Compose or control the root `pmu-gateway`, simulator, or another
+gateway.

@@ -1,0 +1,38 @@
+services:
+  measurement-session-query-indexer:
+    build:
+      context: ../..
+      dockerfile: services/measurement-session-query-indexer/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      trino-session-writer:
+        condition: service_healthy
+      trino-session-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_AUTO_OFFSET_RESET: "${MEASUREMENT_SESSION_QUERY_INDEXER_AUTO_OFFSET_RESET:-earliest}"
+      KAFKA_CONSUMER_GROUP: "${MEASUREMENT_SESSION_QUERY_INDEXER_CONSUMER_GROUP:-measurement-session-query-indexer}"
+      KAFKA_RETRY_INTERVAL_SECONDS: "${MEASUREMENT_SESSION_QUERY_INDEXER_KAFKA_RETRY_INTERVAL_SECONDS:-2}"
+      KAFKA_TOPIC: Blobmeta
+      POSTGRES_DSN: postgresql://wama:wama-postgres-password@postgres:5432/wama
+      S3_ACCESS_KEY_ID: wama-s3-admin
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: wama-s3-admin-secret
+      TRINO_WRITER_URL: http://trino-session-writer:8080
+      TRINO_WRITER_USER: measurement-session-query-indexer
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/wama-query-indexer-ready"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped

@@ -5,9 +5,9 @@ set -eu
 server_config="${FORGEJO_SERVER_CONFIG:-/data/gitea/conf/app.ini}"
 runner_dir="${FORGEJO_RUNNER_DIRECTORY:-/runner}"
 runner_config_file="$runner_dir/config.yaml"
-runner_layout_file="$runner_dir/forgejo-processor-repositories.layout"
-runner_scope_file="$runner_dir/forgejo-processor-repositories.scope"
-runner_layout=eight-connections-v4
+runner_layout_file="$runner_dir/forgejo-managed-repositories.layout"
+runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
+runner_layout=ten-connections-v5
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
 seed_root="${FORGEJO_PROCESSOR_SEED_ROOT:-/opt/wama/seeds}"
@@ -18,14 +18,17 @@ frequency_repository="${FORGEJO_FREQUENCY_SCALE_REPOSITORY:-processor-frequency-
 apparent_repository="${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
 frequency_iec104_export_repository="${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
 lfr_frequency_provision_repository="${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
+gateway_c37_118_onboarding_repository="${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
 frequency_deploy_root="${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
 apparent_deploy_root="${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
 frequency_iec104_export_deploy_root="${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
 lfr_frequency_provision_deploy_root="${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+gateway_c37_118_onboarding_deploy_root="${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
 infra_network="${WAMA_INFRA_NETWORK:-wama-infra}"
 runner_url="${FORGEJO_RUNNER_URL:-}"
 api_url="${FORGEJO_API_URL:-http://forgejo:3000/api/v1}"
-deploy_marker=.wama-forgejo-processor-root
+processor_deploy_marker=.wama-forgejo-processor-root
+gateway_onboarding_deploy_marker=.wama-forgejo-gateway-onboarding-root
 runner_ci_label=wama-processors-ci:docker://wama-forgejo-runner:local
 runner_deploy_label=wama-processors-deploy:host
 
@@ -66,7 +69,7 @@ validate_deploy_root() {
 initialize_deploy_root() {
   repository="$1"
   deploy_root="$2"
-  marker="$deploy_root/$deploy_marker"
+  marker="$deploy_root/$3"
   if [ -e "$deploy_root" ] && [ ! -d "$deploy_root" ]; then
     printf '%s\n' "$deploy_root must be a directory" >&2
     exit 1
@@ -166,6 +169,10 @@ reset_runner_state() {
     "$runner_dir/forgejo-runner.uuid" \
     "$runner_dir/forgejo-processors.scope" \
     "$runner_dir/forgejo-processors.layout" \
+    "$runner_dir/forgejo-processor-repositories.scope" \
+    "$runner_dir/forgejo-processor-repositories.layout" \
+    "$runner_dir/forgejo-managed-repositories.scope" \
+    "$runner_dir/forgejo-managed-repositories.layout" \
     "$runner_dir"/wama-processor-*.secret \
     "$runner_dir"/wama-processor-*.uuid \
     "$runner_scope_file" \
@@ -209,15 +216,18 @@ require_value WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 require_value WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 require_value WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
 require_value WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT "$lfr_frequency_provision_deploy_root"
+require_value WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT "$gateway_c37_118_onboarding_deploy_root"
 validate_identifier FORGEJO_BOOTSTRAP_ADMIN_USERNAME "$admin_username"
 validate_identifier FORGEJO_FREQUENCY_SCALE_REPOSITORY "$frequency_repository"
 validate_identifier FORGEJO_APPARENT_POWER_REPOSITORY "$apparent_repository"
 validate_identifier FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY "$frequency_iec104_export_repository"
 validate_identifier FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY "$lfr_frequency_provision_repository"
+validate_identifier FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY "$gateway_c37_118_onboarding_repository"
 validate_deploy_root WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 validate_deploy_root WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
 validate_deploy_root WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT "$lfr_frequency_provision_deploy_root"
+validate_deploy_root WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT "$gateway_c37_118_onboarding_deploy_root"
 
 if ! forgejo_as_git admin user list | awk -v username="$admin_username" '$2 == username { found = 1 } END { exit !found }'; then
   forgejo_as_git admin user create \
@@ -232,22 +242,25 @@ umask 077
 mkdir -p "$runner_dir"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
-initialize_deploy_root "$frequency_repository" "$frequency_deploy_root"
-initialize_deploy_root "$apparent_repository" "$apparent_deploy_root"
-initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root"
-initialize_deploy_root "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_root"
+initialize_deploy_root "$frequency_repository" "$frequency_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$apparent_repository" "$apparent_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$gateway_c37_118_onboarding_repository" "$gateway_c37_118_onboarding_deploy_root" "$gateway_onboarding_deploy_marker"
 api_auth_header="$(printf '%s:%s' "$admin_username" "$admin_password" | base64 | tr -d '\n')"
 ensure_repository "$frequency_repository"
 ensure_repository "$apparent_repository"
 ensure_repository "$frequency_iec104_export_repository"
 ensure_repository "$lfr_frequency_provision_repository"
+ensure_repository "$gateway_c37_118_onboarding_repository"
 seed_repository_if_empty "$frequency_repository" "$seed_root/processor-frequency-scale"
 seed_repository_if_empty "$apparent_repository" "$seed_root/processor-apparent-power"
 seed_repository_if_empty "$frequency_iec104_export_repository" "$seed_root/processor-frequency-iec104-export"
 seed_repository_if_empty "$lfr_frequency_provision_repository" "$seed_root/processor-lfr-frequency-provision"
+seed_repository_if_empty "$gateway_c37_118_onboarding_repository" "$seed_root/gateway-c37-118-onboarding"
 ensure_package_token
 
-scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$lfr_frequency_provision_repository"
+scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$lfr_frequency_provision_repository,$admin_username/$gateway_c37_118_onboarding_repository"
 if [ ! -f "$runner_layout_file" ] || [ "$(cat "$runner_layout_file")" != "$runner_layout" ]; then
   reset_runner_state
 fi
@@ -263,6 +276,8 @@ frequency_iec104_export_ci_name=wama-processor-frequency-iec104-export-ci
 frequency_iec104_export_deploy_name=wama-processor-frequency-iec104-export-deploy
 lfr_frequency_provision_ci_name=wama-processor-lfr-frequency-provision-ci
 lfr_frequency_provision_deploy_name=wama-processor-lfr-frequency-provision-deploy
+gateway_c37_118_onboarding_ci_name=wama-gateway-c37-118-onboarding-ci
+gateway_c37_118_onboarding_deploy_name=wama-gateway-c37-118-onboarding-deploy
 register_runner "$frequency_repository" "$frequency_ci_name" "$runner_ci_label"
 register_runner "$frequency_repository" "$frequency_deploy_name" "$runner_deploy_label"
 register_runner "$apparent_repository" "$apparent_ci_name" "$runner_ci_label"
@@ -271,6 +286,8 @@ register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_
 register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_name" "$runner_deploy_label"
 register_runner "$lfr_frequency_provision_repository" "$lfr_frequency_provision_ci_name" "$runner_ci_label"
 register_runner "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_name" "$runner_deploy_label"
+register_runner "$gateway_c37_118_onboarding_repository" "$gateway_c37_118_onboarding_ci_name" "$runner_ci_label"
+register_runner "$gateway_c37_118_onboarding_repository" "$gateway_c37_118_onboarding_deploy_name" "$runner_deploy_label"
 
 printf '%s\n' "$runner_layout" > "$runner_layout_file"
 printf '%s\n' "$scope_manifest" > "$runner_scope_file"
@@ -296,6 +313,7 @@ container:
     - "$apparent_deploy_root"
     - "$frequency_iec104_export_deploy_root"
     - "$lfr_frequency_provision_deploy_root"
+    - "$gateway_c37_118_onboarding_deploy_root"
   options: "--add-host=host.docker.internal:host-gateway --cpus=2 --memory=2g"
 server:
   connections:
@@ -331,4 +349,12 @@ server:
       url: $runner_url
       uuid: $(cat "$runner_dir/$lfr_frequency_provision_deploy_name.uuid")
       token: $(cat "$runner_dir/$lfr_frequency_provision_deploy_name.secret")
+    $gateway_c37_118_onboarding_ci_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$gateway_c37_118_onboarding_ci_name.uuid")
+      token: $(cat "$runner_dir/$gateway_c37_118_onboarding_ci_name.secret")
+    $gateway_c37_118_onboarding_deploy_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$gateway_c37_118_onboarding_deploy_name.uuid")
+      token: $(cat "$runner_dir/$gateway_c37_118_onboarding_deploy_name.secret")
 EOF

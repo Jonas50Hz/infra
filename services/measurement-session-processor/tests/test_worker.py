@@ -10,6 +10,7 @@ import unittest
 
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from measurement_session_common.contract import SESSION_PARQUET_SCHEMA_VERSION
 from measurement_session_common.generated.blobmeta_pb2 import Blobmeta
 from measurement_session_common.generated.measurement_session_pb2 import MeasurementSessionRequest
 from measurement_session_processor.config import Settings
@@ -33,6 +34,7 @@ class SessionWorkerTests(unittest.TestCase):
         replay = worker.process_record(record)
 
         self.assertEqual(first.status, Blobmeta.COMPLETE)
+        self.assertEqual(first.object.parquet_schema_version, SESSION_PARQUET_SCHEMA_VERSION)
         self.assertEqual(first.SerializeToString(deterministic=True), replay.SerializeToString(deterministic=True))
         self.assertEqual(druid.calls, 1)
         self.assertEqual(len(producer.records), 2)

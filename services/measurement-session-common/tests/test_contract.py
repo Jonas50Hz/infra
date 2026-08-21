@@ -10,6 +10,8 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from measurement_session_common.contract import (
     DEFAULT_SESSION_BUCKET,
     PARQUET_MEDIA_TYPE,
+    SESSION_PARQUET_FIELD_IDS,
+    SESSION_PARQUET_SCHEMA_VERSION,
     ContractValidationError,
     rejected_blob_id,
     request_sha256,
@@ -24,6 +26,11 @@ from measurement_session_common.generated.measurement_session_pb2 import Measure
 
 class MeasurementSessionContractTests(unittest.TestCase):
     """Prove the request/result boundary remains bounded and immutable."""
+
+    def test_declares_the_stable_v2_parquet_field_layout(self) -> None:
+        self.assertEqual(SESSION_PARQUET_FIELD_IDS["blob_id"], 1)
+        self.assertEqual(SESSION_PARQUET_FIELD_IDS["quality_old_data"], 18)
+        self.assertEqual(len(SESSION_PARQUET_FIELD_IDS), 18)
 
     def test_accepts_bounded_request_and_complete_result(self) -> None:
         request = _request()
@@ -118,6 +125,7 @@ def _completed_result(request: MeasurementSessionRequest) -> Blobmeta:
     result.object.media_type = PARQUET_MEDIA_TYPE
     result.object.byte_length = 64
     result.object.sha256 = b"x" * 32
+    result.object.parquet_schema_version = SESSION_PARQUET_SCHEMA_VERSION
     return result
 
 

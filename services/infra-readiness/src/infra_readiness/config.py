@@ -7,11 +7,12 @@ import math
 import os
 from collections.abc import Mapping
 
-DEFAULT_FORGEJO_PROCESSOR_REPOSITORIES = (
+DEFAULT_FORGEJO_MANAGED_REPOSITORIES = (
     "processor-frequency-scale",
     "processor-apparent-power",
     "processor-frequency-iec104-export",
     "processor-lfr-frequency-provision",
+    "gateway-c37-118-onboarding",
 )
 
 
@@ -32,7 +33,7 @@ class Settings:
     iec104_browser_url: str
     forgejo_admin_password: str
     forgejo_admin_username: str
-    forgejo_processor_repositories: tuple[str, ...]
+    forgejo_managed_repositories: tuple[str, ...]
     forgejo_url: str
     grafana_password: str
     grafana_url: str
@@ -53,6 +54,15 @@ class Settings:
     s3_endpoint_url: str
     s3_region: str
     s3_secret_access_key: str
+    trino_blobmeta_catalog: str
+    trino_blobmeta_schema: str
+    trino_druid_catalog: str
+    trino_druid_schema: str
+    trino_session_catalog: str
+    trino_session_schema: str
+    trino_session_table: str
+    trino_url: str
+    trino_user: str
     victoria_metrics_url: str
 
     @classmethod
@@ -94,10 +104,10 @@ class Settings:
                 "FORGEJO_ADMIN_USERNAME",
                 "wama-admin",
             ),
-            forgejo_processor_repositories=_repositories(
+            forgejo_managed_repositories=_repositories(
                 values,
-                "FORGEJO_PROCESSOR_REPOSITORIES",
-                DEFAULT_FORGEJO_PROCESSOR_REPOSITORIES,
+                "FORGEJO_MANAGED_REPOSITORIES",
+                DEFAULT_FORGEJO_MANAGED_REPOSITORIES,
             ),
             forgejo_url=_url(values, "FORGEJO_URL", "http://forgejo:3000"),
             grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
@@ -154,6 +164,43 @@ class Settings:
                 "S3_SECRET_ACCESS_KEY",
                 "wama-s3-admin-secret",
             ),
+            trino_blobmeta_catalog=_identifier(
+                values,
+                "TRINO_BLOBMETA_CATALOG",
+                "blobmeta",
+            ),
+            trino_blobmeta_schema=_identifier(
+                values,
+                "TRINO_BLOBMETA_SCHEMA",
+                "blobmeta_catalog",
+            ),
+            trino_druid_catalog=_identifier(
+                values,
+                "TRINO_DRUID_CATALOG",
+                "druid",
+            ),
+            trino_druid_schema=_identifier(
+                values,
+                "TRINO_DRUID_SCHEMA",
+                "druid",
+            ),
+            trino_session_catalog=_identifier(
+                values,
+                "TRINO_SESSION_CATALOG",
+                "sessions",
+            ),
+            trino_session_schema=_identifier(
+                values,
+                "TRINO_SESSION_SCHEMA",
+                "wama",
+            ),
+            trino_session_table=_identifier(
+                values,
+                "TRINO_SESSION_TABLE",
+                "measurement_values",
+            ),
+            trino_url=_url(values, "TRINO_URL", "http://trino:8080"),
+            trino_user=_required(values, "TRINO_USER", "wama"),
             victoria_metrics_url=_url(
                 values,
                 "VICTORIA_METRICS_URL",

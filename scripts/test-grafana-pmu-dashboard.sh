@@ -22,7 +22,9 @@ show_failure_diagnostics() {
 trap show_failure_diagnostics ERR
 
 docker compose config --quiet
-docker compose build grafana druid druid-init infra-readiness
+docker compose build grafana druid druid-init infra-readiness trino-session-init
+docker compose up -d --wait --wait-timeout "$wait_timeout_seconds" trino-session-writer
+docker compose run --rm --build --no-deps trino-session-init
 docker compose up -d --wait --wait-timeout "$wait_timeout_seconds" \
   pmu-gateway \
   druid \
