@@ -9,6 +9,14 @@ Each tracked seed is pushed to `main` only when its remote has no refs. An
 existing nonempty private repository is left unchanged; an existing nonprivate
 repository makes bootstrap fail without changing it.
 
+For the default C37.118 demonstration, a fresh onboarding seed uses that
+initial `main` push to trigger its existing workflow. For an existing private
+`gateway-c37-118-onboarding` repository, bootstrap dispatches only its
+`gateway.yaml` workflow at `main` once per retained runner state after it
+writes the scoped runner configuration. The root service never runs the gateway
+Compose project; the workflow remains responsible for its marker-owned source
+adapters.
+
 Configure the values in the root `.env`; a duplicate
 [forgejo-init.env.example](forgejo-init.env.example) is available as a focused
 reference. `FORGEJO_RUNNER_URL` must be reachable from the runner and its job

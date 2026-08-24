@@ -7,12 +7,14 @@ from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from scripts.reconcile_masterdata import (
     DEPLOY_MARKER,
     GATEWAY_COMPOSE_FILE,
     GATEWAY_SERVICE_PREFIX,
     GATEWAY_STATE_FILE,
+    PUBLISHER_SERVICE,
     DeploymentError,
     _active_source_ids,
     _gateway_service_name,
@@ -20,7 +22,9 @@ from scripts.reconcile_masterdata import (
     _require_expected_service,
     _require_expected_services,
     _require_external_infra_network,
+    _verify_live_measurements,
     _write_gateway_compose,
+    reconcile_masterdata,
     synchronize_checkout,
 )
 
@@ -137,6 +141,99 @@ class DeploymentGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(DeploymentError, "external wama-infra"):
             _require_external_infra_network(
                 {"networks": {"wama-infra": {"external": False, "name": "wama-infra"}}},
+                "wama-infra",
+            )
+
+    def test_runs_live_measurement_verification_through_publisher_service(self) -> None:
+        compose_command = ["docker", "compose", "-f", "compose.yaml"]
+        deploy_root = Path("/tmp/gateway-onboarding-deploy")
+        environment = {"WAMA_MASTERDATA_CATALOG_REVISION": "commit-1"}
+
+        with patch("scripts.reconcile_masterdata._run_compose") as run_compose:
+            _verify_live_measurements(compose_command, deploy_root, environment)
+
+        run_compose.assert_called_once_with(
+            compose_command,
+            deploy_root,
+            environment,
+            "run",
+            "--rm",
+            "--no-deps",
+            PUBLISHER_SERVICE,
+            "python",
+            "-m",
+            "gateway_c37_118_onboarding.verify_live_measurements",
+        )
+
+    def test_records_gateway_state_before_live_measurement_verification(self) -> None:
+        with TemporaryDirectory() as directory:
+            deploy_root = Path(directory)
+            observed_state: list[dict[str, object]] = []
+
+            def verify_live_measurements(*_arguments: object) -> None:
+                state_path = deploy_root / GATEWAY_STATE_FILE
+                self.assertTrue(state_path.is_file())
+                observed_state.append(json.loads(state_path.read_text(encoding="utf-8")))
+
+            self._reconcile_one_gateway(deploy_root, verify_live_measurements)
+
+            self.assertEqual(
+                observed_state,
+                [{"commit": "commit-1", "services": ["c37-118-gateway-pmu-bay-01"]}],
+            )
+
+    def test_keeps_gateway_state_when_live_measurement_verification_fails(self) -> None:
+        with TemporaryDirectory() as directory:
+            deploy_root = Path(directory)
+
+            with self.assertRaises(subprocess.CalledProcessError):
+                self._reconcile_one_gateway(
+                    deploy_root,
+                    subprocess.CalledProcessError(1, "docker compose run"),
+                )
+
+            state = json.loads((deploy_root / GATEWAY_STATE_FILE).read_text(encoding="utf-8"))
+            self.assertEqual(state["commit"], "commit-1")
+            self.assertEqual(state["services"], ["c37-118-gateway-pmu-bay-01"])
+
+    def _reconcile_one_gateway(self, deploy_root: Path, verify_side_effect: object) -> None:
+        source_directory = deploy_root / "catalog" / "sources"
+        source_directory.mkdir(parents=True)
+        (source_directory / "pmu-bay-01.yaml").write_text("source_id: pmu-bay-01\n", encoding="utf-8")
+        gateway_service = "c37-118-gateway-pmu-bay-01"
+        base_rendered = {
+            "networks": {"wama-infra": {"external": True, "name": "wama-infra"}},
+        }
+        gateway_rendered = {
+            **base_rendered,
+            "services": {
+                PUBLISHER_SERVICE: {"networks": ["wama-infra"]},
+                gateway_service: {"networks": ["wama-infra"]},
+            },
+        }
+        with (
+            patch("scripts.reconcile_masterdata.subprocess.run"),
+            patch("scripts.reconcile_masterdata._run_compose"),
+            patch(
+                "scripts.reconcile_masterdata._compose_services",
+                side_effect=[[PUBLISHER_SERVICE], [PUBLISHER_SERVICE, gateway_service]],
+            ),
+            patch(
+                "scripts.reconcile_masterdata._rendered_compose_config",
+                side_effect=[base_rendered, gateway_rendered],
+            ),
+            patch("scripts.reconcile_masterdata._verify_image_revision"),
+            patch("scripts.reconcile_masterdata._verify_gateway_revisions"),
+            patch(
+                "scripts.reconcile_masterdata._verify_live_measurements",
+                side_effect=verify_side_effect,
+            ),
+        ):
+            reconcile_masterdata(
+                deploy_root,
+                "wama.local/gateway-c37-118-onboarding:main",
+                "commit-1",
+                "wama-gateway-c37-118-onboarding",
                 "wama-infra",
             )
 

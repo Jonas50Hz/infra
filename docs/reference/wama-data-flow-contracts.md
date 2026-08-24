@@ -1,24 +1,31 @@
-# WAMA Data Flow (Common Format)
+(ref_wama_data_flow_contracts)=
+
+```{meta}
+:description: WAMA Kafka data-flow and raw-Protobuf contract reference for measurements, sessions, metadata, and export.
+```
+
+# WAMA data flow (Common Format)
 
 Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 "Process — MeasurementSession & alarm", and "Architecture at a glance"; the
-[architecture image](image.png); and the [live-data BPMN](Livedaten_Prozess_WAMA.bpmn).
+[architecture image](../wama/image.png); and the
+[live-data BPMN](../wama/Livedaten_Prozess_WAMA.bpmn).
 
 > The image and BPMN are authoritative for process/component vocabulary. The
 > PoC data plane remains separate from Nexus-specific Concentrator/TimeStep,
-> Confluent Schema Registry, and PMUReading/STAT choices. It normalises every
+> Confluent Schema Registry, and PMUReading/STAT choices. It normalizes every
 > source to **Common Format** and routes it through the topics below.
 
 ## Path
 1. **Source → Gateway.** One gateway container per source (PMU, PQM,
-   Faultrecorder, ...). Gateway connects, pulls the stream, and normalises to
+  Faultrecorder, ...). Gateway connects, pulls the stream, and normalizes to
    Common Format (`MCCSMeasurementValue`).
-2. **Gateway → Kafka.** Normalised measurements published to `LiveMeasurement`.
+2. **Gateway → Kafka.** Normalized measurements published to `LiveMeasurement`.
 3. **Processing.** Quixstreams processors consume `LiveMeasurement`, compute
   derived values, and write them back to Kafka. Producers may submit bounded
   `MeasurementSession` requests, and processors may emit `Alarm` and `Export`
   records. The planned
-  [LFR per-second frequency provision](04-lfr-frequency-provision.md) processor
+  [LFR per-second frequency provision](lfr-frequency-provision.md) processor
   begins at this Kafka boundary; source-protocol and PDC ingestion are outside
   that use-case specification.
 4. **Storage.**
@@ -31,7 +38,7 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
      X weeks; aggregated live data is archived.
    - Measurement sessions go to long-term storage (not deleted after six
      weeks).
-5. **Visualisation.** The Druid Router makes Common Format measurement data
+5. **Visualization.** The Druid Router makes Common Format measurement data
   queryable now. Grafana's generated `WAMA Gateways` dashboards query Druid for
   catalog-defined gateway trends and retain each record's explicit quality
   state. This is separate from the Compose PoC's
@@ -71,7 +78,7 @@ this PoC.
 
 ## Masterdata source contract
 **`SourceMasterdata`**, proto3 package `wama.masterdata.v1`. Canonical file:
-[`schema/masterdata.proto`](schema/masterdata.proto). The Kafka key is the
+[`schema/masterdata.proto`](../wama/schema/masterdata.proto). The Kafka key is the
 exact UTF-8 `source_id`; non-null values are deterministic raw-Protobuf source
 records and a null-valued record with the same key is a decommissioning
 tombstone.
@@ -114,7 +121,7 @@ therefore does not satisfy the later LFR audit contract by itself.
 
 ## Common Format — the contract
 **`MCCSMeasurementValue`**, proto3, package `rtd_schema.v1`. Canonical file:
-[`schema/rtd_schema.proto`](schema/rtd_schema.proto). **Same schema as MCCS.**
+[`schema/rtd_schema.proto`](../wama/schema/rtd_schema.proto). **Same schema as MCCS.**
 Serialization: **raw Protobuf** (no Confluent Schema Registry).
 
 ### Fields
@@ -130,7 +137,7 @@ Serialization: **raw Protobuf** (no Confluent Schema Registry).
   - `double_value` — floating point (active/reactive power, voltage, temp, wind).
   - `int_value` (int64) — ordered discrete states (tap position).
   - `uint_value` (uint32) — runtime-configurable **enumerated** states
-    (switch/breaker status, energized state) via ValueToAlias mapping.
+    (switch/breaker status, energized state) using a ValueToAlias mapping.
   - `bool_value` — binary states.
   - `string_value` — status/error/interlocking texts.
   - `timestamp_value` — a timestamp as a measurement.
@@ -140,7 +147,7 @@ Serialization: **raw Protobuf** (no Confluent Schema Registry).
 ### Interpretation rule
 Value meaning is resolved by **Master Data config in the consuming
 module/service**, not hard-coded. `uint_value` enum meanings are bound at
-engineering time via ValueToAlias.
+engineering time using ValueToAlias.
 
 ### Druid live-measurements ingestion
 The root-owned `druid` service builds a Protobuf descriptor from the canonical
@@ -151,9 +158,9 @@ quality flags, and source timestamps queryable. It uses `queryGranularity: none`
 and `rollup: false`; no Druid Schema Registry, Kafka ZooKeeper service, or JSON
 translation path is introduced.
 
-## IEC 104 Export contract
+## IEC 104 export contract
 **`ExportRecord`**, proto3, package `wama.iec104.v1`. Canonical file:
-[`schema/iec104_export.proto`](schema/iec104_export.proto). Serialization is raw
+[`schema/iec104_export.proto`](../wama/schema/iec104_export.proto). Serialization is raw
 Protobuf on the existing `Export` topic. The Kafka key is the canonical
 `export_id` UUID, and the Kafka record timestamp must equal `created_at` rounded
 down to milliseconds.
@@ -198,7 +205,7 @@ the unresolved full LFR selection algorithm.
 ## MeasurementSession request and Blobmeta result contracts
 **`MeasurementSessionRequest`**, proto3, package
 `wama.measurement_session.v1`. Canonical file:
-[`schema/measurement_session.proto`](schema/measurement_session.proto).
+[`schema/measurement_session.proto`](../wama/schema/measurement_session.proto).
 Serialization is raw Protobuf on `MeasurementSession`, keyed by canonical
 `session_id`; the Kafka record timestamp equals `requested_at` rounded down to
 milliseconds.
@@ -219,7 +226,7 @@ MRID order into a typed long-form Parquet artifact, stores it under
 `sessions/<session-id>/measurements.parquet`, and writes a raw-Protobuf receipt
 for idempotent replay. It then publishes **`Blobmeta`**, proto3 package
 `wama.blobmeta.v1`, from
-[`schema/blobmeta.proto`](schema/blobmeta.proto) to the compacted `Blobmeta`
+[`schema/blobmeta.proto`](../wama/schema/blobmeta.proto) to the compacted `Blobmeta`
 topic keyed by immutable `blob_id`.
 
 `Blobmeta` records the request digest, session interval, copied context,

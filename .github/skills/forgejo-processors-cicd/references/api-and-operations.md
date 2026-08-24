@@ -97,10 +97,14 @@ curl --fail --silent --show-error \
 
 Only make that request after a `GET /repos/<owner>/<processor-repository>`
 returns not found. The resulting repository must report `"private": true`.
-Then use `git ls-remote` to inspect refs. If any ref exists, stop: bootstrap
-must leave that repository untouched. If it has no refs, the bootstrap service
-creates the initial `main` commit and pushes it without `--force`. The PoC
-bootstraps both `processor-frequency-scale` and `processor-apparent-power`.
+Then use `git ls-remote` to inspect refs. For processor repositories, an
+existing ref is left untouched. If a repository has no refs, the bootstrap
+service creates the initial `main` commit and pushes it without `--force`. The
+PoC bootstraps `processor-frequency-scale`, `processor-apparent-power`,
+`processor-frequency-iec104-export`, and `processor-lfr-frequency-provision`,
+as well as `gateway-c37-118-onboarding`. An existing private onboarding
+repository is not reseeded, but receives one scoped `gateway.yaml` dispatch
+when its runner state has no prior trigger record.
 
 ## Git and Pull Requests
 

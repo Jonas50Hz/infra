@@ -13,6 +13,10 @@ services here. The separate
 [`../forgejo-repos/`](../forgejo-repos/) seeds each own one processor service
 and join this stack through the external `wama-infra` network.
 
+The manually operated `~/c37-118-simulator` repository is also outside this
+directory and is not a root Compose service. It joins `wama-infra` only when an
+operator starts its separate Compose project.
+
 | Directory | Compose service |
 | --- | --- |
 | [`kafka/`](kafka/) | `kafka` |
@@ -22,7 +26,6 @@ and join this stack through the external `wama-infra` network.
 | [`kafka-ui/`](kafka-ui/) | `kafka-ui` |
 | [`pmu-gateway/`](pmu-gateway/) | `pmu-gateway` (deprecated reference fixture; excluded by default) |
 | [`gateway-dashboard-provisioner/`](gateway-dashboard-provisioner/) | `gateway-dashboard-provisioner` |
-| [`c37-118-simulator/`](c37-118-simulator/) | `c37-118-simulator` (profile `c37-118`) |
 | [`iec104-exporter/`](iec104-exporter/) | `iec104-exporter` |
 | [`iec104-receiver/`](iec104-receiver/) | `iec104-receiver` (profile `iec104-test`) |
 | [`iec104-browser/`](iec104-browser/) | `iec104-browser` |

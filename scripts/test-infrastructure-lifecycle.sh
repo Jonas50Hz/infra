@@ -65,11 +65,19 @@ verify_druid_live_measurement() {
     python -c 'from infra_readiness.config import Settings; from infra_readiness.druid import check_druid; check_druid(Settings.from_environment())'
 }
 
+wait_for_live_measurement() {
+  docker compose run --rm --no-deps \
+    --env REQUIRE_LIVE_MEASUREMENT=true \
+    --env READINESS_TIMEOUT_SECONDS="$readiness_timeout_seconds" \
+    infra-readiness
+}
+
 start_and_verify() {
   local phase="$1"
 
   docker compose up -d
   wait_for_readiness "$phase" || return 1
+  wait_for_live_measurement
   verify_druid_live_measurement
 }
 

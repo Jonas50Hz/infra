@@ -52,7 +52,8 @@ The fixture is intentionally not watched. Recreate or restart the service
 after changing it:
 
 ```sh
-docker compose up -d --force-recreate pmu-gateway
+docker compose -f docker-compose.yml -f services/pmu-gateway/compose.yaml \
+  up -d --force-recreate pmu-gateway
 ```
 
 To start with a different fixture, use an absolute host path so Compose's
@@ -60,7 +61,8 @@ included-file path handling is unambiguous:
 
 ```sh
 PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
-  docker compose up -d --force-recreate pmu-gateway
+  docker compose -f docker-compose.yml -f services/pmu-gateway/compose.yaml \
+    up -d --force-recreate pmu-gateway
 ```
 
 Set `PMU_GATEWAY_PUBLISH_INTERVAL_MS` to override the file interval for one

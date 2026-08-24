@@ -129,6 +129,8 @@ def reconcile_masterdata(
             commit,
         )
     _write_gateway_state(deploy_root, commit, gateway_services)
+    if gateway_services:
+        _verify_live_measurements(base_compose_command, deploy_root, environment)
 
 
 def _validate_workspace(workspace: Path) -> None:
@@ -329,6 +331,25 @@ def _run_compose(
     *arguments: str,
 ) -> None:
     subprocess.run([*compose_command, *arguments], cwd=deploy_root, env=environment, check=True)
+
+
+def _verify_live_measurements(
+    compose_command: list[str],
+    deploy_root: Path,
+    environment: dict[str, str],
+) -> None:
+    _run_compose(
+        compose_command,
+        deploy_root,
+        environment,
+        "run",
+        "--rm",
+        "--no-deps",
+        PUBLISHER_SERVICE,
+        "python",
+        "-m",
+        "gateway_c37_118_onboarding.verify_live_measurements",
+    )
 
 
 def _compose_services(

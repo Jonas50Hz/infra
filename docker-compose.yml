@@ -5,7 +5,6 @@ include:
   - ./services/kafka-exporter/compose.yaml
   - ./services/kafka-ui/compose.yaml
   - ./services/gateway-dashboard-provisioner/compose.yaml
-  - ./services/c37-118-simulator/compose.yaml
   - ./services/iec104-exporter/compose.yaml
   - ./services/iec104-receiver/compose.yaml
   - ./services/iec104-browser/compose.yaml

@@ -82,6 +82,10 @@ case "$url" in
   */collaborators/"$FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME")
     : > "$output_file"
     ;;
+  */actions/workflows/gateway.yaml/dispatches)
+    test "$method" = POST
+    test "$data" = '{"ref":"main"}'
+    ;;
   *) exit 1 ;;
 esac
 if [ "$output_file" != /dev/null ] && [ ! -s "$output_file" ] && [ "$method" != PUT ]; then
@@ -200,6 +204,15 @@ assert_contains() {
   }
 }
 
+assert_not_contains() {
+  unexpected="$1"
+  path="$2"
+  if grep -Fq "$unexpected" "$path"; then
+    printf '%s\n' "Expected $path not to contain $unexpected" >&2
+    exit 1
+  fi
+}
+
 test_seeds_and_registers_all_processor_repositories() {
   setup_case seed-new
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
@@ -222,16 +235,20 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains wama-gateway-c37-118-onboarding-deploy: "$case_directory/runner/config.yaml"
   assert_contains ten-connections-v5 "$case_directory/runner/forgejo-managed-repositories.layout"
   assert_contains 'PUT http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118-onboarding/collaborators/wama-gateway-onboarding-agent {"permission":"write"}' "$case_directory/curl.log"
+  assert_not_contains '/actions/workflows/' "$case_directory/curl.log"
+  test -f "$case_directory/runner/gateway-c37-118-onboarding.workflow-triggered"
   assert_contains 'owner=wama-admin' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
   assert_contains 'repository=gateway-c37-118-onboarding' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
   assert_contains 'username=wama-gateway-onboarding-agent' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.identity"
   test "$(stat -c '%a' "$case_directory/runner/forgejo-gateway-c37-118-onboarding-agent.token")" = 600
-  if grep -Fq test-gateway-onboarding-agent-token "$case_directory/bootstrap.log"; then
-    printf '%s\n' "Bootstrap wrote the gateway onboarding agent token to its log" >&2
+  if grep -Eq 'test-(gateway-onboarding-agent-token|package-token)' "$case_directory/bootstrap.log"; then
+    printf '%s\n' "Bootstrap wrote a Forgejo token to its log" >&2
     exit 1
   fi
+  export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
   run_bootstrap >> "$case_directory/bootstrap.log" 2>&1
   test "$(grep -Fc -- "admin user create --username wama-gateway-onboarding-agent" "$case_directory/forgejo.log")" -eq 1
+  assert_not_contains '/actions/workflows/' "$case_directory/curl.log"
   test -f "$case_directory/frequency-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/apparent-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/frequency-iec104-export-deploy/.wama-forgejo-processor-root"
@@ -253,6 +270,11 @@ test_skips_nonempty_repositories() {
   assert_contains "processor-frequency-iec104-export already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "processor-lfr-frequency-provision already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "gateway-c37-118-onboarding already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
+  assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118-onboarding/actions/workflows/gateway.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 1
+  test -f "$case_directory/runner/gateway-c37-118-onboarding.workflow-triggered"
+  run_bootstrap >> "$case_directory/bootstrap.log" 2>&1
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 1
 }
 
 test_rejects_unmarked_nonempty_processor_root() {

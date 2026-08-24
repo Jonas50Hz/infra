@@ -10,6 +10,7 @@ runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
 runner_layout=ten-connections-v5
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
+gateway_c37_118_onboarding_workflow_trigger_file="$runner_dir/gateway-c37-118-onboarding.workflow-triggered"
 gateway_c37_118_onboarding_agent_username="${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME:-wama-gateway-c37-118-onboarding-agent}"
 gateway_c37_118_onboarding_agent_email="${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL:-wama-gateway-c37-118-onboarding-agent@local}"
 gateway_c37_118_onboarding_agent_token_name=wama-gateway-c37-118-onboarding-agent
@@ -124,6 +125,7 @@ ensure_repository() {
 seed_repository_if_empty() {
   repository="$1"
   seed_directory="$2"
+  seeded_file="${3:-}"
   scope="$admin_username/$repository"
   repository_url="http://forgejo:3000/$scope.git"
   if ! refs="$(GIT_TERMINAL_PROMPT=0 git \
@@ -151,6 +153,9 @@ seed_repository_if_empty() {
   GIT_TERMINAL_PROMPT=0 git -C "$seed_worktree" \
     -c "http.extraHeader=Authorization: Basic $api_auth_header" \
     push "$repository_url" HEAD:refs/heads/main
+  if [ -n "$seeded_file" ]; then
+    : > "$seeded_file"
+  fi
 }
 
 ensure_package_token() {
@@ -172,6 +177,16 @@ forgejo_api_as_admin() {
   curl --fail --silent --show-error \
     --user "$admin_username:$admin_password" \
     "$@"
+}
+
+dispatch_gateway_c37_118_onboarding_workflow() {
+  forgejo_api_as_admin \
+    --request POST \
+    --header "Accept: application/json" \
+    --header "Content-Type: application/json" \
+    --data '{"ref":"main"}' \
+    "$api_url/repos/$admin_username/$gateway_c37_118_onboarding_repository/actions/workflows/gateway.yaml/dispatches"
+  printf '%s\n' "Queued gateway-c37-118-onboarding workflow for main."
 }
 
 lookup_gateway_c37_118_onboarding_agent() {
@@ -291,6 +306,7 @@ reset_runner_state() {
     "$runner_dir"/wama-processor-*.uuid \
     "$runner_scope_file" \
     "$runner_config_file" \
+    "$gateway_c37_118_onboarding_workflow_trigger_file" \
     "$runner_dir/.runner"
 }
 
@@ -358,6 +374,7 @@ umask 077
 mkdir -p "$runner_dir"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
+gateway_c37_118_onboarding_seeded_file="$temporary_directory/gateway-c37-118-onboarding.seeded"
 initialize_deploy_root "$frequency_repository" "$frequency_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$apparent_repository" "$apparent_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root" "$processor_deploy_marker"
@@ -373,7 +390,10 @@ seed_repository_if_empty "$frequency_repository" "$seed_root/processor-frequency
 seed_repository_if_empty "$apparent_repository" "$seed_root/processor-apparent-power"
 seed_repository_if_empty "$frequency_iec104_export_repository" "$seed_root/processor-frequency-iec104-export"
 seed_repository_if_empty "$lfr_frequency_provision_repository" "$seed_root/processor-lfr-frequency-provision"
-seed_repository_if_empty "$gateway_c37_118_onboarding_repository" "$seed_root/gateway-c37-118-onboarding"
+seed_repository_if_empty \
+  "$gateway_c37_118_onboarding_repository" \
+  "$seed_root/gateway-c37-118-onboarding" \
+  "$gateway_c37_118_onboarding_seeded_file"
 ensure_package_token
 ensure_gateway_c37_118_onboarding_agent
 
@@ -475,3 +495,10 @@ server:
       uuid: $(cat "$runner_dir/$gateway_c37_118_onboarding_deploy_name.uuid")
       token: $(cat "$runner_dir/$gateway_c37_118_onboarding_deploy_name.secret")
 EOF
+
+if [ -e "$gateway_c37_118_onboarding_seeded_file" ]; then
+  : > "$gateway_c37_118_onboarding_workflow_trigger_file"
+elif [ ! -e "$gateway_c37_118_onboarding_workflow_trigger_file" ]; then
+  dispatch_gateway_c37_118_onboarding_workflow
+  : > "$gateway_c37_118_onboarding_workflow_trigger_file"
+fi

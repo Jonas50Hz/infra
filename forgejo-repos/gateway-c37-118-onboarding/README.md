@@ -14,12 +14,12 @@ a CFG-2 phasor magnitude channel and binds frequency/ROCOF to their singleton
 v2 values. V1 accepts only the `voltage`, `current`, `frequency`, and `rocof`
 double-value mappings with units `V`, `A`, `Hz`, and `Hz/s`.
 
-The root-owned simulator remains a fixed five-PMU V2 fixture at
-`172.30.0.10:4712` through `172.30.0.10:4716`. The initial catalog contains
-one source YAML for each fixture PMU, but reviewed source YAML files may be
-added or removed. Active Masterdata records, generated adapters, and
-verification expectations are derived from the current catalog; this
-repository does not control, deploy, or restart the simulator.
+The manually operated `~/c37-118-simulator` repository remains a fixed
+five-PMU V2 fixture at `172.30.0.10:4712` through `172.30.0.10:4716`. The
+initial catalog contains one source YAML for each fixture PMU, but reviewed
+source YAML files may be added or removed. Active Masterdata records, generated
+adapters, and verification expectations are derived from the current catalog;
+this repository does not control, deploy, restart, or stop the simulator.
 
 Run the repository checks from this directory:
 
@@ -41,8 +41,9 @@ and removes only that source's previously managed adapter. Raw STAT/time-quality
 retention, version 3, CFG-3, UDP, TLS, source discovery, and the root simulator
 remain outside this repository's gateway scope.
 
-After a successful deployment, verify fresh records for every approved catalog
-MRID from the marker-owned deployment root:
+After adapter reconciliation, the deployment automatically verifies fresh
+records for every approved catalog MRID. Run the same verifier manually only
+for focused troubleshooting:
 
 ```sh
 cd /var/lib/wama-gateway-c37-118-onboarding

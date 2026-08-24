@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "skills": {
+    "documentation-build": {
+      "source": "canonical/copilot-collections",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-build/SKILL.md",
+      "computedHash": "e0a6742007daecca92fe72dcb8d2c2682f46220b522714af5fcb3718e3a24fa1"
+    },
+    "documentation-diataxis": {
+      "source": "canonical/copilot-collections",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-diataxis/SKILL.md",
+      "computedHash": "7c06cfa23591073429a3fbb46fa3c5a33235bc5c1723158fb9959be462d5568c"
+    },
+    "documentation-review": {
+      "source": "canonical/copilot-collections",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-review/SKILL.md",
+      "computedHash": "608b946993ff3643af6f71af863b3150da8c97aeb98261f71b3a8bb5e682e3f4"
+    },
+    "documentation-structure": {
+      "source": "canonical/copilot-collections",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-structure/SKILL.md",
+      "computedHash": "a62cfe3f6595a5849501c4cf8e0fc7b2dff22774a42c09f37d9f92a5b350f68f"
+    },
+    "documentation-style": {
+      "source": "canonical/copilot-collections",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-style/SKILL.md",
+      "computedHash": "acde13e78f6c6c3090965a05e17f3d00acdccb0fcd9a9a30b7336d404bd13001"
+    },
+    "documentation-verify": {
+      "source": "canonical/copilot-collections",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-verify/SKILL.md",
+      "computedHash": "676a66b5f8d07c50c1744d97c67a3b8aa890c4c8266b4cf2315e6378dcb37863"
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grill-me/SKILL.md",
+      "computedHash": "9cdbb4b8f7a3aeaef82e6230c9e823500d4a8a1214c726cf342cf9829d34fc7d"
+    },
+    "writing-documentation-with-diataxis": {
+      "source": "sammcj/agentic-coding",
+      "sourceType": "github",
+      "skillPath": "Skills_disabled/diataxis-documentation/SKILL.md",
+      "computedHash": "80b05e3bf8a65e2d22b2861e6d39d7d47b643a17f27a7c6c91aa76b99a84cd8c"
+    }
+  }
+}

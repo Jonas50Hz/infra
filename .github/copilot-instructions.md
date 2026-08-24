@@ -61,11 +61,14 @@ This is NOT the production target (production is Kubernetes-based).
   the root README, and these instructions in the same change.
 - The legacy Phase 1 `pmu-gateway` fixture is retained for reference only and
   is excluded from the root Compose assembly. The standalone C37.118 simulator
-  remains opt-in and does not publish Kafka or Common Format records.
-- `c37-118-simulator` owns `services/c37-118-simulator/`. It is an opt-in,
-  root-owned standalone C37.118 TCP source simulator with no Kafka, Common
-  Format, gateway, or Forgejo dependency. Its large fleet checks stay manually
-  armed and isolated from `wama-infra`.
+  lives in the separately managed `~/c37-118-simulator` repository. It is
+  manually started with its default five-PMU V2 profile and does not publish
+  Kafka or Common Format records.
+- `c37-118-simulator` is never a root Compose service. Its separate Compose
+  project joins the external `wama-infra` network at the reviewed
+  `172.30.0.10` address only after an operator starts it. It has no Kafka,
+  Common Format, gateway, or Forgejo dependency. Its large fleet checks remain
+  manually armed and isolated from `wama-infra`.
 - Druid owns `services/druid/` and persists its single-server state in
   `druid-data`; `druid-init` owns `services/druid-init/` and must idempotently
   initialize the raw-Protobuf `LiveMeasurement` supervisor. Druid's Router is
@@ -163,8 +166,8 @@ This is NOT the production target (production is Kubernetes-based).
 - Keep raw/waveform data OFF Kafka (separate path in the real design).
 
 ## Where the full plan lives
-Detailed platform context is in [`docs/wama/`](../docs/wama/). Read:
-- [Overview & processes](../docs/wama/00-overview.md)
-- [Architecture & SW stack](../docs/wama/01-architecture.md)
-- [Data flow & Kafka contracts](../docs/wama/02-dataflow-contracts.md)
-- [PoC compose plan](../docs/wama/03-poc-compose-plan.md)
+Detailed platform context is in [`docs/`](../docs/index.md). Read:
+- [Overview & processes](../docs/explanation/wama-platform-overview.md)
+- [Architecture & SW stack](../docs/explanation/wama-architecture.md)
+- [Data flow & Kafka contracts](../docs/reference/wama-data-flow-contracts.md)
+- [PoC compose plan](../docs/explanation/wama-poc-compose-plan.md)

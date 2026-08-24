@@ -1,6 +1,12 @@
-# C37.118 Masterdata and Gateway Onboarding
+(ref_c37_118_masterdata_gateway_onboarding)=
 
-## Status and Scope
+```{meta}
+:description: Reference for reviewed C37.118 Masterdata publication and guarded legacy version 2 gateway onboarding.
+```
+
+# C37.118 Masterdata and gateway onboarding
+
+## Status and scope
 
 This increment establishes reviewed C37.118 PMU masterdata, its runtime Kafka
 projection, and a guarded legacy C37.118.2-2011 wire-version-2 TCP adapter for
@@ -14,12 +20,12 @@ is the one explicitly declared gateway-deployment-test repository. It owns a
 one-shot `masterdata-publisher` plus only source-scoped adapters rendered by its
 marker-owned deployment guard.
 
-## Authority and Runtime State
+## Authority and runtime state
 
 Git is the reviewed authority. A Power User changes a source YAML file on a
 feature branch. Repository validation checks the catalog, raw-Protobuf contract,
 v2 decoder, and deployment guard. A Systemexperte approves the change by
-merging it to `main`, which builds one revision-labelled image and runs it from
+merging it to `main`, which builds one revision-labeled image and runs it from
 its marker-owned deployment root.
 
 Kafka's compacted `Masterdata` topic is the runtime projection. Git history
@@ -34,9 +40,9 @@ workflow at `main` once per retained runner state for an existing private
 onboarding repository. Root Compose does not run the onboarding Compose project
 or manage its adapters.
 
-## Wire Contract
+## Wire contract
 
-The canonical [`schema/masterdata.proto`](schema/masterdata.proto) defines
+The canonical [`schema/masterdata.proto`](../wama/schema/masterdata.proto) defines
 `wama.masterdata.v1.SourceMasterdata`.
 
 | Item | V1 rule |
@@ -58,7 +64,7 @@ frequency and ROCOF use their required singleton v2 values. Hostnames, default
 ports, device credentials, capability discovery, non-PMU source protocols, and
 secret distribution are intentionally excluded.
 
-## Catalog Rules
+## Catalog rules
 
 The publisher rejects unknown YAML keys, invalid endpoint literals and port
 ranges, non-v2 wire versions, duplicate source IDs, channels, selectors, or
@@ -77,7 +83,7 @@ and MRID ownership collisions. It publishes active sources in deterministic
 source-ID order and tombstones only source IDs previously owned by its catalog
 but absent from the approved catalog.
 
-## Deployment Boundary
+## Deployment boundary
 
 The repository has the dedicated root
 `/var/lib/wama-gateway-c37-118-onboarding`, marked with
@@ -104,7 +110,7 @@ then invokes the bounded catalog-derived `LiveMeasurement` verifier through
 its own one-shot publisher service. A verifier failure makes the workflow fail
 without orphaning the recorded adapter ownership.
 
-## Adapter Behavior
+## Adapter behavior
 
 The adapter requests CFG-2 before accepting Data, derives all value offsets and
 scaling from that configuration, and reconnects with bounded backoff after a
@@ -116,7 +122,7 @@ Future field timestamps are rejected. Generic Common Format quality is limited
 to `valid` and `substituted` from conservative v2 `STAT` handling; a separate
 status-evidence contract remains necessary for LFR audit use.
 
-## Five-PMU Demonstration
+## Five-PMU demonstration
 
 The manually operated `~/c37-118-simulator` repository provides the separate
 V2 source fixture for this declared Forgejo gateway-deployment test. An

@@ -1,4 +1,10 @@
-# C37.118.2-2024 V2/V3 Simulator
+(ref_c37_118_simulator)=
+
+```{meta}
+:description: Reference for the manually operated C37.118.2 version 2 and version 3 TCP source simulator.
+```
+
+# C37.118.2-2024 V2/V3 simulator
 
 ## Scope and authority
 
@@ -8,8 +14,8 @@ profile for the onboarding demonstration and attaches to the existing external
 `wama-infra` network. It is not a gateway and has no Kafka, Common Format,
 Protobuf, Druid, SeaweedFS, Forgejo, or data-plane dependency.
 
-The normative wire reference is the local approved
-`IEEE Std C37.118.2-2024.PDF` in this directory, SHA-256
+The normative wire reference is the approved local
+[`IEEE Std C37.118.2-2024.PDF`](../wama/IEEE%20Std%20C37.118.2%E2%84%A2-2024.PDF), SHA-256
 `ee776f9b78ccc95980d05e04e570f6dbbdad3993ae7412dc81ed772d5cbd7546`.
 This document summarizes the implemented V2 and V3 subsets; on any conflict,
 the PDF wins.
@@ -19,7 +25,7 @@ Each profile explicitly selects C37.118.2-2011 V2 or C37.118.2-2024 V3 through
 frames for its selected version. It does not negotiate versions, accept V1, or
 bridge V2/V3 traffic.
 
-## Wire Subsets
+## Wire subsets
 
 All fields are encoded in network byte order and use CRC-CCITT with seed
 `0xFFFF` and no final XOR.
@@ -108,7 +114,7 @@ Remote rename/configure-stream commands, extended commands, old-data requests,
 discrete-event data, V1, CFG-3, UDP, TLS, multicast, PDC aggregation, and
 raw-frame retention are excluded.
 
-## Fixed PMU Profile
+## Fixed PMU profile
 
 One listener models one independently addressable PMU. The simulator has a hard
 maximum of 100 listeners in one single-threaded Rust event loop. The full fleet uses
@@ -202,7 +208,7 @@ and sample index. The service retains no sample history or random-event queue.
 Its UTC measurement timestamps start at the next valid frame boundary and
 advance in exact `TIME_BASE / data_rate_hz` steps.
 
-## Memory and Backpressure
+## Memory and backpressure
 
 The application-memory shape is bounded:
 
@@ -219,7 +225,7 @@ or sample.
 
 ## Verification
 
-The regular image test verifies both envelopes and checksums, genuine V2 versus
+The regular image test verifies both envelopes and checksums, genuine V2 compared to
 V1 SYNC handling, V2 HDR/CFG-1/CFG-2/data behavior, V3 command behavior,
 profile rejection, fixed-point bounds, fragmented/concatenated command handling,
 and standalone TCP exchanges:
@@ -250,9 +256,9 @@ Set `C37_118_WIRE_VERSION=2` only when deliberately running one of these
 already-armed manual V2 soaks. The default is V3. Neither V2 large-fleet test is
 part of default startup, lifecycle validation, or CI.
 
-They use a labelled private Docker network rather than `wama-infra`, enforce a
+They use a labeled private Docker network rather than `wama-infra`, enforce a
 single-run lock, require cgroup memory accounting, cap simulator memory, and
-remove only their labelled resources. The active 100-PMU test requires 100
+remove only their labeled resources. The active 100-PMU test requires 100
 clients at 50 Hz for 15 minutes; the idle test separately checks listener-only
 memory. Neither test is part of default startup, lifecycle validation, or CI.
 

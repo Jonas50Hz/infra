@@ -4,8 +4,10 @@ Local Docker Compose backbone for the WAMA proof of concept. It runs one plain
 Apache Kafka broker in KRaft combined mode, initializes the WAMA topic
 contract, provides Kafka UI to inspect brokers, topics, consumer groups, and
 messages, retains an optional legacy PMU fixture for reference, provides Forgejo with one
-Actions runner, includes SeaweedFS as authenticated S3-compatible blob storage,
-and accepts browser-confirmed bounded measurement-session requests before
+Actions runner, provides the `wama-infra` network for a manually started
+five-PMU C37.118 V2 source fixture and queues the approved onboarding workflow
+for source-scoped adapters, includes SeaweedFS as
+authenticated S3-compatible blob storage, and accepts browser-confirmed bounded measurement-session requests before
 materializing them from Druid into integrity-checked Parquet artifacts.
 Compacted raw-Protobuf `Blobmeta` results
 are projected into PostgreSQL for session, artifact, status, and MRID-coverage
@@ -25,6 +27,9 @@ Quixstreams processor in the root Compose assembly, or Kubernetes artifacts.
 Druid's internal single-server coordination is confined to its container and
 does not change the plain Kafka KRaft topology.
 
+See [WAMA documentation](docs/index.md) for platform explanations, technical
+reference, and authoritative local source assets.
+
 ## Repository Boundary
 
 This checkout is the **infrastructure repository**. It owns the Compose stack,
@@ -33,7 +38,9 @@ monitoring. It is the ownership and deployment surface for all infrastructure,
 including the Druid image and supervisor,
 and every asset outside the narrow Forgejo deployment scope. The legacy
 `pmu-gateway` fixture is retained for reference but excluded from the default
-Compose stack. This checkout is
+Compose stack. The separate `~/c37-118-simulator` repository owns the manually
+started C37.118 source fixture and is also excluded from the root Compose
+stack. This checkout is
 never added as a Forgejo remote and is never pushed to Forgejo.
 
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
@@ -61,6 +68,12 @@ is the explicit C37.118 gateway-deployment-test seed. A reviewed legacy-v2
 source catalog reconciles raw-Protobuf Masterdata records and tombstones to
 Kafka, then reconciles one source-scoped adapter per active catalog source. It
 does not modify the deprecated `pmu-gateway` fixture or run root Compose services.
+An operator manually starts the matching five-PMU V2 fixture from
+`~/c37-118-simulator` after the root stack has created `wama-infra`. A fresh
+onboarding seed uses its initial `main` push to trigger the workflow; an
+existing private onboarding repository receives one scoped `gateway.yaml`
+dispatch per retained runner state. The successful workflow verifies every reviewed catalog MRID on
+`LiveMeasurement` and is the demonstration-ready signal.
 
 ## Repository layout
 
@@ -78,7 +91,6 @@ service owns its fragment, configuration, and scripts beneath
 | [services/kafka-ui/](services/kafka-ui/) | `kafka-ui` | Compose fragment and Kafka UI environment configuration |
 | [services/pmu-gateway/](services/pmu-gateway/) | `pmu-gateway` (deprecated) | Retained reference fixture, image, source, and tests; excluded from default Compose |
 | [services/gateway-dashboard-provisioner/](services/gateway-dashboard-provisioner/) | `gateway-dashboard-provisioner` | Root-owned compacted-Masterdata consumer and generated Grafana gateway dashboards |
-| [services/c37-118-simulator/](services/c37-118-simulator/) | `c37-118-simulator` | Profile-gated standalone C37.118 TCP simulator and manual fleet-test tooling |
 | [services/iec104-exporter/](services/iec104-exporter/) | `iec104-exporter` | One-way IEC 104 controlled station consuming raw-Protobuf `Export` records |
 | [services/iec104-receiver/](services/iec104-receiver/) | `iec104-receiver` | Profile-gated test control center for IEC 104 protocol verification |
 | [services/iec104-browser/](services/iec104-browser/) | `iec104-browser` | On-demand browser control center for wire-received IEC 104 values |
@@ -130,6 +142,12 @@ infrastructure with one command:
 docker compose up -d
 ```
 
+This starts the root infrastructure and queues the explicitly scoped onboarding
+workflow; Compose returns before that asynchronous Actions run completes. Start
+the five-PMU V2 source separately from `~/c37-118-simulator` before the
+onboarding adapters need it. A green `gateway.yaml` run in Forgejo proves the
+catalog-derived adapters, Kafka records, and their raw-Protobuf contract.
+
 Kafka-dependent services wait for the broker to become healthy and topic
 initialization to complete before starting, including after `docker compose stop`
 followed by `docker compose up -d`.
@@ -170,10 +188,12 @@ docker compose logs infra-readiness
 `forgejo-init` and `infra-readiness` should have exited with status `0`; the
 latter verifies the Kafka contract, service control planes, PostgreSQL,
 SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener. Live PMU traffic
-and Druid/Grafana sample queries are opt-in through
-`INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT=true` with an external producer.
-The profile-gated measurement-session request-flow verifier and IEC 104 test
-receiver run only when explicitly invoked.
+and Druid/Grafana sample queries remain outside its default infrastructure-only
+gate; the green onboarding workflow is the ordinary demonstration data proof.
+Set `INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT=true` to additionally require
+live records in a root readiness run. The profile-gated measurement-session
+request-flow verifier and IEC 104 test receiver run only when explicitly
+invoked.
 
 Stop the stack while preserving Kafka, Druid, PostgreSQL, SeaweedFS, Forgejo,
 runner, Grafana, and VictoriaMetrics data:
@@ -208,11 +228,11 @@ scripts/test-infrastructure-lifecycle.sh
 
 The script first runs the non-destructive Forgejo bootstrap safety checks, then
 runs `docker compose down -v --remove-orphans`, starts the ordinary stack,
-requires `infra-readiness` to succeed, and repeats the check after `docker
-compose down` without deleting volumes. It independently re-runs the Druid PMU
-query check after each start. On failure it leaves the stack running and prints
-focused diagnostic logs. On success it leaves the restarted stack running for
-processor testing.
+requires `infra-readiness` to succeed, then waits for the automatic gateway
+deployment to produce live measurements before repeating the Druid PMU query.
+It repeats that check after `docker compose down` without deleting volumes. On
+failure it leaves the stack running and prints focused diagnostic logs. On
+success it leaves the restarted stack running for processor testing.
 
 Run only the Druid/Kafka/PMU path during focused local development:
 
@@ -301,8 +321,9 @@ The `gateway-c37-118-onboarding` workflow follows the same trusted
 `validate -> publish -> deploy` sequence. Its deploy step runs
 `masterdata-publisher` once through `docker compose run --rm`, then uses the
 marker-owned deployment guard to reconcile only generated legacy-v2 source
-adapters. It cannot control the deprecated root `pmu-gateway` fixture, root Compose project, or
-any adapter absent from its approved catalog.
+adapters and verifies every approved MRID on `LiveMeasurement`. It cannot
+control the deprecated root `pmu-gateway` fixture, root Compose project, or any
+adapter absent from its approved catalog.
 
 Validate the canonical Masterdata contract, onboarding seed, isolated Compose
 project, Forgejo bootstrap guard, and onboarding credential bridge together:
@@ -365,15 +386,17 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 
 ## C37.118 Simulator
 
-The profile-gated [C37.118 simulator](services/c37-118-simulator/) is a
-standalone C37.118.2-2011 V2 and C37.118.2-2024 V3 TCP source and protocol test
-service. It neither implements nor validates a gateway, and it has no Kafka,
-Common Format, or Druid dependency. V2 performs HDR -> CFG-1 -> CFG-2 -> start
--> periodic data -> stop; V3 performs capability -> stream configuration ->
-start -> periodic data -> stop.
+The manually operated C37.118 simulator lives in
+`~/c37-118-simulator` and is the five-PMU C37.118.2-2011 V2 source fixture for
+the onboarding demonstration. It remains a standalone TCP source and
+protocol-test service: it neither implements nor validates a gateway, and it
+has no Kafka, Common Format, or Druid dependency. V2 performs HDR -> CFG-1 ->
+CFG-2 -> start -> periodic data -> stop; V3 performs capability -> stream
+configuration -> start -> periodic data -> stop.
 
 ```sh
-docker compose --profile c37-118 up -d --build c37-118-simulator
+cd ~/c37-118-simulator
+docker compose up -d --build
 ```
 
 Its regular Docker test target covers the C37.118 frame/profile/server/probe
@@ -634,7 +657,7 @@ bridge, backfill, or migration is provided.
 `LiveMeasurement` uses raw Protobuf. `pmu-gateway` serializes
 `MCCSMeasurementValue` records directly from
 [the canonical schema](docs/wama/schema/rtd_schema.proto); see
-[the Common Format contract](docs/wama/02-dataflow-contracts.md). Do not use
+[the Common Format contract](docs/reference/wama-data-flow-contracts.md). Do not use
 JSON console messages as application data on that topic.
 
 `MeasurementSession` uses raw Protobuf, serialized from
@@ -646,8 +669,12 @@ and is keyed by immutable `blob_id`; Parquet bytes remain in SeaweedFS.
 `Export` uses raw Protobuf, serialized from
 [the IEC 104 export schema](docs/wama/schema/iec104_export.proto). The current
 root-owned exporter supports outbound `M_SP_NA_1`, `M_DP_NA_1`, and `M_ME_NC_1`
-monitor values only. A future processor may produce this contract from its own
-Forgejo repository, but no export-producing processor is part of this checkout.
+monitor values only. The Forgejo-owned
+[`processor-frequency-iec104-export`](forgejo-repos/processor-frequency-iec104-export/README.md)
+seed consumes explicit-valid fake PMU frequency from `LiveMeasurement` and
+publishes deterministic raw-Protobuf `ExportRecord` values for `M_ME_NC_1` on
+`Export`. It is a direct configured PoC mapping, not the unresolved full LFR
+selection algorithm.
 
 ## CLI inspection
 
@@ -728,11 +755,12 @@ and admin UI over plaintext HTTP on all host interfaces; its documented PoC
 credentials have broad local access.
 
 Grafana is exposed on port 3001 with anonymous access and self-registration
-disabled. Its administrator credentials live only in the ignored
-`services/grafana/grafana.env` file. VictoriaMetrics is bound to localhost;
-node-exporter and cAdvisor are Compose-internal. cAdvisor runs privileged and
-mounts Docker and host paths to collect container metrics, so it carries the
-same trusted-host restriction as the Actions runner.
+disabled. Its documented disposable administrator credentials are stored in the
+tracked `services/grafana/grafana.env` local-PoC configuration file.
+VictoriaMetrics is bound to localhost; node-exporter and cAdvisor are
+Compose-internal. cAdvisor runs privileged and mounts Docker and host paths to
+collect container metrics, so it carries the same trusted-host restriction as
+the Actions runner.
 
 The Druid Router is exposed without authentication on port 8888 for trusted-LAN
 SQL, native-query, supervisor, and web-console access. Druid's Coordinator,

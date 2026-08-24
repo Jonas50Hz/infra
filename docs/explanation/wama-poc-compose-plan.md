@@ -1,4 +1,10 @@
-# WAMA PoC — Docker Compose Plan (full end-to-end)
+(exp_wama_poc_compose_plan)=
+
+```{meta}
+:description: Decision record for the WAMA Docker Compose proof of concept and its intentional deviations from the target architecture.
+```
+
+# WAMA PoC — Docker Compose plan (full end-to-end)
 
 Decision record for the Compose-based PoC. It uses the WAMA Platform Concept
 (Gerbrand Jonas) plus the authoritative image/BPMN process and component
@@ -16,7 +22,7 @@ onboarding -> config/CI -> live data (Common Format) -> Quixstreams processing
 |--------------------|-----------------|--------|
 | Strimzi (Kafka operator) | Plain Kafka, KRaft mode | Strimzi is K8s-only |
 | ArgoCD (GitOps CD) | Forgejo Actions `docker compose up -d` or Watchtower | ArgoCD needs a cluster |
-| Gateway via GitOps/K8s | Forgejo Actions scoped C37.118 gateway-deployment test | No operator without K8s; only catalog-derived legacy-v2 adapters may deploy |
+| Gateway deployment with GitOps/K8s | Forgejo Actions scoped C37.118 gateway-deployment test | No operator without K8s; only catalog-derived legacy-v2 adapters may deploy |
 | Kafka Connector -> PostgreSQL as platform service | Same, plain containers | No operators |
 
 ## Common Format
@@ -77,7 +83,7 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
 1. **Kafka (KRaft, single broker)** + Kafka-UI. Create topics.
 2. **Fake PMU gateway** emitting `MCCSMeasurementValue` to `LiveMeasurement`
    from a startup YAML fixture (own MRIDs; set field/gateway/MCCS timestamps).
-3. **Quixstreams processor** via `docker compose up`. Validate
+3. **Quixstreams processor** using `docker compose up`. Validate
    consume -> derive -> write-back to Kafka.
 
 ### Infrastructure monitoring (available now)
@@ -123,7 +129,7 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    dashboard reads valid raw values directly from Druid without changing those
    storage policies.
 
-### Phase 2 — Storage + visualisation (makes data queryable)
+### Phase 2 — Storage + visualization (makes data queryable)
 7. **SeaweedFS** — the measurement-session worker writes Parquet artifacts and
    raw replay receipts to blob; `Blobmeta` publishes only integrity metadata.
    Keep raw values off Kafka.
@@ -152,7 +158,7 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    work.
 
 ### Phase 4 — Onboarding + config as data
-11. **C37.118 Masterdata via Git (available now)** — the private
+11. **C37.118 Masterdata in Git (available now)** — the private
    `gateway-c37-118-onboarding` repository holds stable source location,
    literal endpoint/port, PMU IDCODE, legacy wire version 2, and immutable
    signal-to-MRID mappings. Its one-shot publisher projects reviewed
@@ -195,8 +201,8 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
 ## Consumer requirements
 - Processors **idempotent** (Kafka at-least-once delivery).
 - Keep raw/waveform data off Kafka (blob path + `Blobmeta` pointer only).
-- Value meaning resolved via Master Data config, not hard-coded; `uint_value`
-  enums bound via ValueToAlias at engineering time.
+- Value meaning resolved through Master Data config, not hard-coded; `uint_value`
+   enums bound using ValueToAlias at engineering time.
 
 ## Measurement session & alarm path (Phase 2+)
 Bounded raw-Protobuf `MeasurementSession` request -> Druid historical query ->
