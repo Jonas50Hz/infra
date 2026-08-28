@@ -8,7 +8,7 @@ release and installs the local `alerta.plugins` entry-point package.
 The mounted `config/alertad.conf` explicitly configures the isolated
 `alerta-postgres` database and Mailpit SMTP settings. It sets
 `AUTH_REQUIRED=False`; the UI/API is published on all host interfaces at port
-`${ALERTA_HOST_PORT:-8081}`.
+`18081`.
 
 The image's built-in admin-key bootstrap creates one fixed trusted-PoC key used
 only by `alarm-alerta-ingress` to set the required `customer=wama` mapping. It

@@ -10,6 +10,10 @@ This documentation describes the WAMA Docker Compose proof of concept. The
 [WAMA source assets](wama/) remain the canonical locations for schemas, BPMN
 models, the approved C37.118 standard copy, and the architecture image.
 
+## Einstieg
+
+- [WAMA PoC: Einstieg in zehn Minuten](how-to/wama-einstieg.md)
+
 ## Explanation
 
 - [WAMA platform overview and processes](explanation/wama-platform-overview.md)

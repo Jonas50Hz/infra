@@ -33,9 +33,7 @@ to Alerta through `alarm-alerta-ingress`. Alerta keeps the operator-facing
 acknowledgement and close state in its own isolated PostgreSQL database, while
 Mailpit receives only best-effort local test email. Alarm payloads remain out of
 VictoriaMetrics and no Forgejo seed deploys or owns these root services.
-Compose publishes Alerta on all host interfaces at port `8081` when
-`ALERTA_HOST_PORT` is unset. Set `ALERTA_HOST_PORT=18081` in `.env` when a
-local simulator already uses `8081`.
+Compose publishes Alerta on all host interfaces at the fixed port `18081`.
 
 See [WAMA documentation](docs/index.md) for platform explanations, technical
 reference, and authoritative local source assets.
@@ -149,8 +147,8 @@ directory. Provision each in its own separate processor repository seed.
 
 - Docker Engine with Docker Compose v2 or newer
 - Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8085`, `8333`,
-  `23646`, `3000`, `3001`, `3003`, `3004`, `3005`, `5432`, `8081` (or the
-  configured `ALERTA_HOST_PORT`, such as `18081`), `8025`, `8888`, `2222`, and
+  `23646`, `3000`, `3001`, `3003`, `3004`, `3005`, `5432`, `18081`, `8025`,
+  `8888`, `2222`, and
   `127.0.0.1:2404` available
 
 ## Start and stop
@@ -191,9 +189,8 @@ not treat an HTTP registry as trusted by default.
 [ -e .env ] || install -m 600 .env.example .env
 ```
 
-The example sets `ALERTA_HOST_PORT=18081` for hosts where a local simulator
-already occupies `8081`. Remove or unset that value to retain Compose's `8081`
-default.
+Alerta is published on the fixed host port `18081`; the simulator console can
+therefore use its default port `8081` at the same time.
 
 Check the service state:
 

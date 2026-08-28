@@ -14,7 +14,7 @@ services:
       ADMIN_PASSWORD: wama-alerta-admin
       ADMIN_USERS: wama-alerta-admin@local.test
     ports:
-        - "0.0.0.0:${ALERTA_HOST_PORT:-8081}:8080"
+        - "0.0.0.0:18081:8080"
     volumes:
       - ./config/alertad.conf:/app/alertad.conf:ro
     healthcheck:
