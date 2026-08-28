@@ -1,1 +1,0 @@
-"""Build-time generated raw Common Format Protobuf bindings."""

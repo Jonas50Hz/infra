@@ -1,0 +1,1 @@
+"""Locally generated raw-Protobuf contracts."""

@@ -20,27 +20,27 @@ rewritten to `127.0.0.1:3000`; do not change that behavior in a workflow.
 
 ## Authentication
 
-### Local onboarding automation
+### Local C37.118 gateway automation
 
-For the existing local private `gateway-c37-118-onboarding` checkout, do not
+For the existing local private `gateway-c37-118` checkout, do not
 request or create a personal API token. `forgejo-init` creates a restricted,
 non-admin collaborator with access only to that repository and keeps its token
 in the trusted runner volume. From the parent infrastructure checkout, install
-the local Git credential into the external clone:
+the local Git credential into the co-located checkout:
 
 ```sh
-sh scripts/configure-forgejo-gateway-onboarding-agent.sh \
-  --checkout ../gateway-c37-118-onboarding
+sh scripts/configure-forgejo-gateway-c37-118-agent.sh \
+  --checkout forgejo-repos/gateway-c37-118
 ```
 
-The installer rejects the parent `infra` checkout and the tracked seed,
-preserves `origin`, and writes the credential with mode `0600` under
+The installer rejects the parent `infra` checkout, preserves `origin`, and
+writes the credential with mode `0600` under
 `${XDG_CONFIG_HOME:-$HOME/.config}/wama-forgejo/`. Use the wrapper for REST
 calls so `FORGEJO_API_TOKEN` exists only in the child process:
 
 ```sh
-sh scripts/with-forgejo-gateway-onboarding-agent.sh \
-  --checkout ../gateway-c37-118-onboarding -- \
+sh scripts/with-forgejo-gateway-c37-118-agent.sh \
+  --checkout forgejo-repos/gateway-c37-118 -- \
   sh -c 'curl --fail --silent --show-error \
     --header "Authorization: token $FORGEJO_API_TOKEN" \
     "$FORGEJO_API_URL/user"'
@@ -48,8 +48,8 @@ sh scripts/with-forgejo-gateway-onboarding-agent.sh \
 
 Re-run the installer after `docker compose down -v`. The normal checkout can
 then push its feature branch or use the wrapper to create, merge, or dispatch
-the existing guarded onboarding workflow. This route never creates another
-repository and never changes the parent checkout or seed.
+the existing guarded C37.118 gateway workflow. This route never creates another
+repository and never changes the parent infrastructure checkout.
 
 ### Personal tokens
 
@@ -100,11 +100,12 @@ returns not found. The resulting repository must report `"private": true`.
 Then use `git ls-remote` to inspect refs. For processor repositories, an
 existing ref is left untouched. If a repository has no refs, the bootstrap
 service creates the initial `main` commit and pushes it without `--force`. The
-PoC bootstraps `processor-frequency-scale`, `processor-apparent-power`,
-`processor-frequency-iec104-export`, and `processor-lfr-frequency-provision`,
-as well as `gateway-c37-118-onboarding`. An existing private onboarding
-repository is not reseeded, but receives one scoped `gateway.yaml` dispatch
-when its runner state has no prior trigger record.
+PoC bootstraps five managed private repositories:
+`processor-frequency-scale`, `processor-apparent-power`,
+`processor-frequency-iec104-export`, `processor-alarm-threshold`, and
+`gateway-c37-118`. An existing private C37.118 gateway repository is not
+reseeded, but receives one scoped `gateway.yaml` dispatch when its runner state
+has no prior trigger record.
 
 ## Git and Pull Requests
 
@@ -149,7 +150,7 @@ developer checkout is not the replacement path.
 ## Actions and Deployment
 
 Processor repositories use `.forgejo/workflows/processor.yaml`; the explicit
-`gateway-c37-118-onboarding` repository uses
+`gateway-c37-118` repository uses
 `.forgejo/workflows/gateway.yaml`. Both follow this lifecycle:
 
 | Event or ref | Jobs that may run | Result |
@@ -211,9 +212,9 @@ processor workflow must preserve:
 Any proposal that violates this contract belongs in the parent infrastructure
 repository, not this Forgejo workflow.
 
-`gateway-c37-118-onboarding` instead uses
-`scripts/reconcile_masterdata.py`. Its `WAMA_GATEWAY_ONBOARDING_DEPLOY_ROOT`
-must be absolute, marker-owned by `.wama-forgejo-gateway-onboarding-root`, and
+`gateway-c37-118` instead uses
+`scripts/reconcile_masterdata.py`. Its `WAMA_GATEWAY_C37_118_DEPLOY_ROOT`
+must be absolute, marker-owned by `.wama-forgejo-gateway-c37-118-root`, and
 outside the workspace. It renders `masterdata-publisher` plus only generated
 `c37-118-gateway-<source-id>` services derived from safe approved catalog
 filenames, uses only the existing external `wama-infra` network, verifies the

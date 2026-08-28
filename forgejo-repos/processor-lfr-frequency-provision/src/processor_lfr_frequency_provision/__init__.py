@@ -1,1 +1,0 @@
-"""LFR per-second preferred-frequency provision processor."""

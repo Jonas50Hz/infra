@@ -1,1 +1,0 @@
-"""Generated Protobuf bindings for the standalone onboarding repository."""

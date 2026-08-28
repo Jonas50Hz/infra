@@ -1,0 +1,109 @@
+services:
+  kafka:
+    image: apache/kafka:4.0.0
+    hostname: kafka
+    environment:
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+
+  alerta-postgres:
+    image: postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929
+    environment:
+      POSTGRES_DB: alerta
+      POSTGRES_USER: alerta
+      POSTGRES_PASSWORD: alerta-postgres-password
+    volumes:
+      - alerta-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$${POSTGRES_USER} --dbname=$${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+
+  mailpit:
+    image: axllent/mailpit:v1.31.0@sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24
+    ports:
+        - "0.0.0.0:${MAILPIT_UI_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+  alerta:
+    build:
+      context: ../..
+      dockerfile: services/alerta/Dockerfile
+    environment:
+      ALERTA_SVR_CONF_FILE: /app/alertad.conf
+      ADMIN_KEY: wama-alerta-ingress-local-api-key-0001
+      ADMIN_PASSWORD: wama-alerta-admin
+      ADMIN_USERS: wama-alerta-admin@local.test
+    ports:
+        - "0.0.0.0:${ALERTA_HOST_PORT:-8081}:8080"
+    volumes:
+      - ../alerta/config/alertad.conf:/app/alertad.conf:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/venv/bin/python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/api/management/gtg', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  alarm-alerta-ingress:
+    build:
+      context: ../..
+      dockerfile: services/alarm-alerta-ingress/Dockerfile
+    environment:
+      ALERTA_API_KEY: wama-alerta-ingress-local-api-key-0001
+      ALERTA_REQUEST_TIMEOUT_SECONDS: 10
+      ALERTA_URL: http://alerta:8080
+      ALARM_ALERTA_INGRESS_READY_FILE: /tmp/wama-alarm-alerta-ingress-ready
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_RETRY_INTERVAL_SECONDS: 1
+      KAFKA_TOPIC: Alarm
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/wama-alarm-alerta-ingress-ready"]
+      interval: 5s
+      timeout: 2s
+      retries: 24
+      start_period: 5s
+
+volumes:
+  alerta-postgres-data:

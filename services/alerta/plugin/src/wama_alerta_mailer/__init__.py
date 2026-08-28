@@ -1,0 +1,1 @@
+"""Alerta plugin package for WAMA's first-active-episode notification."""

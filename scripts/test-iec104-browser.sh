@@ -23,6 +23,22 @@ wait_for_browser_health() {
   return 1
 }
 
+wait_for_browser_active() {
+  local deadline=$((SECONDS + ${IEC104_BROWSER_START_TIMEOUT_SECONDS:-60}))
+
+  while ((SECONDS < deadline)); do
+    if curl --fail --silent \
+      http://127.0.0.1:${IEC104_BROWSER_PORT:-3003}/v1/iec104/status \
+      | grep --quiet '"active":true.*"state":"active".*"viewers":0'; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf '%s\n' "Timed out waiting for the IEC 104 browser control-center connection." >&2
+  return 1
+}
+
 cleanup() {
   if [[ -n "$probe_pid" ]] && kill -0 "$probe_pid" 2>/dev/null; then
     kill "$probe_pid" 2>/dev/null || true
@@ -49,14 +65,15 @@ trap show_failure_diagnostics ERR
 docker compose stop iec104-browser >/dev/null 2>&1 || true
 docker compose up -d --build iec104-browser
 wait_for_browser_health
+wait_for_browser_active
 docker compose --profile iec104-test build iec104-receiver
 
 docker compose exec -T iec104-browser \
   python -m iec104_browser.e2e >"$probe_log" 2>&1 &
 probe_pid="$!"
 
-# Export records remain in Kafka until the browser control center completes STARTDT.
-# The WebSocket probe proves that activation by receiving every fixture ASDU.
+# Export records remain in Kafka until the persistent browser control center
+# completes STARTDT. The WebSocket probe proves reception of every fixture ASDU.
 IEC104_RECEIVER_MODE=publish-only \
   docker compose --profile iec104-test run --rm --no-deps iec104-receiver
 wait "$probe_pid"
@@ -66,13 +83,13 @@ cat "$probe_log"
 deadline=$((SECONDS + ${IEC104_BROWSER_E2E_TIMEOUT_SECONDS:-30}))
 while ((SECONDS < deadline)); do
   if curl --fail --silent http://127.0.0.1:${IEC104_BROWSER_PORT:-3003}/v1/iec104/status \
-    | grep --quiet '"active":false.*"state":"idle".*"viewers":0'; then
+    | grep --quiet '"active":true.*"state":"active".*"viewers":0'; then
     break
   fi
   sleep 1
 done
 if ((SECONDS >= deadline)); then
-  printf '%s\n' "IEC 104 browser retained its control-center connection after stream closure." >&2
+  printf '%s\n' "IEC 104 browser did not retain its control-center connection after stream closure." >&2
   exit 1
 fi
 

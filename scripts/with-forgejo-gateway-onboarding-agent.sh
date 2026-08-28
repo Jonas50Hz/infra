@@ -88,13 +88,12 @@ shift
 
 read_identity
 if [ -z "$checkout" ]; then
-  checkout="$(dirname "$infrastructure_root")/$repository"
+  checkout="$infrastructure_root/forgejo-repos/$repository"
 fi
 [ -d "$checkout" ] || fail "The onboarding checkout does not exist: $checkout"
 checkout="$(CDPATH= cd -- "$checkout" && pwd -P)"
-seed_checkout="$(CDPATH= cd -- "$infrastructure_root/forgejo-repos/$repository" && pwd -P)"
-if [ "$checkout" = "$infrastructure_root" ] || [ "$checkout" = "$seed_checkout" ]; then
-  fail "Refusing to use the infrastructure checkout or tracked Forgejo seed"
+if [ "$checkout" = "$infrastructure_root" ]; then
+  fail "Refusing to use the infrastructure checkout"
 fi
 git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
   || fail "The onboarding checkout is not a Git worktree"

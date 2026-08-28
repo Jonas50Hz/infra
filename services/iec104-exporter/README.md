@@ -16,6 +16,7 @@ record.
 The host mapping defaults to `127.0.0.1:2404`. Override it with
 `IEC104_EXPORTER_HOST_PORT` when that port is occupied.
 
-The exporter permits one control center. `iec104-browser` acquires that slot
-only while its live page is open; `iec104-receiver` owns it only during the
-profile-gated protocol test.
+The exporter permits one control center. `iec104-browser` owns that slot from
+application startup, including while it has zero live viewers. Stop the browser
+before running the profile-gated `iec104-receiver` test; that receiver workflow
+must own the slot for the duration of its protocol test.

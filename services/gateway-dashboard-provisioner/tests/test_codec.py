@@ -45,7 +45,7 @@ class MasterdataCodecTests(unittest.TestCase):
 def _source_message() -> masterdata_pb2.SourceMasterdata:
     message = masterdata_pb2.SourceMasterdata(
         source_id="pmu-bay-01",
-        catalog_id="wama-c37-118-onboarding",
+        catalog_id="wama-c37-118",
         catalog_revision="abc123",
     )
     message.published_at.FromDatetime(datetime(2026, 8, 21, 12, tzinfo=timezone.utc))

@@ -8,6 +8,7 @@ import unittest
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from measurement_session_processor.druid import (
+    DruidClient,
     DruidQueryError,
     MeasurementRow,
     _order_timestamp_ties,
@@ -28,6 +29,29 @@ class DruidQueryTests(unittest.TestCase):
         self.assertIn('"__time" < MILLIS_TO_TIMESTAMP(', query)
         self.assertIn('ORDER BY "__time" ASC', query)
         self.assertNotIn('ORDER BY "__time" ASC, "mrid" ASC', query)
+
+    def test_posts_ordered_query_with_ordered_partition_context(self) -> None:
+        request = _request("urn:wama:poc:bay-01")
+        session = _FakeSession()
+        client = DruidClient(
+            "http://druid:8888",
+            "live_measurements",
+            timeout_seconds=60,
+            session=session,
+        )
+
+        rows = tuple(client.iter_rows(request))
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(
+            session.request_json,
+            {
+                "query": query_for_request(request, "live_measurements"),
+                "resultFormat": "objectLines",
+                "context": {"maxSegmentPartitionsOrderedInMemory": 80},
+            },
+        )
+        self.assertIn('ORDER BY "__time" ASC', session.request_json["query"])
 
     def test_stabilizes_mrid_order_within_one_timestamp(self) -> None:
         rows = _order_timestamp_ties(
@@ -90,3 +114,31 @@ def _row(mrid: str, minute: int = 0) -> MeasurementRow:
         value_type="double",
         double_value=50.01,
     )
+
+
+class _FakeSession:
+    def __init__(self) -> None:
+        self.request_json: dict[str, object] = {}
+
+    def post(self, _url: str, **kwargs: object) -> "_FakeResponse":
+        request_json = kwargs["json"]
+        if not isinstance(request_json, dict):
+            raise AssertionError("Druid request must have a JSON body")
+        self.request_json = request_json
+        return _FakeResponse()
+
+
+class _FakeResponse:
+    def raise_for_status(self) -> None:
+        pass
+
+    def iter_lines(self, decode_unicode: bool) -> list[str]:
+        if not decode_unicode:
+            raise AssertionError("Druid response must be decoded as Unicode")
+        return [
+            '{"timestamp_mccs":"2026-08-19T09:00:00Z","mrid":"urn:wama:poc:bay-01",'
+            '"double_value":50.01}'
+        ]
+
+    def close(self) -> None:
+        pass

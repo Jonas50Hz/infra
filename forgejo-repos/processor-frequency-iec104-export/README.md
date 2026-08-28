@@ -1,10 +1,19 @@
 # Processor Frequency IEC 104 Export
 
 This standalone Forgejo repository owns only the
-`processor-frequency-iec104-export` service. It performs the direct PoC slice:
+`processor-frequency-iec104-export` service. It performs the minimal event-time
+PoC slice:
 it consumes configured reviewed C37.118 gateway frequencies from
 `LiveMeasurement` and writes raw-Protobuf `wama.iec104.v1.ExportRecord` values
 to `Export`.
+
+Valid mapped frequency samples are accumulated independently per MRID by the
+`timestamp_field` event-time second. Each bucket includes nanoseconds 0 through
+999,999,999 (human notation `ss:0000` through `ss:9999`). A valid sample in a
+later event-time second closes the previous bucket for that MRID and emits its
+arithmetic average with the bucket-start timestamp. Older late samples do not
+amend a closed bucket. An idle final bucket does not flush without later valid
+event-time data, and aggregation state is process-local.
 
 [`config/frequency-iec104-export.yaml`](config/frequency-iec104-export.yaml)
 is the processor-owned reviewed mapping. Every current entry emits one
@@ -30,8 +39,9 @@ added. `FREQUENCY_IEC104_CONFIG_PATH` selects the map and defaults to
 Only a mapped MRID with a matching Kafka key, finite `double_value`, and
 explicit `quality.valid=true` produces an export. Source `substituted`,
 `operator_blocked`, `overflow`, and `old_data` flags map to IEC quality fields.
-The output key is a deterministic UUIDv5 `export_id`; its Kafka timestamp and
-`created_at` both preserve the triggering input Kafka timestamp.
+The output key is a deterministic UUIDv5 `export_id`; emitted records use the
+corresponding bucket-start timestamp rather than preserving the triggering
+input Kafka timestamp.
 
 This is deliberately **not** the full LFR per-second preferred-frequency
 algorithm described in the parent infrastructure documentation. It does not

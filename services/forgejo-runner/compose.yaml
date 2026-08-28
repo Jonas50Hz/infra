@@ -25,10 +25,13 @@ services:
         source: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
         target: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
       - type: bind
-        source: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
-        target: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+        source: "${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
+        target: "${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
       - type: bind
-        source: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
-        target: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
+        source: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+        target: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+      - type: bind
+        source: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
+        target: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
     command: ["/bin/forgejo-runner", "daemon", "--config", "/data/config.yaml"]
     restart: unless-stopped

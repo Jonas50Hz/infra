@@ -24,6 +24,9 @@ _QUANTITY_DETAILS: Final = {
     "rocof": ("ROCOF (Hz/s)", "suffix:Hz/s"),
 }
 _QUANTITY_ORDER: Final = ("voltage", "current", "frequency", "rocof")
+_ORDERED_SERIES_CONTEXT_PARAMETERS: Final = (
+    ("maxSegmentPartitionsOrderedInMemory", 75),
+)
 
 
 class DashboardRenderError(ValueError):
@@ -254,7 +257,13 @@ def _series_panel(
             },
             "tooltip": {"mode": "multi", "sort": "desc"},
         },
-        "targets": [_druid_target(_series_query(signals), "wide")],
+        "targets": [
+            _druid_target(
+                _series_query(signals),
+                "wide",
+                context_parameters=_ORDERED_SERIES_CONTEXT_PARAMETERS,
+            )
+        ],
         "title": title,
         "type": "timeseries",
     }
@@ -309,11 +318,21 @@ def _druid_datasource() -> dict[str, str]:
     return {"type": DRUID_DATASOURCE_TYPE, "uid": DRUID_DATASOURCE_UID}
 
 
-def _druid_target(query: str, output_format: str) -> dict[str, Any]:
+def _druid_target(
+    query: str,
+    output_format: str,
+    *,
+    context_parameters: tuple[tuple[str, Any], ...] = (),
+) -> dict[str, Any]:
     return {
         "builder": {"query": query, "queryType": "sql"},
         "refId": "A",
-        "settings": {"contextParameters": [], "format": output_format},
+        "settings": {
+            "contextParameters": [
+                {"name": name, "value": value} for name, value in context_parameters
+            ],
+            "format": output_format,
+        },
     }
 
 

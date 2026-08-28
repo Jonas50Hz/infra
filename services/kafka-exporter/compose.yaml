@@ -4,7 +4,7 @@ services:
     command:
       - --kafka.server=kafka:9092
       - --web.listen-address=:9308
-      - --topic.filter=^(LiveMeasurement|MeasurementSession|Alarm|Export|Masterdata|Schema|Blobmeta)$
+      - --topic.filter=^(LiveMeasurement|MeasurementSession|Alarm|AlarmEvaluationWatermark|Export|Masterdata|Schema|Blobmeta)$
       - --group.filter=.*
     depends_on:
       kafka:

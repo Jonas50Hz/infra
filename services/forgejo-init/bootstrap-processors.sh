@@ -7,15 +7,15 @@ runner_dir="${FORGEJO_RUNNER_DIRECTORY:-/runner}"
 runner_config_file="$runner_dir/config.yaml"
 runner_layout_file="$runner_dir/forgejo-managed-repositories.layout"
 runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
-runner_layout=ten-connections-v5
+runner_layout=twelve-connections-v6
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
-gateway_c37_118_onboarding_workflow_trigger_file="$runner_dir/gateway-c37-118-onboarding.workflow-triggered"
-gateway_c37_118_onboarding_agent_username="${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME:-wama-gateway-c37-118-onboarding-agent}"
-gateway_c37_118_onboarding_agent_email="${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL:-wama-gateway-c37-118-onboarding-agent@local}"
-gateway_c37_118_onboarding_agent_token_name=wama-gateway-c37-118-onboarding-agent
-gateway_c37_118_onboarding_agent_token_file="$runner_dir/forgejo-gateway-c37-118-onboarding-agent.token"
-gateway_c37_118_onboarding_agent_identity_file="$runner_dir/forgejo-gateway-c37-118-onboarding-agent.identity"
+gateway_c37_118_workflow_trigger_file="$runner_dir/gateway-c37-118.workflow-triggered"
+gateway_c37_118_agent_username="${FORGEJO_GATEWAY_C37_118_AGENT_USERNAME:-wama-gateway-c37-118-agent}"
+gateway_c37_118_agent_email="${FORGEJO_GATEWAY_C37_118_AGENT_EMAIL:-wama-gateway-c37-118-agent@local}"
+gateway_c37_118_agent_token_name=wama-gateway-c37-118-agent
+gateway_c37_118_agent_token_file="$runner_dir/forgejo-gateway-c37-118-agent.token"
+gateway_c37_118_agent_identity_file="$runner_dir/forgejo-gateway-c37-118-agent.identity"
 seed_root="${FORGEJO_PROCESSOR_SEED_ROOT:-/opt/wama/seeds}"
 admin_username="${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
 admin_email="${FORGEJO_BOOTSTRAP_ADMIN_EMAIL:-wama-admin@local}"
@@ -23,18 +23,20 @@ admin_password="${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
 frequency_repository="${FORGEJO_FREQUENCY_SCALE_REPOSITORY:-processor-frequency-scale}"
 apparent_repository="${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
 frequency_iec104_export_repository="${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
-lfr_frequency_provision_repository="${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
-gateway_c37_118_onboarding_repository="${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
+frequency_measurement_session_repository="${FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY:-processor-frequency-measurement-session}"
+alarm_threshold_repository="${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-processor-alarm-threshold}"
+gateway_c37_118_repository="${FORGEJO_GATEWAY_C37_118_REPOSITORY:-gateway-c37-118}"
 frequency_deploy_root="${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
 apparent_deploy_root="${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
 frequency_iec104_export_deploy_root="${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-lfr_frequency_provision_deploy_root="${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
-gateway_c37_118_onboarding_deploy_root="${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
+frequency_measurement_session_deploy_root="${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
+alarm_threshold_deploy_root="${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+gateway_c37_118_deploy_root="${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
 infra_network="${WAMA_INFRA_NETWORK:-wama-infra}"
 runner_url="${FORGEJO_RUNNER_URL:-}"
 api_url="${FORGEJO_API_URL:-http://forgejo:3000/api/v1}"
 processor_deploy_marker=.wama-forgejo-processor-root
-gateway_onboarding_deploy_marker=.wama-forgejo-gateway-onboarding-root
+gateway_c37_118_deploy_marker=.wama-forgejo-gateway-c37-118-root
 runner_ci_label=wama-processors-ci:docker://wama-forgejo-runner:local
 runner_deploy_label=wama-processors-deploy:host
 
@@ -145,6 +147,7 @@ seed_repository_if_empty() {
   seed_worktree="$temporary_directory/seed-$repository"
   mkdir "$seed_worktree"
   cp -R "$seed_directory"/. "$seed_worktree"
+  rm -rf "$seed_worktree/.git"
   git -C "$seed_worktree" init --initial-branch=main --quiet
   git -C "$seed_worktree" config user.name "WAMA Forgejo bootstrap"
   git -C "$seed_worktree" config user.email "$admin_email"
@@ -179,117 +182,117 @@ forgejo_api_as_admin() {
     "$@"
 }
 
-dispatch_gateway_c37_118_onboarding_workflow() {
+dispatch_gateway_c37_118_workflow() {
   forgejo_api_as_admin \
     --request POST \
     --header "Accept: application/json" \
     --header "Content-Type: application/json" \
     --data '{"ref":"main"}' \
-    "$api_url/repos/$admin_username/$gateway_c37_118_onboarding_repository/actions/workflows/gateway.yaml/dispatches"
-  printf '%s\n' "Queued gateway-c37-118-onboarding workflow for main."
+    "$api_url/repos/$admin_username/$gateway_c37_118_repository/actions/workflows/gateway.yaml/dispatches"
+  printf '%s\n' "Queued gateway-c37-118 workflow for main."
 }
 
-lookup_gateway_c37_118_onboarding_agent() {
-  gateway_c37_118_onboarding_agent_users_file="$temporary_directory/gateway-c37-118-onboarding-agent-users.json"
-  gateway_c37_118_onboarding_agent_file="$temporary_directory/gateway-c37-118-onboarding-agent.json"
+lookup_gateway_c37_118_agent() {
+  gateway_c37_118_agent_users_file="$temporary_directory/gateway-c37-118-agent-users.json"
+  gateway_c37_118_agent_file="$temporary_directory/gateway-c37-118-agent.json"
   forgejo_api_as_admin \
-    --output "$gateway_c37_118_onboarding_agent_users_file" \
+    --output "$gateway_c37_118_agent_users_file" \
     "$api_url/admin/users?limit=100"
-  if ! jq -e --arg username "$gateway_c37_118_onboarding_agent_username" \
+  if ! jq -e --arg username "$gateway_c37_118_agent_username" \
     '.[] | select(.username == $username)' \
-    "$gateway_c37_118_onboarding_agent_users_file" > "$gateway_c37_118_onboarding_agent_file"; then
-    : > "$gateway_c37_118_onboarding_agent_file"
+    "$gateway_c37_118_agent_users_file" > "$gateway_c37_118_agent_file"; then
+    : > "$gateway_c37_118_agent_file"
   fi
 }
 
-gateway_c37_118_onboarding_agent_is_restricted_non_admin() {
-  [ -s "$gateway_c37_118_onboarding_agent_file" ] \
-    && jq -e --arg username "$gateway_c37_118_onboarding_agent_username" \
+gateway_c37_118_agent_is_restricted_non_admin() {
+  [ -s "$gateway_c37_118_agent_file" ] \
+    && jq -e --arg username "$gateway_c37_118_agent_username" \
       '.username == $username and .is_admin == false and .restricted == true' \
-      "$gateway_c37_118_onboarding_agent_file" > /dev/null
+      "$gateway_c37_118_agent_file" > /dev/null
 }
 
-ensure_gateway_c37_118_onboarding_agent_user() {
-  lookup_gateway_c37_118_onboarding_agent
-  if [ ! -s "$gateway_c37_118_onboarding_agent_file" ]; then
-    gateway_c37_118_onboarding_agent_password="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '\n')"
-    if [ -z "$gateway_c37_118_onboarding_agent_password" ]; then
-      printf '%s\n' "Unable to generate a Forgejo gateway onboarding agent password" >&2
+ensure_gateway_c37_118_agent_user() {
+  lookup_gateway_c37_118_agent
+  if [ ! -s "$gateway_c37_118_agent_file" ]; then
+    gateway_c37_118_agent_password="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '\n')"
+    if [ -z "$gateway_c37_118_agent_password" ]; then
+      printf '%s\n' "Unable to generate a Forgejo C37.118 gateway agent password" >&2
       exit 1
     fi
     forgejo_as_git admin user create \
-      --username "$gateway_c37_118_onboarding_agent_username" \
-      --password "$gateway_c37_118_onboarding_agent_password" \
-      --email "$gateway_c37_118_onboarding_agent_email" \
+      --username "$gateway_c37_118_agent_username" \
+      --password "$gateway_c37_118_agent_password" \
+      --email "$gateway_c37_118_agent_email" \
       --restricted \
       --must-change-password=false
-    lookup_gateway_c37_118_onboarding_agent
+    lookup_gateway_c37_118_agent
   fi
-  if ! gateway_c37_118_onboarding_agent_is_restricted_non_admin; then
-    printf '%s\n' "Forgejo gateway onboarding agent must be a restricted non-admin user" >&2
+  if ! gateway_c37_118_agent_is_restricted_non_admin; then
+    printf '%s\n' "Forgejo C37.118 gateway agent must be a restricted non-admin user" >&2
     exit 1
   fi
 }
 
-ensure_gateway_c37_118_onboarding_agent_collaboration() {
+ensure_gateway_c37_118_agent_collaboration() {
   forgejo_api_as_admin \
     --request PUT \
     --header "Content-Type: application/json" \
     --data '{"permission":"write"}' \
-    --output "$temporary_directory/gateway-c37-118-onboarding-agent-collaboration.json" \
-    "$api_url/repos/$admin_username/$gateway_c37_118_onboarding_repository/collaborators/$gateway_c37_118_onboarding_agent_username"
+    --output "$temporary_directory/gateway-c37-118-agent-collaboration.json" \
+    "$api_url/repos/$admin_username/$gateway_c37_118_repository/collaborators/$gateway_c37_118_agent_username"
 }
 
-gateway_c37_118_onboarding_agent_token_is_valid() {
-  if [ ! -s "$gateway_c37_118_onboarding_agent_token_file" ]; then
+gateway_c37_118_agent_token_is_valid() {
+  if [ ! -s "$gateway_c37_118_agent_token_file" ]; then
     return 1
   fi
-  gateway_c37_118_onboarding_agent_token="$(cat "$gateway_c37_118_onboarding_agent_token_file")"
-  if [ -z "$gateway_c37_118_onboarding_agent_token" ]; then
+  gateway_c37_118_agent_token="$(cat "$gateway_c37_118_agent_token_file")"
+  if [ -z "$gateway_c37_118_agent_token" ]; then
     return 1
   fi
-  gateway_c37_118_onboarding_agent_token_response="$temporary_directory/gateway-c37-118-onboarding-agent-token.json"
+  gateway_c37_118_agent_token_response="$temporary_directory/gateway-c37-118-agent-token.json"
   if ! curl --fail --silent --show-error \
-    --header "Authorization: token $gateway_c37_118_onboarding_agent_token" \
-    --output "$gateway_c37_118_onboarding_agent_token_response" \
+    --header "Authorization: token $gateway_c37_118_agent_token" \
+    --output "$gateway_c37_118_agent_token_response" \
     "$api_url/user"; then
     return 1
   fi
-  grep -Fq "\"username\":\"$gateway_c37_118_onboarding_agent_username\"" "$gateway_c37_118_onboarding_agent_token_response"
+  grep -Fq "\"username\":\"$gateway_c37_118_agent_username\"" "$gateway_c37_118_agent_token_response"
 }
 
-ensure_gateway_c37_118_onboarding_agent_token() {
-  if ! gateway_c37_118_onboarding_agent_token_is_valid; then
-    rm -f "$gateway_c37_118_onboarding_agent_token_file"
+ensure_gateway_c37_118_agent_token() {
+  if ! gateway_c37_118_agent_token_is_valid; then
+    rm -f "$gateway_c37_118_agent_token_file"
     forgejo_as_git admin user generate-access-token \
-      --username "$gateway_c37_118_onboarding_agent_username" \
-      --token-name "$gateway_c37_118_onboarding_agent_token_name" \
+      --username "$gateway_c37_118_agent_username" \
+      --token-name "$gateway_c37_118_agent_token_name" \
       --scopes all \
-      --raw > "$gateway_c37_118_onboarding_agent_token_file"
+      --raw > "$gateway_c37_118_agent_token_file"
   fi
-  chown git:git "$gateway_c37_118_onboarding_agent_token_file"
-  chmod 600 "$gateway_c37_118_onboarding_agent_token_file"
-  if ! gateway_c37_118_onboarding_agent_token_is_valid; then
-    printf '%s\n' "Forgejo gateway onboarding agent token is invalid" >&2
+  chown git:git "$gateway_c37_118_agent_token_file"
+  chmod 600 "$gateway_c37_118_agent_token_file"
+  if ! gateway_c37_118_agent_token_is_valid; then
+    printf '%s\n' "Forgejo C37.118 gateway agent token is invalid" >&2
     exit 1
   fi
 }
 
-write_gateway_c37_118_onboarding_agent_identity() {
-  cat > "$gateway_c37_118_onboarding_agent_identity_file" <<EOF
+write_gateway_c37_118_agent_identity() {
+  cat > "$gateway_c37_118_agent_identity_file" <<EOF
 owner=$admin_username
-repository=$gateway_c37_118_onboarding_repository
-username=$gateway_c37_118_onboarding_agent_username
+repository=$gateway_c37_118_repository
+username=$gateway_c37_118_agent_username
 EOF
-  chown git:git "$gateway_c37_118_onboarding_agent_identity_file"
-  chmod 600 "$gateway_c37_118_onboarding_agent_identity_file"
+  chown git:git "$gateway_c37_118_agent_identity_file"
+  chmod 600 "$gateway_c37_118_agent_identity_file"
 }
 
-ensure_gateway_c37_118_onboarding_agent() {
-  ensure_gateway_c37_118_onboarding_agent_user
-  ensure_gateway_c37_118_onboarding_agent_collaboration
-  ensure_gateway_c37_118_onboarding_agent_token
-  write_gateway_c37_118_onboarding_agent_identity
+ensure_gateway_c37_118_agent() {
+  ensure_gateway_c37_118_agent_user
+  ensure_gateway_c37_118_agent_collaboration
+  ensure_gateway_c37_118_agent_token
+  write_gateway_c37_118_agent_identity
 }
 
 reset_runner_state() {
@@ -306,7 +309,6 @@ reset_runner_state() {
     "$runner_dir"/wama-processor-*.uuid \
     "$runner_scope_file" \
     "$runner_config_file" \
-    "$gateway_c37_118_onboarding_workflow_trigger_file" \
     "$runner_dir/.runner"
 }
 
@@ -342,24 +344,27 @@ fi
 
 require_value FORGEJO_BOOTSTRAP_ADMIN_PASSWORD "$admin_password"
 require_value FORGEJO_RUNNER_URL "$runner_url"
-require_value FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL "$gateway_c37_118_onboarding_agent_email"
+require_value FORGEJO_GATEWAY_C37_118_AGENT_EMAIL "$gateway_c37_118_agent_email"
 require_value WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 require_value WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 require_value WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
-require_value WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT "$lfr_frequency_provision_deploy_root"
-require_value WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT "$gateway_c37_118_onboarding_deploy_root"
+require_value WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT "$frequency_measurement_session_deploy_root"
+require_value WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
+require_value WAMA_GATEWAY_C37_118_DEPLOY_ROOT "$gateway_c37_118_deploy_root"
 validate_identifier FORGEJO_BOOTSTRAP_ADMIN_USERNAME "$admin_username"
 validate_identifier FORGEJO_FREQUENCY_SCALE_REPOSITORY "$frequency_repository"
 validate_identifier FORGEJO_APPARENT_POWER_REPOSITORY "$apparent_repository"
 validate_identifier FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY "$frequency_iec104_export_repository"
-validate_identifier FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY "$lfr_frequency_provision_repository"
-validate_identifier FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY "$gateway_c37_118_onboarding_repository"
-validate_identifier FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME "$gateway_c37_118_onboarding_agent_username"
+validate_identifier FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY "$frequency_measurement_session_repository"
+validate_identifier FORGEJO_ALARM_THRESHOLD_REPOSITORY "$alarm_threshold_repository"
+validate_identifier FORGEJO_GATEWAY_C37_118_REPOSITORY "$gateway_c37_118_repository"
+validate_identifier FORGEJO_GATEWAY_C37_118_AGENT_USERNAME "$gateway_c37_118_agent_username"
 validate_deploy_root WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 validate_deploy_root WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
-validate_deploy_root WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT "$lfr_frequency_provision_deploy_root"
-validate_deploy_root WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT "$gateway_c37_118_onboarding_deploy_root"
+validate_deploy_root WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT "$frequency_measurement_session_deploy_root"
+validate_deploy_root WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
+validate_deploy_root WAMA_GATEWAY_C37_118_DEPLOY_ROOT "$gateway_c37_118_deploy_root"
 
 if ! forgejo_as_git admin user list | awk -v username="$admin_username" '$2 == username { found = 1 } END { exit !found }'; then
   forgejo_as_git admin user create \
@@ -374,30 +379,33 @@ umask 077
 mkdir -p "$runner_dir"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
-gateway_c37_118_onboarding_seeded_file="$temporary_directory/gateway-c37-118-onboarding.seeded"
+gateway_c37_118_seeded_file="$temporary_directory/gateway-c37-118.seeded"
 initialize_deploy_root "$frequency_repository" "$frequency_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$apparent_repository" "$apparent_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root" "$processor_deploy_marker"
-initialize_deploy_root "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_root" "$processor_deploy_marker"
-initialize_deploy_root "$gateway_c37_118_onboarding_repository" "$gateway_c37_118_onboarding_deploy_root" "$gateway_onboarding_deploy_marker"
+initialize_deploy_root "$frequency_measurement_session_repository" "$frequency_measurement_session_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$alarm_threshold_repository" "$alarm_threshold_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$gateway_c37_118_repository" "$gateway_c37_118_deploy_root" "$gateway_c37_118_deploy_marker"
 api_auth_header="$(printf '%s:%s' "$admin_username" "$admin_password" | base64 | tr -d '\n')"
 ensure_repository "$frequency_repository"
 ensure_repository "$apparent_repository"
 ensure_repository "$frequency_iec104_export_repository"
-ensure_repository "$lfr_frequency_provision_repository"
-ensure_repository "$gateway_c37_118_onboarding_repository"
+ensure_repository "$frequency_measurement_session_repository"
+ensure_repository "$alarm_threshold_repository"
+ensure_repository "$gateway_c37_118_repository"
 seed_repository_if_empty "$frequency_repository" "$seed_root/processor-frequency-scale"
 seed_repository_if_empty "$apparent_repository" "$seed_root/processor-apparent-power"
 seed_repository_if_empty "$frequency_iec104_export_repository" "$seed_root/processor-frequency-iec104-export"
-seed_repository_if_empty "$lfr_frequency_provision_repository" "$seed_root/processor-lfr-frequency-provision"
+seed_repository_if_empty "$frequency_measurement_session_repository" "$seed_root/processor-frequency-measurement-session"
+seed_repository_if_empty "$alarm_threshold_repository" "$seed_root/processor-alarm-threshold"
 seed_repository_if_empty \
-  "$gateway_c37_118_onboarding_repository" \
-  "$seed_root/gateway-c37-118-onboarding" \
-  "$gateway_c37_118_onboarding_seeded_file"
+  "$gateway_c37_118_repository" \
+  "$seed_root/gateway-c37-118" \
+  "$gateway_c37_118_seeded_file"
 ensure_package_token
-ensure_gateway_c37_118_onboarding_agent
+ensure_gateway_c37_118_agent
 
-scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$lfr_frequency_provision_repository,$admin_username/$gateway_c37_118_onboarding_repository"
+scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$frequency_measurement_session_repository,$admin_username/$alarm_threshold_repository,$admin_username/$gateway_c37_118_repository"
 if [ ! -f "$runner_layout_file" ] || [ "$(cat "$runner_layout_file")" != "$runner_layout" ]; then
   reset_runner_state
 fi
@@ -411,20 +419,24 @@ apparent_ci_name=wama-processor-apparent-power-ci
 apparent_deploy_name=wama-processor-apparent-power-deploy
 frequency_iec104_export_ci_name=wama-processor-frequency-iec104-export-ci
 frequency_iec104_export_deploy_name=wama-processor-frequency-iec104-export-deploy
-lfr_frequency_provision_ci_name=wama-processor-lfr-frequency-provision-ci
-lfr_frequency_provision_deploy_name=wama-processor-lfr-frequency-provision-deploy
-gateway_c37_118_onboarding_ci_name=wama-gateway-c37-118-onboarding-ci
-gateway_c37_118_onboarding_deploy_name=wama-gateway-c37-118-onboarding-deploy
+frequency_measurement_session_ci_name=wama-processor-frequency-measurement-session-ci
+frequency_measurement_session_deploy_name=wama-processor-frequency-measurement-session-deploy
+alarm_threshold_ci_name=wama-processor-alarm-threshold-ci
+alarm_threshold_deploy_name=wama-processor-alarm-threshold-deploy
+gateway_c37_118_ci_name=wama-gateway-c37-118-ci
+gateway_c37_118_deploy_name=wama-gateway-c37-118-deploy
 register_runner "$frequency_repository" "$frequency_ci_name" "$runner_ci_label"
 register_runner "$frequency_repository" "$frequency_deploy_name" "$runner_deploy_label"
 register_runner "$apparent_repository" "$apparent_ci_name" "$runner_ci_label"
 register_runner "$apparent_repository" "$apparent_deploy_name" "$runner_deploy_label"
 register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_ci_name" "$runner_ci_label"
 register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_name" "$runner_deploy_label"
-register_runner "$lfr_frequency_provision_repository" "$lfr_frequency_provision_ci_name" "$runner_ci_label"
-register_runner "$lfr_frequency_provision_repository" "$lfr_frequency_provision_deploy_name" "$runner_deploy_label"
-register_runner "$gateway_c37_118_onboarding_repository" "$gateway_c37_118_onboarding_ci_name" "$runner_ci_label"
-register_runner "$gateway_c37_118_onboarding_repository" "$gateway_c37_118_onboarding_deploy_name" "$runner_deploy_label"
+register_runner "$frequency_measurement_session_repository" "$frequency_measurement_session_ci_name" "$runner_ci_label"
+register_runner "$frequency_measurement_session_repository" "$frequency_measurement_session_deploy_name" "$runner_deploy_label"
+register_runner "$alarm_threshold_repository" "$alarm_threshold_ci_name" "$runner_ci_label"
+register_runner "$alarm_threshold_repository" "$alarm_threshold_deploy_name" "$runner_deploy_label"
+register_runner "$gateway_c37_118_repository" "$gateway_c37_118_ci_name" "$runner_ci_label"
+register_runner "$gateway_c37_118_repository" "$gateway_c37_118_deploy_name" "$runner_deploy_label"
 
 printf '%s\n' "$runner_layout" > "$runner_layout_file"
 printf '%s\n' "$scope_manifest" > "$runner_scope_file"
@@ -449,8 +461,9 @@ container:
     - "$frequency_deploy_root"
     - "$apparent_deploy_root"
     - "$frequency_iec104_export_deploy_root"
-    - "$lfr_frequency_provision_deploy_root"
-    - "$gateway_c37_118_onboarding_deploy_root"
+    - "$frequency_measurement_session_deploy_root"
+    - "$alarm_threshold_deploy_root"
+    - "$gateway_c37_118_deploy_root"
   options: "--add-host=host.docker.internal:host-gateway --cpus=2 --memory=2g"
 server:
   connections:
@@ -478,27 +491,35 @@ server:
       url: $runner_url
       uuid: $(cat "$runner_dir/$frequency_iec104_export_deploy_name.uuid")
       token: $(cat "$runner_dir/$frequency_iec104_export_deploy_name.secret")
-    $lfr_frequency_provision_ci_name:
+    $frequency_measurement_session_ci_name:
       url: $runner_url
-      uuid: $(cat "$runner_dir/$lfr_frequency_provision_ci_name.uuid")
-      token: $(cat "$runner_dir/$lfr_frequency_provision_ci_name.secret")
-    $lfr_frequency_provision_deploy_name:
+      uuid: $(cat "$runner_dir/$frequency_measurement_session_ci_name.uuid")
+      token: $(cat "$runner_dir/$frequency_measurement_session_ci_name.secret")
+    $frequency_measurement_session_deploy_name:
       url: $runner_url
-      uuid: $(cat "$runner_dir/$lfr_frequency_provision_deploy_name.uuid")
-      token: $(cat "$runner_dir/$lfr_frequency_provision_deploy_name.secret")
-    $gateway_c37_118_onboarding_ci_name:
+      uuid: $(cat "$runner_dir/$frequency_measurement_session_deploy_name.uuid")
+      token: $(cat "$runner_dir/$frequency_measurement_session_deploy_name.secret")
+    $alarm_threshold_ci_name:
       url: $runner_url
-      uuid: $(cat "$runner_dir/$gateway_c37_118_onboarding_ci_name.uuid")
-      token: $(cat "$runner_dir/$gateway_c37_118_onboarding_ci_name.secret")
-    $gateway_c37_118_onboarding_deploy_name:
+      uuid: $(cat "$runner_dir/$alarm_threshold_ci_name.uuid")
+      token: $(cat "$runner_dir/$alarm_threshold_ci_name.secret")
+    $alarm_threshold_deploy_name:
       url: $runner_url
-      uuid: $(cat "$runner_dir/$gateway_c37_118_onboarding_deploy_name.uuid")
-      token: $(cat "$runner_dir/$gateway_c37_118_onboarding_deploy_name.secret")
+      uuid: $(cat "$runner_dir/$alarm_threshold_deploy_name.uuid")
+      token: $(cat "$runner_dir/$alarm_threshold_deploy_name.secret")
+    $gateway_c37_118_ci_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$gateway_c37_118_ci_name.uuid")
+      token: $(cat "$runner_dir/$gateway_c37_118_ci_name.secret")
+    $gateway_c37_118_deploy_name:
+      url: $runner_url
+      uuid: $(cat "$runner_dir/$gateway_c37_118_deploy_name.uuid")
+      token: $(cat "$runner_dir/$gateway_c37_118_deploy_name.secret")
 EOF
 
-if [ -e "$gateway_c37_118_onboarding_seeded_file" ]; then
-  : > "$gateway_c37_118_onboarding_workflow_trigger_file"
-elif [ ! -e "$gateway_c37_118_onboarding_workflow_trigger_file" ]; then
-  dispatch_gateway_c37_118_onboarding_workflow
-  : > "$gateway_c37_118_onboarding_workflow_trigger_file"
+if [ -e "$gateway_c37_118_seeded_file" ]; then
+  : > "$gateway_c37_118_workflow_trigger_file"
+elif [ ! -e "$gateway_c37_118_workflow_trigger_file" ]; then
+  dispatch_gateway_c37_118_workflow
+  : > "$gateway_c37_118_workflow_trigger_file"
 fi

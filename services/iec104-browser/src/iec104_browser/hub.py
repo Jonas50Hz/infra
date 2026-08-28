@@ -36,7 +36,7 @@ class Subscription:
 
 
 class LiveHub:
-    """Open c104 for active pages only and discard all state after the last one."""
+    """Fan out an application-lifetime IEC monitor to transient page streams."""
 
     def __init__(self, monitor_factory: MonitorFactory, queue_size: int = 256) -> None:
         self._lock = asyncio.Lock()
@@ -46,50 +46,57 @@ class LiveHub:
         self._queue_size = queue_size
         self._state = MonitorStatus(active=False, state="idle")
         self._subscriptions: dict[str, asyncio.Queue[dict[str, object]]] = {}
+        self._generation = 0
+
+    async def start(self) -> None:
+        """Start the IEC monitor once before accepting browser subscriptions."""
+
+        async with self._lock:
+            if self._monitor is not None:
+                return
+
+            self._loop = asyncio.get_running_loop()
+            self._generation += 1
+            generation = self._generation
+            self._state = MonitorStatus(active=False, state="connecting")
+            try:
+                monitor_to_start = self._monitor_factory(
+                    lambda event: self._on_event(generation, event),
+                    lambda status: self._on_status(generation, status),
+                )
+            except Exception:
+                self._loop = None
+                self._state = MonitorStatus(active=False, state="idle")
+                raise
+            self._monitor = monitor_to_start
+
+        try:
+            await asyncio.to_thread(monitor_to_start.start)
+        except Exception:
+            async with self._lock:
+                if self._monitor is monitor_to_start:
+                    self._monitor = None
+                    self._loop = None
+                    self._generation += 1
+                    self._state = MonitorStatus(active=False, state="idle")
+            raise
 
     async def subscribe(self) -> Subscription:
-        """Create one browser stream and start IEC 104 for the first viewer."""
+        """Create one browser stream without retaining its received values."""
 
-        monitor_to_start: MonitorProtocol | None = None
         subscription: Subscription
         async with self._lock:
             queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=self._queue_size)
             subscription = Subscription(queue=queue, token=uuid4().hex)
             self._subscriptions[subscription.token] = queue
-            self._loop = asyncio.get_running_loop()
-            if self._monitor is None:
-                self._state = MonitorStatus(active=False, state="connecting")
-                monitor_to_start = self._monitor_factory(self._on_event, self._on_status)
-                self._monitor = monitor_to_start
             _enqueue(queue, self._status_payload())
-
-        if monitor_to_start is not None:
-            try:
-                await asyncio.to_thread(monitor_to_start.start)
-            except Exception:
-                async with self._lock:
-                    self._subscriptions.pop(subscription.token, None)
-                    if self._monitor is monitor_to_start:
-                        self._monitor = None
-                        self._state = MonitorStatus(active=False, state="idle")
-                        if not self._subscriptions:
-                            self._loop = None
-                raise
         return subscription
 
     async def unsubscribe(self, subscription: Subscription) -> None:
-        """Drop a page stream and stop IEC 104 after the final page closes."""
+        """Drop a page stream while keeping the application monitor available."""
 
-        monitor_to_stop: MonitorProtocol | None = None
         async with self._lock:
             self._subscriptions.pop(subscription.token, None)
-            if not self._subscriptions and self._monitor is not None:
-                monitor_to_stop = self._monitor
-                self._monitor = None
-                self._loop = None
-                self._state = MonitorStatus(active=False, state="idle")
-        if monitor_to_stop is not None:
-            await asyncio.to_thread(monitor_to_stop.stop)
 
     async def shutdown(self) -> None:
         """Release c104 during application shutdown without retaining events."""
@@ -100,6 +107,7 @@ class LiveHub:
             monitor_to_stop = self._monitor
             self._monitor = None
             self._loop = None
+            self._generation += 1
             self._state = MonitorStatus(active=False, state="idle")
         if monitor_to_stop is not None:
             await asyncio.to_thread(monitor_to_stop.stop)
@@ -114,21 +122,25 @@ class LiveHub:
                 "viewers": len(self._subscriptions),
             }
 
-    def _on_event(self, event: MonitorEvent) -> None:
+    def _on_event(self, generation: int, event: MonitorEvent) -> None:
         loop = self._loop
         if loop is not None:
-            loop.call_soon_threadsafe(self._broadcast, event.payload())
+            loop.call_soon_threadsafe(self._broadcast, generation, event.payload())
 
-    def _on_status(self, status: MonitorStatus) -> None:
+    def _on_status(self, generation: int, status: MonitorStatus) -> None:
         loop = self._loop
         if loop is not None:
-            loop.call_soon_threadsafe(self._publish_status, status)
+            loop.call_soon_threadsafe(self._publish_status, generation, status)
 
-    def _broadcast(self, payload: dict[str, object]) -> None:
+    def _broadcast(self, generation: int, payload: dict[str, object]) -> None:
+        if generation != self._generation:
+            return
         for queue in tuple(self._subscriptions.values()):
             _enqueue(queue, payload)
 
-    def _publish_status(self, status: MonitorStatus) -> None:
+    def _publish_status(self, generation: int, status: MonitorStatus) -> None:
+        if generation != self._generation:
+            return
         if status == self._state:
             return
         self._state = status

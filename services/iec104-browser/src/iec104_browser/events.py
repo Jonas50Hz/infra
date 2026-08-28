@@ -40,7 +40,7 @@ class MonitorEvent:
 
 @dataclass(frozen=True)
 class MonitorStatus:
-    """Current lifecycle state of the on-demand IEC 104 control center."""
+    """Current lifecycle state of the persistent IEC 104 control center."""
 
     active: bool
     state: str

@@ -131,6 +131,7 @@ class DruidClient:
                 json={
                     "query": query_for_request(request, self._datasource),
                     "resultFormat": "objectLines",
+                    "context": {"maxSegmentPartitionsOrderedInMemory": 80},
                 },
                 stream=True,
                 timeout=self._timeout_seconds,

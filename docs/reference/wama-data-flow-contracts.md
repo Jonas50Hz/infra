@@ -1,7 +1,7 @@
 (ref_wama_data_flow_contracts)=
 
 ```{meta}
-:description: WAMA Kafka data-flow and raw-Protobuf contract reference for measurements, sessions, metadata, and export.
+:description: WAMA Kafka data-flow and raw-Protobuf contract reference for measurements, sessions, alarms, metadata, and export.
 ```
 
 # WAMA data flow (Common Format)
@@ -23,8 +23,8 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 2. **Gateway → Kafka.** Normalized measurements published to `LiveMeasurement`.
 3. **Processing.** Quixstreams processors consume `LiveMeasurement`, compute
   derived values, and write them back to Kafka. Producers may submit bounded
-  `MeasurementSession` requests, and processors may emit `Alarm` and `Export`
-  records. The planned
+  `MeasurementSession` requests; live processors may emit compacted `Alarm`
+  desired state and `Export` records. The planned
   [LFR per-second frequency provision](lfr-frequency-provision.md) processor
   begins at this Kafka boundary; source-protocol and PDC ingestion are outside
   that use-case specification.
@@ -51,8 +51,9 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
   path; its MRID selector and session link open a local confirmation UI that
   submits only the selected interval and identifiers. Its session dashboard can
   download the current immutable selection as CSV through a loopback-only,
-  fixed-query Trino exporter. Alerting and broader cross-session analytics
-  remain later work.
+  fixed-query Trino exporter. Grafana alerting and broader cross-session
+  analytics remain later work; root-owned Alarm incident management is a
+  separate Alerta/Mailpit path.
     The root-owned gateway dashboard provisioner independently replays compacted
     `Masterdata` to maintain Grafana's active-source fleet and Druid-backed
     source pages; it does not use Trino or imply gateway deployment health.
@@ -65,7 +66,8 @@ Sources: **WAMA Platform Concept** (Gerbrand Jonas) — "Process — Live data",
 |-------|------|----------|
 | `LiveMeasurement` | stream | `MCCSMeasurementValue` (Common Format) + derived values |
 | `MeasurementSession` | stream | Raw-Protobuf bounded historical extraction requests |
-| `Alarm` | stream | Alarm records raised from measurement sessions |
+| `Alarm` | compacted | Raw-Protobuf current active `AlarmDesiredState` values; same-key tombstones clear them |
+| `AlarmEvaluationWatermark` | compacted | Raw-Protobuf latest qualifying evaluation time keyed exactly like `Alarm` |
 | `Export` | stream | Typed raw-Protobuf `ExportRecord` values for one-way IEC 104 export; file/MQTT payloads remain future work |
 | `Masterdata` | compacted | Raw-Protobuf `SourceMasterdata` source endpoint, location, PMU identity, and signal-to-MRID mappings |
 | `Schema` | compacted | Common-Format schema definitions |
@@ -76,6 +78,95 @@ compacted `Blobmeta` topic. Kafka remains the source of truth. A future Kafka
 Connector may mirror `Masterdata` and `Schema` separately; it is not part of
 this PoC.
 
+## Alarm desired-state contract
+**`AlarmDesiredState`**, proto3 package `wama.alarm.v1`. Canonical file:
+[`schema/alarm.proto`](../wama/schema/alarm.proto). `Alarm` is a root-owned,
+compacted desired-active-state topic, not a MeasurementSession event stream or
+an append-only lifecycle/audit topic. Live processors emit its raw-Protobuf
+values when their current evaluation says an alarm is active.
+
+A non-null raw-Protobuf value means the alarm is active. A null-valued Kafka
+tombstone with the same key automatically clears and removes that active state.
+For a non-null record, the Kafka key must byte-for-byte equal the payload's
+UTF-8 `alarm_key`. It is exactly this unambiguous deterministic encoding of the
+stable `(rule_id, exact_mrid)` pair:
+
+`alarm/v1/<base64url-no-padding(UTF-8(rule_id))>/<base64url-no-padding(UTF-8(mrid))>`.
+
+The slash separator cannot occur in either base64url component, so consumers
+can recover both exact UTF-8 identities without ambiguity. `rule_id` and
+`mrid` must be non-empty, and the payload retains both values alongside the
+key.
+
+Every active value carries an immutable canonical `episode_id`, stable rule ID,
+exact MRID, `WARNING` or `CRITICAL` severity, original activation timestamp,
+current rule revision, and current evidence. Evidence or rule-revision refreshes
+update the same key and retain the same `episode_id`; only a later activation
+after a tombstone receives a new episode ID. The contract deliberately excludes
+acknowledgement and notification fields. Those workflows, and durable audit
+history, belong outside `Alarm`; see [ADR 0001](../adr/0001-compacted-alarm-desired-state.md).
+
+## Alarm evaluation watermark contract
+**`AlarmEvaluationWatermark`**, proto3 package `wama.alarm.v1`. Canonical file:
+[`schema/alarm.proto`](../wama/schema/alarm.proto). This root-owned compacted
+topic uses the exact `Alarm` key and records the latest qualifying
+`last_evaluated_at` for the same `(rule_id, exact_mrid)` identity. It is current
+evaluation state, not an audit, episode, notification, or acknowledgement
+ledger.
+
+The watermark remains when an inactive alarm's `Alarm` tombstone later compacts
+away. A processor can therefore reject an older late measurement after restart
+instead of allowing it to reactivate the cleared alarm.
+
+### Cutover paths
+#### Legacy delete-retained Alarm
+A nonempty legacy `delete` `Alarm` requires the exact
+`WAMA_ALARM_LEGACY_MIGRATION=discard-delete-retained-alarm-v1` guard. The
+initializer deletes and recreates `Alarm` as compacted state, deliberately
+discarding its retained active state without claiming recovery. It then creates
+or verifies `AlarmEvaluationWatermark` normally.
+
+#### Forward-only compact active state
+When an existing compact `Alarm` retains records and the watermark topic is
+absent, Kafka initialisation rejects the topology unless
+`WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION=accept-forward-only-alarm-evaluation-watermark-v1`.
+That exact one-time guard creates and verifies only
+`AlarmEvaluationWatermark`, preserving `Alarm`'s topic ID, retained bytes, and
+end offsets. It does not alter or backfill `Alarm`. Recovery rejects a
+pre-watermark active `Alarm` unless the guard is set; with the guard, it
+bootstraps only from that active record's current evidence. The cutover is
+forward-only because it establishes the late-data correctness boundary for
+subsequent evaluations without claiming historical reconstruction. See
+[ADR 0002](../adr/0002-alarm-evaluation-watermark.md).
+
+## Alarm incident management
+`alarm-alerta-ingress` is the sole root-owned direct consumer for this Alerta
+slice. It generates its local bindings from the canonical `alarm.proto`, manually
+assigns every `Alarm` partition, captures end offsets, folds a complete snapshot
+of non-null active values and same-key tombstones, reconciles remote state, and
+only then becomes ready. It tails the same assignment idempotently; consumer
+group offsets are never its restart reconciliation source.
+
+The ingress maps an active state to Alerta resource `MRID`, event
+`wama-alarm/<episode_id>`, environment `WAMA`, customer `wama`, and fixed native
+severity `indeterminate`. The domain severity appears in visible
+`[WAMA WARNING]` or `[WAMA CRITICAL]` text and WAMA attributes. Native severity
+never changes for an active episode, which preserves a product-side Alerta
+acknowledgement across evidence and rule-revision refreshes.
+
+Ingress ownership requires both tag `wama-managed` and attribute
+`wama_managed_by=alarm-alerta-ingress`. Reconciliation considers only such
+active or acknowledged records. A same-key tombstone closes matching records via
+Alerta's native `PUT /api/alert/<id>/status` route; it never deletes an alert or
+touches foreign or closed historic records.
+
+Alerta uses its isolated PostgreSQL database. Its custom `post_receive` plugin
+sends the fixed Mailpit recipient only for a first WAMA-managed active episode:
+status `open`, no repeat, `duplicate_count=0`, prior severity `indeterminate`,
+and exactly one initial `new` history entry. SMTP delivery is best-effort local
+PoC behaviour only. No durable retry, external relay, outbox, or WAMA audit
+ledger is implied.
+
 ## Masterdata source contract
 **`SourceMasterdata`**, proto3 package `wama.masterdata.v1`. Canonical file:
 [`schema/masterdata.proto`](../wama/schema/masterdata.proto). The Kafka key is the
@@ -83,7 +174,7 @@ exact UTF-8 `source_id`; non-null values are deterministic raw-Protobuf source
 records and a null-valued record with the same key is a decommissioning
 tombstone.
 
-The private `gateway-c37-118-onboarding` Git catalog is the reviewed authority.
+The private `gateway-c37-118` Git catalog is the reviewed authority.
 Its Systemexperte-approved `main` revision publishes a `catalog_id`, Git
 revision, and publication timestamp with every source projection. V1 supports
 one legacy C37.118 wire-version-2 TCP PMU endpoint per source: literal
@@ -107,7 +198,7 @@ The current publisher reads the compacted topic through its end offsets before
 writing. It rejects a source key owned by another catalog or an MRID owned by
 another active source, writes active records in deterministic source order, and
 tombstones only sources previously owned by its catalog. The approved
-onboarding deployment then renders one isolated adapter per active source and
+C37.118 gateway deployment then renders one isolated adapter per active source and
 removes only a matching previously managed adapter after its tombstone.
 
 Each adapter requests C37.118 v2 CFG-2, derives its field mapping from that
@@ -176,8 +267,9 @@ default COT flags: originator address 0, test false, and negative confirmation
 false.
 
 `iec104-exporter` is the controlled-station server on plain TCP port 2404. It
-only sends monitor-direction ASDUs to one active control-center connection and
-only processes TCP/IEC transport control traffic inbound. Its TCP ingress guard
+permits one active control-center connection only and sends only
+monitor-direction ASDUs while processing only TCP/IEC transport control traffic
+inbound. Its TCP ingress guard
 forwards only well-formed U (`STARTDT`, `STOPDT`, `TESTFR`) and S
 acknowledgement frames, and closes any connection that sends a malformed control
 frame or application I-frame before c104 can process or answer it. It exposes no
@@ -190,12 +282,14 @@ The profile-gated `iec104-receiver` is a test-only control center. It uses
 `STARTDT` without a general interrogation, publishes unique fixture records,
 and verifies the received ASDU fields. It then deliberately sends a raw
 general-interrogation I-frame and requires connection closure without an
-application response. `iec104-browser` is the on-demand read-only control center
-for operator viewing: an open page starts its `STARTDT` connection and receives
-live values over IEC 104; the browser page owns the transient event list and
-discarding the final page ends reception. It is the same single control-center
-slot used by the profile-gated receiver, so browser and receiver tests do not
-run concurrently. The Forgejo-owned
+application response. `iec104-browser` is the root-owned, read-only control
+center for operator viewing: its process establishes the `STARTDT` connection at
+startup and retains it for the process lifetime, including with `viewers: 0`.
+Human pages and WebSocket connections are transient viewers only, so status may
+be active with zero viewers; the browser retains no values after the final page
+closes. It is the same single control-center slot used by the profile-gated
+receiver, so stop the browser before running the receiver workflow and do not
+run them concurrently. The Forgejo-owned
 [`processor-frequency-iec104-export`](../../forgejo-repos/processor-frequency-iec104-export/README.md)
 seed consumes configured mapped, explicitly valid PMU-frequency values from
 `LiveMeasurement` and publishes deterministic raw-Protobuf `ExportRecord`
@@ -214,6 +308,22 @@ The request contains a canonical UUID, requested/start/end timestamps, sorted
 unique MRIDs, and at most 32 sorted metadata entries. It represents the
 half-open interval $[started\_at, ended\_at)$ and is bounded by environment
 defaults of 32 MRIDs and 24 hours. It contains no raw samples.
+
+### Frequency capture producer (PoC)
+The standard Forgejo `processor-frequency-measurement-session` seed consumes
+`LiveMeasurement` and publishes one bounded raw-Protobuf
+`MeasurementSessionRequest` for each eligible Frequency Capture Episode. Its
+explicit five-source, EE-editable Python policy evaluates each source
+independently: a valid `f > 50.2 Hz` opens an episode, and a valid
+`f <= 50.2 Hz` closes it. The request bounds are
+`[onset - 10s, clearance + 10s)`.
+
+It uses one simple ten-second processing-time delay after clearance before it
+publishes the request. A tail re-entry does not merge into the prior episode.
+An open in-memory episode is discarded on restart, and a padded capture longer
+than 24 hours is discarded. Deterministic request IDs protect ordinary retries.
+This is PoC best-effort timing: it does not guarantee Druid visibility or tail
+completeness, and it never represents Alarm lifecycle.
 
 `measurement-session-api` is the root-owned local-PoC browser boundary for
 this contract. It normalizes a Grafana selection, creates or reuses a canonical
@@ -249,7 +359,12 @@ and accepts only digest-identical replays for a `blob_id`.
 - Grafana selects `blob_id` and queries the registered Iceberg artifact through
   the read-only Trino datasource; object-key parsing and the internal writer are
   never exposed to the dashboard.
-- Decision: should an alarm be sent? If yes → `Alarm` + Power-User notification.
+- Live processors independently evaluate live inputs and publish the current
+  `AlarmDesiredState` when active, then a same-key tombstone when it clears.
+  They do not use `MeasurementSession` as an alarm lifecycle stream. The root
+  ingress maps desired state into Alerta's separate acknowledgement/close
+  lifecycle and first-episode Mailpit notification; Kafka remains the source of
+  truth for desired state, not Alerta history.
 - PostgreSQL provides direct metadata/coverage queries; selected-session Grafana
   presentation is available. File export, live lifecycle updates, cross-session
   analytics, and Kubernetes delivery remain excluded.
@@ -267,4 +382,10 @@ and accepts only digest-identical replays for a `blob_id`.
 - Kafka delivery is at-least-once → make processors **idempotent**.
 - Keep raw/waveform data off Kafka; `MeasurementSession` carries only a bounded
   extraction command and `Blobmeta` carries integrity-checked object metadata.
+- Treat `Alarm` as a compacted current-state topic: apply same-key updates
+  idempotently and process its tombstones as automatic clearances.
+- Maintain `AlarmEvaluationWatermark` for each newer qualifying evaluation so
+  the newest evaluation remains available after an `Alarm` clearance compacts.
+- Keep Alarm payloads out of VictoriaMetrics. `alarm-alerta-ingress` has no
+  Druid, Grafana, Trino, SeaweedFS, PostgreSQL, or Forgejo access.
 - Always set `timestamp_mccs`; carry through field/gateway timestamps if present.

@@ -6,6 +6,16 @@ processors against a Kafka backbone, then use Forgejo only for internal
 processor deployment and explicitly scoped gateway-deployment tests.
 This is NOT the production target (production is Kubernetes-based).
 
+## PoC delivery scope
+- Make the requested happy path work and demonstrate it with a focused check.
+- Add failure handling only when the failure is highly probable during normal
+  local PoC use, directly blocks the happy path, or is required by a hard rule.
+- Do not broaden work into production resilience, high availability, exhaustive
+  negative testing, broad compatibility, or speculative edge-case behavior
+  unless the request explicitly calls for it.
+- The hard rules and ownership boundaries below remain mandatory in every PoC
+  change.
+
 ## Domain Vocabulary
 - [docs/wama/image.png](../docs/wama/image.png),
   [docs/wama/User_Konfiguration_Nexus.bpmn](../docs/wama/User_Konfiguration_Nexus.bpmn),
@@ -32,7 +42,7 @@ This is NOT the production target (production is Kubernetes-based).
   `docker compose up -d` or Watchtower on new application image tags. Forgejo
   must never deploy, modify, or trigger deployment of the root infrastructure
   Compose project.
-- `gateway-c37-118-onboarding` is the one declared gateway-deployment test.
+- `gateway-c37-118` is the one declared gateway-deployment test.
   Its scope is one-shot publication of raw-Protobuf `Masterdata` from reviewed
   legacy C37.118 version-2 PMU catalog files plus source-scoped adapters
   rendered by its guarded, marker-owned deployment root. It may start, recreate,
@@ -82,6 +92,13 @@ This is NOT the production target (production is Kubernetes-based).
   records. `blobmeta-catalog` may create only its immutable `blobmeta_catalog`
   schema; Kafka remains the source of truth. A future Kafka Connect mirror of
   `Masterdata` and `Schema` remains separate.
+- Alarm incident services own `services/alerta-postgres/`, `services/mailpit/`,
+  `services/alerta/`, and `services/alarm-alerta-ingress/`. They are root-owned
+  and never Forgejo deployment targets: `alerta-postgres` holds only Alerta's
+  product state, Mailpit is the local SMTP test inbox, Alerta owns the
+  loopback-only incident UI/API, and the ingress reconciles compacted
+  raw-Protobuf `Alarm` state. Alarm, Alerta, and Mailpit payloads must never
+  enter VictoriaMetrics.
 - Trino owns `services/trino/`, internal-only
   `services/trino-session-writer/`, and one-shot `services/trino-init/` plus
   `services/trino-session-init/`.
@@ -116,26 +133,30 @@ This is NOT the production target (production is Kubernetes-based).
 - IEC 104 services own `services/iec104-exporter/`,
   `services/iec104-receiver/`, and `services/iec104-browser/`. The exporter is
   a root-owned one-way controlled station that consumes typed raw-Protobuf
-  `Export` records; the receiver is a profile-gated control-center test only;
-  the browser is an on-demand, read-only control center that holds no values
-  after its final page closes. None is a Forgejo deployment target. The
+  `Export` records and permits one control-center connection only; the receiver
+  is a profile-gated control-center test only, and browser and receiver are
+  mutually exclusive, with the browser stopped before the receiver workflow.
+  The browser is root-owned and read-only: its outgoing control-center
+  connection begins at browser process startup and persists for the process
+  lifetime, including with `viewers: 0`. Its human pages and WebSocket
+  connections are transient viewers only, so status can be active with zero
+  viewers, and it holds no values after its final page closes. None is a Forgejo
+  deployment target. The
   independent `processor-frequency-iec104-export` seed is the direct configured
   PMU-frequency-to-`M_ME_NC_1` producer; it is not the unresolved full LFR
   preferred-frequency algorithm.
-- `processor-lfr-frequency-provision` is the separate Forgejo-owned per-second
-  LFR core. It publishes a configured preferred-frequency Common Format value
-  to `LiveMeasurement`; it does not deploy root IEC 104 services or produce
-  `Export` records until that later contract increment is explicitly scoped.
 - Forgejo services own `services/forgejo/`, `services/forgejo-init/`, and
   `services/forgejo-runner/`.
-- This repository is never pushed to Forgejo. Each tracked seed at
-  `forgejo-repos/processor-*/` is an independent Forgejo-pushable processor
-  repository. It owns one internal `processor-*` service, its workflow, code,
-  app Compose fragment, and deployment script. The independent
-  `forgejo-repos/gateway-c37-118-onboarding/` seed owns the explicit C37.118
-  Masterdata publication and catalog-derived legacy-v2 adapter test only. All
-  other assets remain in this repository. Every managed seed connects to
-  infrastructure only through the external `wama-infra` Docker network.
+- This repository is never pushed to Forgejo. The co-located worktrees at
+  `forgejo-repos/processor-alarm-threshold/` and
+  `forgejo-repos/gateway-c37-118/` are independent Forgejo-pushable
+  repositories; the remaining `forgejo-repos/processor-*/` entries are tracked
+  bootstrap seeds. Each processor repository owns one internal `processor-*`
+  service, its workflow, code, app Compose fragment, and deployment script. The
+  C37.118 gateway worktree owns the explicit C37.118 Masterdata publication and
+  catalog-derived legacy-v2 adapter test only. All other assets remain in this
+  repository. Every managed repository source connects to infrastructure only
+  through the external `wama-infra` Docker network.
 - Infrastructure monitoring services own `services/victoria-metrics/`,
   `services/node-exporter/`, `services/cadvisor/`, `services/kafka-exporter/`,
   and `services/grafana/`. VictoriaMetrics holds infrastructure telemetry only;
@@ -161,8 +182,8 @@ This is NOT the production target (production is Kubernetes-based).
 
 ## Coding conventions
 - Python: type hints, early returns, docstrings, no bare excepts.
-- Kafka topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`
-  (see data contracts).
+- Kafka topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`,
+  `AlarmEvaluationWatermark`, `Export` (see data contracts).
 - Keep raw/waveform data OFF Kafka (separate path in the real design).
 
 ## Where the full plan lives

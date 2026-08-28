@@ -30,7 +30,7 @@ semantics before it writes files. Invalid input leaves the last complete snapsho
 in place and marks the service unhealthy.
 
 This service does not deploy, restart, or evaluate a gateway. The Forgejo C37
-onboarding workflow remains the authority that publishes Masterdata and manages
+C37.118 gateway workflow remains the authority that publishes Masterdata and manages
 only its approved adapter scope. Druid remains the live-value datasource; Trino
 is not used to determine gateway membership or render these pages.
 

@@ -12,7 +12,7 @@ explicitly enabled and repositories are forced private for this trusted PoC.
 
 The one-shot [`../forgejo-init/`](../forgejo-init/) service creates the initial
 administrator, private seeded `processor-frequency-scale`,
-`processor-apparent-power`, `processor-frequency-iec104-export`, and
-`processor-lfr-frequency-provision` repositories, and separate CI/deployment
+`processor-apparent-power`, and `processor-frequency-iec104-export` repositories,
+plus the `gateway-c37-118` repository, with separate CI/deployment
 runner connections scoped to each repository. The parent infrastructure
 repository is never pushed to this Forgejo instance.

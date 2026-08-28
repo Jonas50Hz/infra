@@ -1,0 +1,21 @@
+name: ${WAMA_PROCESSOR_COMPOSE_PROJECT_NAME:-wama-processor-frequency-measurement-session}
+
+services:
+  processor-frequency-measurement-session:
+    image: "${WAMA_PROCESSOR_IMAGE:-wama.local/processor-frequency-measurement-session:main}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      WAMA_INPUT_TOPIC: "${WAMA_INPUT_TOPIC:-LiveMeasurement}"
+      WAMA_KAFKA_BOOTSTRAP_SERVERS: "${WAMA_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+      WAMA_OUTPUT_TOPIC: "${WAMA_OUTPUT_TOPIC:-MeasurementSession}"
+      WAMA_PROCESSOR_CONSUMER_GROUP: "${WAMA_PROCESSOR_CONSUMER_GROUP:-processor-frequency-measurement-session}"
+    networks:
+      - wama-infra
+    restart: unless-stopped
+
+networks:
+  wama-infra:
+    external: true
+    name: ${WAMA_INFRA_NETWORK:-wama-infra}

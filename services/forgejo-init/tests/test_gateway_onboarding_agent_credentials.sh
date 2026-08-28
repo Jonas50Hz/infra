@@ -3,9 +3,10 @@
 set -eu
 
 repository_root="$(cd "$(dirname "$0")/../../.." && pwd)"
-installer="$repository_root/scripts/configure-forgejo-gateway-onboarding-agent.sh"
-wrapper="$repository_root/scripts/with-forgejo-gateway-onboarding-agent.sh"
 temporary_root="$(mktemp -d)"
+infrastructure_root="$temporary_root/infrastructure"
+installer="$infrastructure_root/scripts/configure-forgejo-gateway-onboarding-agent.sh"
+wrapper="$infrastructure_root/scripts/with-forgejo-gateway-onboarding-agent.sh"
 
 cleanup() {
   rm -rf "$temporary_root"
@@ -46,6 +47,12 @@ EOF
   chmod +x "$fake_bin/docker"
 }
 
+create_synthetic_infrastructure_root() {
+  mkdir -p "$infrastructure_root/scripts" "$infrastructure_root/forgejo-repos"
+  cp "$repository_root/scripts/configure-forgejo-gateway-onboarding-agent.sh" "$installer"
+  cp "$repository_root/scripts/with-forgejo-gateway-onboarding-agent.sh" "$wrapper"
+}
+
 create_checkout() {
   checkout="$1"
   origin="$2"
@@ -57,15 +64,15 @@ run_installer() {
   PATH="$temporary_root/bin:$PATH" \
     XDG_CONFIG_HOME="$temporary_root/config" \
     GATEWAY_AGENT_TEST_DOCKER_LOG="$temporary_root/docker.log" \
-    sh "$installer" --checkout "$1"
+    sh "$installer" "$@"
 }
 
-test_configures_only_the_external_onboarding_checkout() {
+test_configures_the_colocated_onboarding_checkout() {
   : > "$temporary_root/docker.log"
-  checkout="$temporary_root/gateway-c37-118-onboarding"
+  checkout="$infrastructure_root/forgejo-repos/gateway-c37-118-onboarding"
   create_checkout "$checkout" http://forgejo.test/wama-admin/gateway-c37-118-onboarding.git
   origin_before="$(git -C "$checkout" remote get-url origin)"
-  run_installer "$checkout" > "$temporary_root/installer.log" 2>&1
+  run_installer > "$temporary_root/installer.log" 2>&1
   test "$(git -C "$checkout" remote get-url origin)" = "$origin_before"
   credential_file="$temporary_root/config/wama-forgejo/gateway-c37-118-onboarding.credentials"
   test "$(stat -c '%a' "$temporary_root/config/wama-forgejo")" = 700
@@ -82,7 +89,7 @@ test_configures_only_the_external_onboarding_checkout() {
     XDG_CONFIG_HOME="$temporary_root/config" \
     GATEWAY_AGENT_TEST_DOCKER_LOG="$temporary_root/docker.log" \
     FORGEJO_API_TOKEN=wrong-token \
-    sh "$wrapper" --checkout "$checkout" -- sh -c '
+    sh "$wrapper" -- sh -c '
       test "$FORGEJO_OWNER" = wama-admin
       test "$FORGEJO_REPOSITORY" = gateway-c37-118-onboarding
       test "$FORGEJO_API_URL" = http://forgejo.test/api/v1
@@ -97,7 +104,7 @@ test_configures_only_the_external_onboarding_checkout() {
 test_rejects_mismatched_agent_credential() {
   checkout="$temporary_root/mismatched-agent-checkout"
   create_checkout "$checkout" http://forgejo.test/wama-admin/gateway-c37-118-onboarding.git
-  run_installer "$checkout" > "$temporary_root/mismatched-installer.log" 2>&1
+  run_installer --checkout "$checkout" > "$temporary_root/mismatched-installer.log" 2>&1
   credential_file="$temporary_root/config/wama-forgejo/gateway-c37-118-onboarding.credentials"
   printf '%s\n' 'http://another-agent:another-token@forgejo.test/wama-admin/gateway-c37-118-onboarding.git' \
     > "$credential_file"
@@ -110,21 +117,19 @@ test_rejects_mismatched_agent_credential() {
   assert_contains 'does not match its configured agent' "$temporary_root/mismatched-wrapper.log"
 }
 
-test_rejects_parent_seed_and_wrong_remote() {
-  if run_installer "$repository_root" > "$temporary_root/parent.log" 2>&1; then
+test_rejects_infrastructure_checkout_and_wrong_remote() {
+  if run_installer --checkout "$infrastructure_root" > "$temporary_root/parent.log" 2>&1; then
     fail "Installer accepted the infrastructure checkout"
-  fi
-  if run_installer "$repository_root/forgejo-repos/gateway-c37-118-onboarding" > "$temporary_root/seed.log" 2>&1; then
-    fail "Installer accepted the tracked gateway onboarding seed"
   fi
   wrong_checkout="$temporary_root/wrong-checkout"
   create_checkout "$wrong_checkout" http://forgejo.test/wama-admin/processor-frequency-scale.git
-  if run_installer "$wrong_checkout" > "$temporary_root/wrong.log" 2>&1; then
+  if run_installer --checkout "$wrong_checkout" > "$temporary_root/wrong.log" 2>&1; then
     fail "Installer accepted an unrelated Forgejo repository"
   fi
 }
 
+create_synthetic_infrastructure_root
 create_fake_docker "$temporary_root/bin"
-test_configures_only_the_external_onboarding_checkout
+test_configures_the_colocated_onboarding_checkout
 test_rejects_mismatched_agent_credential
-test_rejects_parent_seed_and_wrong_remote
+test_rejects_infrastructure_checkout_and_wrong_remote

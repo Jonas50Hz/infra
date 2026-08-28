@@ -28,6 +28,14 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      alerta-postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      alerta:
+        condition: service_healthy
+      alarm-alerta-ingress:
+        condition: service_healthy
       trino-init:
         condition: service_completed_successfully
       trino:
@@ -53,9 +61,10 @@ services:
     env_file:
       - ../grafana/grafana.env
     environment:
+      ALERTA_URL: http://alerta:8080
       FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_MANAGED_REPOSITORIES: "${FORGEJO_MANAGED_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-lfr-frequency-provision,gateway-c37-118-onboarding}"
+      FORGEJO_MANAGED_REPOSITORIES: "${FORGEJO_MANAGED_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-frequency-measurement-session,processor-alarm-threshold,gateway-c37-118}"
       FORGEJO_URL: http://forgejo:3000
       DRUID_DATASOURCE: live_measurements
       DRUID_EXPECTED_DOUBLE_VALUE: "${DRUID_EXPECTED_DOUBLE_VALUE:-50.01}"
@@ -66,6 +75,7 @@ services:
       IEC104_BROWSER_URL: http://iec104-browser:8080
       MEASUREMENT_SESSION_API_URL: http://measurement-session-api:8080
       MEASUREMENT_SESSION_EXPORTER_URL: http://measurement-session-exporter:8080
+      MAILPIT_URL: http://mailpit:8025
       BLOBMETA_TOPIC_PARTITIONS: "${BLOBMETA_TOPIC_PARTITIONS:-12}"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUME_TIMEOUT_SECONDS: "${INFRA_READINESS_KAFKA_CONSUME_TIMEOUT_SECONDS:-12}"

@@ -8,7 +8,7 @@ the target are intentional.
 ## Objective
 Prove one source end-to-end on docker-compose, mirroring this plan's data path
 without Kubernetes:
-onboarding -> config/CI -> live data (Common Format) -> Quixstreams processing
+gateway configuration -> config/CI -> live data (Common Format) -> Quixstreams processing
 -> storage (Druid + SeaweedFS) -> Grafana -> export. Then close the CI/CD loop.
 
 ## Swaps vs. target (and why)
@@ -46,6 +46,12 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
    verifies and registers exact v2 session Parquet files in Iceberg.
 - `postgres` — persistent Blobmeta catalog plus a prepared future target for
    compacted Masterdata/Schema records.
+- `alerta-postgres` — isolated durable PostgreSQL backend for root-owned Alerta.
+- `mailpit` — internal SMTP test inbox with a loopback-only inspection UI.
+- `alerta` — loopback-only operator incident UI/API with a first-WAMA-episode
+   Mailpit plugin.
+- `alarm-alerta-ingress` — root-owned compacted raw-Protobuf `Alarm` consumer
+   and marker-scoped Alerta reconciler.
 - `trino` — host-exposed read-only federation coordinator; internal-only
    `trino-session-writer` plus one-shot `trino-session-init` own Iceberg table
    initialization and exact-file registration.
@@ -65,12 +71,13 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `iec104-exporter` — root-owned one-way IEC 104 controlled station consuming
    typed raw-Protobuf `Export` records.
 - `iec104-receiver` — profile-gated test control center for the IEC 104 path.
-- `iec104-browser` — on-demand, read-only web control center for live
-   wire-received IEC 104 values.
+- `iec104-browser` — persistent, read-only web control center whose process
+   connects at startup and observes live wire-received IEC 104 values through
+   transient human pages.
 - `forgejo` + `forgejo-runner` — Git + CI/CD + built-in registry.
 
-Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
-`Masterdata`, `Schema`, `Blobmeta`.
+Topics: `LiveMeasurement`, `MeasurementSession`, `Export`; compacted `Alarm`,
+`AlarmEvaluationWatermark`, `Masterdata`, `Schema`, `Blobmeta`.
 
 ## Build order (phased)
 ### Phase 1 — Backbone + processor (proves the core)
@@ -106,6 +113,38 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
   its immutable catalog schema; a future Kafka Connect mirror of `Masterdata`
   and `Schema` remains separate and unimplemented.
 
+### Alarm incident management (available now)
+- **Alerta + isolated PostgreSQL** — root-owned incident state with distinct
+   acknowledgement and native close actions. The API/UI is loopback-only because
+   the trusted local PoC sets `AUTH_REQUIRED=False`.
+- **Mailpit** — internal SMTP test inbox. Alerta's supported Mailer sends only
+   the first new active WAMA episode to a fixed local recipient; failures are
+   best-effort and no retry/outbox guarantee is provided.
+- **Alarm ingress** — manually replays every compacted `Alarm` partition to a
+   captured end offset, folds active records/tombstones, reconciles only
+   marker-owned open/ack Alerta alerts, then tails idempotently without using
+   consumer-group offsets as restart state.
+- **Alarm evaluation watermark** — root-owned compacted current state keyed
+   exactly like `Alarm`. It retains each `(rule_id, mrid)`'s latest qualifying
+   evaluation time, including inactive evaluations, after a clearance tombstone
+   compacts away.
+
+There are two distinct Alarm cutovers. A nonempty legacy `delete` `Alarm`
+requires the exact `WAMA_ALARM_LEGACY_MIGRATION=discard-delete-retained-alarm-v1`
+guard to discard and recreate it as compacted state. This legacy
+discard/recreate path intentionally drops retained active state and does not
+recover it; the watermark then initializes normally.
+
+For an existing compact `Alarm` with retained active state and no watermark,
+the watermark is a forward-only cutover. Set
+`WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION=accept-forward-only-alarm-evaluation-watermark-v1`
+only to create and verify `AlarmEvaluationWatermark` without altering `Alarm`.
+It preserves `Alarm`'s topic ID, retained bytes, and end offsets. Existing active
+state bootstraps only from current evidence; historical evaluations are not
+backfilled. This makes future late-data rejection correct without claiming
+retroactive correctness for pre-cutover state; see
+[ADR 0002](../adr/0002-alarm-evaluation-watermark.md).
+
 ### Live measurement storage (available now)
 - **Druid + druid-init** — root-owned persistent single-server store and
   idempotent Kafka supervisor. The image compiles a descriptor from the
@@ -133,27 +172,28 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    over Druid and the selected-session dashboard over read-only Trino are
    available now. Trino federates Druid, PostgreSQL Blobmeta metadata, and
    registered Iceberg session files. The session dashboard has a loopback-only
-   CSV download for its current immutable selection. Alerting and broader
-   cross-session analytics remain deferred. This is separate from the
+   CSV download for its current immutable selection. Grafana alerting and broader
+   cross-session analytics remain separate from the root Alarm-to-Alerta path.
+   This is separate from the
    already-provisioned VictoriaMetrics infrastructure dashboards.
 
 ### Phase 3 — Export (IEC 104 available now)
 10. **IEC 104 exporter** — root-owned controlled station consumes typed
    raw-Protobuf `ExportRecord` values from `Export` and sends `M_SP_NA_1`,
    `M_DP_NA_1`, and `M_ME_NC_1` monitor values to one connected control center.
-   The on-demand browser is the read-only live control center while a page is
-   open and discards messages when its final page closes. The profile-gated
-   receiver proves the exclusive wire path using only `STARTDT` and unique
-   fixtures. `processor-frequency-iec104-export` now provides the direct,
+   The browser process establishes its `STARTDT` connection at startup and
+   keeps it throughout its lifetime, permitting exporter consumption and drain
+   with zero viewers; human pages are transient WebSocket observers and own
+   transient event lists. The profile-gated receiver proves the exclusive wire
+   path using only `STARTDT` and unique fixtures. `processor-frequency-iec104-export` now provides the direct,
    processor-mapped C37.118 gateway-frequency-to-`M_ME_NC_1` PoC producer
-   through its own Forgejo repository. `processor-lfr-frequency-provision`
-   separately seeds the first multi-PMU per-second selection core; complete PMU-status evidence, IEC
-   104 LFR export, XLSX and broader file export, and MQTT export remain future
-   work.
+      through its own Forgejo repository. It is not the future multi-PMU LFR
+      preferred-frequency algorithm; complete PMU-status evidence, IEC 104 LFR
+      export, XLSX and broader file export, and MQTT export remain future work.
 
-### Phase 4 — Onboarding + config as data
+### Phase 4 — Gateway configuration as data
 11. **C37.118 Masterdata via Git (available now)** — the private
-   `gateway-c37-118-onboarding` repository holds stable source location,
+   `gateway-c37-118` repository holds stable source location,
    literal endpoint/port, PMU IDCODE, legacy wire version 2, and immutable
    signal-to-MRID mappings. Its one-shot publisher projects reviewed
    raw-Protobuf records to compacted `Masterdata`; deleting a source emits its
@@ -163,26 +203,23 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
    Masterdata and source-gateway reconciliation. The guarded adapter path is
    limited to reviewed legacy-v2 C37.118 TCP sources. An operator manually
    starts the matching five-PMU V2 fixture from `~/c37-118-simulator`, but only
-   the onboarding workflow owns adapter reconciliation.
+   the C37.118 gateway workflow owns adapter reconciliation.
 
 ### Phase 5 — CI/CD loop (automates deploy)
-13. **Forgejo + Actions runner + registry** — infrastructure provisions
-   private seeded `processor-frequency-scale`, `processor-apparent-power`, and
-   `processor-frequency-iec104-export`, and
-   `processor-lfr-frequency-provision`, plus the explicit
-   `gateway-c37-118-onboarding` test repository and ten repository-scoped
-   runner connections on one daemon. Each processor seed owns CI: test + build
-   image + push for exactly one processor. The gateway-onboarding seed owns
-   catalog validation, a one-shot Masterdata publisher, and source-scoped v2
-   adapters generated from its reviewed catalog. A fresh onboarding seed uses
-   its initial `main` push to start this flow; bootstrap dispatches only this
-   workflow once per retained runner state for an existing private onboarding
-   remote. The LFR seed currently
-   publishes its configured preferred frequency to `LiveMeasurement`; its IEC
-   104 export stage remains deferred.
+13. **Forgejo + Actions runner + registry** — infrastructure provisions five
+   managed repositories: the private `processor-frequency-scale`,
+   `processor-apparent-power`, `processor-frequency-iec104-export`, and
+   `processor-alarm-threshold` processor repositories plus the explicit
+   `gateway-c37-118` test repository. It registers ten
+   repository-scoped runner connections on one daemon. Each processor seed owns
+   CI: test + build image + push for exactly one processor. The gateway-c37-118 seed owns catalog validation, a
+   one-shot Masterdata publisher, and source-scoped v2 adapters generated from
+   its reviewed catalog. A fresh C37.118 gateway source uses its initial `main` push
+   to start this flow; bootstrap dispatches only this workflow once per
+   retained runner state for an existing private C37.118 gateway remote.
 14. **CD trigger** — processor jobs synchronize only their checkout to their
    isolated deployment root and run their one-service `docker compose up -d`.
-   The onboarding job synchronizes only to its separately marked root, runs
+   The C37.118 gateway job synchronizes only to its separately marked root, runs
    `masterdata-publisher` once, then reconciles only generated adapters for
     active source IDs and, when catalog-derived adapters are active, verifies
     every reviewed MRID on `LiveMeasurement`.
@@ -190,11 +227,17 @@ Topics: `LiveMeasurement`, `MeasurementSession`, `Alarm`, `Export`; compacted
 
 ### Phase 6 — End-to-end pilot
 15. Run one real source through the whole path:
-    onboarding -> config/CI -> live data -> Druid -> Grafana -> export.
+    gateway configuration -> config/CI -> live data -> Druid -> Grafana -> export.
 
 ## Consumer requirements
 - Processors **idempotent** (Kafka at-least-once delivery).
 - Keep raw/waveform data off Kafka (blob path + `Blobmeta` pointer only).
+- Live processors publish raw-Protobuf `AlarmDesiredState` values to the
+   root-owned compacted `Alarm` topic. A same-key tombstone clears the active
+   state. `AlarmEvaluationWatermark` retains the latest qualifying evaluation
+   for the same key, including after clearances. The root ingress maps `Alarm`
+   to Alerta's separate acknowledgement/close lifecycle; Kafka remains neither
+   notification nor audit history.
 - Value meaning resolved via Master Data config, not hard-coded; `uint_value`
   enums bound via ValueToAlias at engineering time.
 
@@ -204,13 +247,17 @@ immutable v2 Parquet + receipt in SeaweedFS -> compacted raw-Protobuf `Blobmeta`
 -> immutable PostgreSQL metadata/coverage catalog -> verified exact-file Iceberg
 registration -> read-only Trino/Grafana selected-session query. The worker pool
 scales over the 12 `MeasurementSession` partitions; `Blobmeta` also has 12
-partitions. Live lifecycle updates, alarm integration, file export, and
-cross-session analytics remain excluded from this slice.
+partitions. Separately, live processors maintain the compacted `Alarm` desired
+active state and emit same-key tombstones for clearances. The root ingress
+reconciles that state to Alerta without changing foreign/closed history; Mailpit
+receives a first-episode-only best-effort local test email. Alarm is neither a
+MeasurementSession lifecycle stream nor an audit or notification interface.
+File export and cross-session analytics remain excluded from this slice.
 
 ## Open risks to validate early
 - Quixstreams throughput / heavy waveform at target load (unproven).
 - Whether a JVM engine (Flink/Beam) is needed for heavy signal processing.
 - Druid single-server throughput, production topology, and retention/aggregation
-   policy; alerting path (PagerDuty later?); how Trino federation expands beyond
-   the current read-only Druid and Blobmeta slice.
+   policy; the reviewed production escalation path beyond local Mailpit; and how
+   Trino federation expands beyond the current read-only Druid and Blobmeta slice.
 - Whether Apache Spark is needed for future batch or heavy workloads.

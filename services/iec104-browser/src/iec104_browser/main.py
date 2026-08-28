@@ -1,4 +1,4 @@
-"""Construct the production on-demand IEC 104 browser application."""
+"""Construct the production persistent IEC 104 browser application."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from iec104_browser.monitor import Iec104Monitor
 
 
 def build_app():
-    """Wire the transient browser hub to its c104 monitor and static UI."""
+    """Wire the browser hub to its process-lifetime c104 monitor and static UI."""
 
     settings = Settings.from_environment()
 

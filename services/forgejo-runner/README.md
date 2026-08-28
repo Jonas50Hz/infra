@@ -5,7 +5,7 @@ Runner plus Git, Node, Python 3.12, Protocol Buffer tooling, Docker CLI,
 Docker Compose, and rsync. The image is the default container for the
 `wama-processors-ci` Actions label.
 
-The bootstrap service registers ten repository-scoped connections on the same
+The bootstrap service registers twelve repository-scoped connections on the same
 capacity-one runner daemon:
 
 - `wama-processor-frequency-scale-ci` and
@@ -16,11 +16,14 @@ capacity-one runner daemon:
 - `wama-processor-frequency-iec104-export-ci` and
   `wama-processor-frequency-iec104-export-deploy` validate/publish and deploy
   only the direct frequency IEC 104 processor.
-- `wama-processor-lfr-frequency-provision-ci` and
-  `wama-processor-lfr-frequency-provision-deploy` validate/publish and deploy
-  only the per-second LFR preferred-frequency processor.
-- `wama-gateway-c37-118-onboarding-ci` and
-  `wama-gateway-c37-118-onboarding-deploy` validate/publish the combined image,
+- `wama-processor-alarm-threshold-ci` and
+  `wama-processor-alarm-threshold-deploy` validate/publish and deploy only the
+  alarm-threshold processor.
+- `wama-processor-frequency-measurement-session-ci` and
+  `wama-processor-frequency-measurement-session-deploy` validate/publish and
+  deploy only the frequency-capture MeasurementSession processor.
+- `wama-gateway-c37-118-ci` and
+  `wama-gateway-c37-118-deploy` validate/publish the combined image,
   run the one-shot C37.118 Masterdata publisher, and reconcile only
   catalog-derived legacy-v2 adapters in their marker-owned deployment root.
 

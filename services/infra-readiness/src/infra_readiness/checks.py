@@ -26,8 +26,14 @@ from infra_readiness.trino import TrinoReadinessError, check_trino
 
 LOGGER = logging.getLogger(__name__)
 
-STREAM_TOPICS = ("LiveMeasurement", "MeasurementSession", "Alarm", "Export")
-COMPACTED_TOPICS = ("Masterdata", "Schema", "Blobmeta")
+STREAM_TOPICS = ("LiveMeasurement", "MeasurementSession", "Export")
+COMPACTED_TOPICS = (
+    "Alarm",
+    "AlarmEvaluationWatermark",
+    "Masterdata",
+    "Schema",
+    "Blobmeta",
+)
 TOPIC_CLEANUP_POLICIES = {
     **{topic: "delete" for topic in STREAM_TOPICS},
     **{topic: "compact" for topic in COMPACTED_TOPICS},
@@ -70,6 +76,8 @@ def check_all(settings: Settings) -> None:
     """Run every externally observable readiness check."""
 
     check_kafka_topics(settings)
+    check_alerta(settings)
+    check_mailpit(settings)
     if settings.require_live_measurement:
         check_live_measurement(settings)
         try:
@@ -116,6 +124,40 @@ def check_kafka_topics(settings: Settings) -> None:
 
     validate_topic_descriptions(descriptions, _topic_partition_counts(settings))
     validate_topic_configurations(topic_configurations_from_responses(responses))
+
+
+def check_alerta(settings: Settings) -> None:
+    """Require Alerta's API readiness endpoint after ingress reconciliation."""
+
+    session = requests.Session()
+    try:
+        response = session.get(_url(settings.alerta_url, "/api/management/gtg"), timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise ReadinessError(f"Alerta health request failed: {error}") from error
+    finally:
+        session.close()
+    validate_alerta_health(response.text)
+
+
+def validate_alerta_health(payload: str) -> None:
+    """Require Alerta's native good-to-go response contract."""
+
+    if payload.strip() != "OK":
+        raise ReadinessError("Alerta health endpoint did not report ok")
+
+
+def check_mailpit(settings: Settings) -> None:
+    """Require Mailpit's HTTP readiness endpoint without sending any email."""
+
+    session = requests.Session()
+    try:
+        response = session.get(_url(settings.mailpit_url, "/readyz"), timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise ReadinessError(f"Mailpit health request failed: {error}") from error
+    finally:
+        session.close()
 
 
 def validate_topic_descriptions(

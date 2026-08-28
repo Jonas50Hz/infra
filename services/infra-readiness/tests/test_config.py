@@ -13,6 +13,7 @@ class SettingsTests(unittest.TestCase):
     def test_uses_local_poc_defaults(self) -> None:
         settings = Settings.from_environment({})
 
+        self.assertEqual(settings.alerta_url, "http://alerta:8080")
         self.assertEqual(settings.druid_router_url, "http://druid:8888")
         self.assertEqual(settings.druid_datasource, "live_measurements")
         self.assertEqual(settings.druid_expected_double_value, 50.01)
@@ -26,14 +27,16 @@ class SettingsTests(unittest.TestCase):
             settings.measurement_session_exporter_url,
             "http://measurement-session-exporter:8080",
         )
+        self.assertEqual(settings.mailpit_url, "http://mailpit:8025")
         self.assertEqual(
             settings.forgejo_managed_repositories,
             (
                 "processor-frequency-scale",
                 "processor-apparent-power",
                 "processor-frequency-iec104-export",
-                "processor-lfr-frequency-provision",
-                "gateway-c37-118-onboarding",
+                "processor-frequency-measurement-session",
+                "processor-alarm-threshold",
+                "gateway-c37-118",
             ),
         )
         self.assertEqual(settings.kafka_bootstrap_servers, "kafka:9092")
@@ -86,6 +89,8 @@ class SettingsTests(unittest.TestCase):
     def test_rejects_non_http_service_url(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "FORGEJO_URL"):
             Settings.from_environment({"FORGEJO_URL": "forgejo:3000"})
+        with self.assertRaisesRegex(ConfigurationError, "ALERTA_URL"):
+            Settings.from_environment({"ALERTA_URL": "alerta:8080"})
         with self.assertRaisesRegex(ConfigurationError, "IEC104_BROWSER_URL"):
             Settings.from_environment({"IEC104_BROWSER_URL": "iec104-browser:8080"})
         with self.assertRaisesRegex(ConfigurationError, "MEASUREMENT_SESSION_API_URL"):
@@ -96,6 +101,8 @@ class SettingsTests(unittest.TestCase):
             Settings.from_environment(
                 {"MEASUREMENT_SESSION_EXPORTER_URL": "measurement-session-exporter:8080"}
             )
+        with self.assertRaisesRegex(ConfigurationError, "MAILPIT_URL"):
+            Settings.from_environment({"MAILPIT_URL": "mailpit:8025"})
         with self.assertRaisesRegex(ConfigurationError, "TRINO_URL"):
             Settings.from_environment({"TRINO_URL": "trino:8080"})
 

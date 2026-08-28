@@ -13,10 +13,11 @@ from iec104_browser.hub import LiveHub
 
 
 def create_app(hub: LiveHub, static_root: Path | None = None) -> FastAPI:
-    """Create an API that opens IEC reception only for active browser streams."""
+    """Create an API that retains IEC reception for its full lifespan."""
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        await hub.start()
         try:
             yield
         finally:

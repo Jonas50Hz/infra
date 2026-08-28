@@ -11,8 +11,9 @@ DEFAULT_FORGEJO_MANAGED_REPOSITORIES = (
     "processor-frequency-scale",
     "processor-apparent-power",
     "processor-frequency-iec104-export",
-    "processor-lfr-frequency-provision",
-    "gateway-c37-118-onboarding",
+    "processor-frequency-measurement-session",
+    "processor-alarm-threshold",
+    "gateway-c37-118",
 )
 
 
@@ -24,6 +25,7 @@ class ConfigurationError(ValueError):
 class Settings:
     """External endpoints and expectations for the current Compose topology."""
 
+    alerta_url: str
     druid_datasource: str
     druid_expected_double_value: float
     druid_expected_double_value_tolerance: float
@@ -33,6 +35,7 @@ class Settings:
     iec104_browser_url: str
     measurement_session_api_url: str
     measurement_session_exporter_url: str
+    mailpit_url: str
     forgejo_admin_password: str
     forgejo_admin_username: str
     forgejo_managed_repositories: tuple[str, ...]
@@ -74,6 +77,7 @@ class Settings:
 
         values = os.environ if environment is None else environment
         return cls(
+            alerta_url=_url(values, "ALERTA_URL", "http://alerta:8080"),
             druid_datasource=_identifier(values, "DRUID_DATASOURCE", "live_measurements"),
             druid_expected_double_value=_finite_float(
                 values,
@@ -107,6 +111,7 @@ class Settings:
                 "MEASUREMENT_SESSION_EXPORTER_URL",
                 "http://measurement-session-exporter:8080",
             ),
+            mailpit_url=_url(values, "MAILPIT_URL", "http://mailpit:8025"),
             forgejo_admin_password=_required(
                 values,
                 "FORGEJO_ADMIN_PASSWORD",

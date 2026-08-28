@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package wama.measurement_session.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message MeasurementSessionRequest {
+    string session_id = 1;
+    google.protobuf.Timestamp requested_at = 2;
+    google.protobuf.Timestamp started_at = 3;
+    google.protobuf.Timestamp ended_at = 4;
+    repeated string mrids = 5;
+    repeated MetadataEntry metadata = 6;
+}
+
+message MetadataEntry {
+    string key = 1;
+    string value = 2;
+}

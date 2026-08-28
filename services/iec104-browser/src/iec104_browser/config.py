@@ -1,4 +1,4 @@
-"""Environment-backed settings for the on-demand IEC 104 browser."""
+"""Environment-backed settings for the persistent IEC 104 browser."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ class ConfigurationError(ValueError):
 
 @dataclass(frozen=True)
 class Settings:
-    """Trusted local connections and transient queue sizing for the browser."""
+    """Trusted local connection and transient observer queue settings."""
 
     exporter_host: str
     exporter_port: int

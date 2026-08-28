@@ -24,8 +24,8 @@ initialized Iceberg session table is visible. It also requires the provisioned
 active catalog source. It checks the local measurement-session API HTTP health
 and CSV exporter HTTP health, plus Grafana's selected-MRID session and CSV
 download links without publishing a request or exporting data. It checks the
-IEC 104 browser HTTP health and accepts its idle or viewer-owned status without
-opening an IEC control-center connection.
+IEC 104 browser HTTP health and accepts its persistent active status, including
+zero UI viewers. It does not open a second IEC control-center connection.
 
 The probe deliberately does not require PostgreSQL to have no application
 tables. The Blobmeta catalog is an app-owned schema and is verified by its own

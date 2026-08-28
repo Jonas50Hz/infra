@@ -5,7 +5,7 @@ Apache Kafka broker in KRaft combined mode, initializes the WAMA topic
 contract, provides Kafka UI to inspect brokers, topics, consumer groups, and
 messages, retains an optional legacy PMU fixture for reference, provides Forgejo with one
 Actions runner, provides the `wama-infra` network for a manually started
-five-PMU C37.118 V2 source fixture and queues the approved onboarding workflow
+five-PMU C37.118 V2 source fixture and queues the approved C37.118 gateway workflow
 for source-scoped adapters, includes SeaweedFS as
 authenticated S3-compatible blob storage, and accepts browser-confirmed bounded measurement-session requests before
 materializing them from Druid into integrity-checked Parquet artifacts.
@@ -18,14 +18,24 @@ dashboard displays live PMU measurements over time. A persistent single-server
 Druid instance directly ingests raw-Protobuf `LiveMeasurement` records for live
 SQL queries. A root-owned IEC 60870-5-104 controlled station consumes typed
 raw-Protobuf `Export` records and sends monitor-direction values to one control
-center connection. An on-demand browser becomes that control center only while
-its live page is open and displays the values it receives on the IEC wire.
+center connection. The browser owns that persistent connection from application
+startup, displays wire-received values to viewer-only pages, and retains it with
+zero viewers. Stop the browser before running the profile-gated receiver test.
 
 This is a Compose-based PoC foundation. It deliberately does not include
 a Kafka ZooKeeper service, Confluent components, a Schema Registry, a
 Quixstreams processor in the root Compose assembly, or Kubernetes artifacts.
 Druid's internal single-server coordination is confined to its container and
 does not change the plain Kafka KRaft topology.
+
+The root-owned alarm slice replays compacted raw-Protobuf `Alarm` desired state
+to Alerta through `alarm-alerta-ingress`. Alerta keeps the operator-facing
+acknowledgement and close state in its own isolated PostgreSQL database, while
+Mailpit receives only best-effort local test email. Alarm payloads remain out of
+VictoriaMetrics and no Forgejo seed deploys or owns these root services.
+Compose publishes Alerta on all host interfaces at port `8081` when
+`ALERTA_HOST_PORT` is unset. Set `ALERTA_HOST_PORT=18081` in `.env` when a
+local simulator already uses `8081`.
 
 See [WAMA documentation](docs/index.md) for platform explanations, technical
 reference, and authoritative local source assets.
@@ -45,8 +55,9 @@ never added as a Forgejo remote and is never pushed to Forgejo.
 
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
 [`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),
-[`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/), and
-[`forgejo-repos/processor-lfr-frequency-provision/`](forgejo-repos/processor-lfr-frequency-provision/)
+[`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/),
+[`forgejo-repos/processor-alarm-threshold/`](forgejo-repos/processor-alarm-threshold/),
+and the standard `processor-frequency-measurement-session` seed
 are separate processor-repository seeds. `forgejo-init` automatically creates
 one private Forgejo repository per seed and seeds each `main` branch only when
 its remote has no refs. An existing nonempty private repository is left
@@ -54,24 +65,29 @@ unchanged. Each repository contains one internal processor, its one-service
 Compose fragment, deployment tooling, and a Forgejo Actions workflow. The IEC
 104 seed maps reviewed gateway frequency MRIDs through an explicit
 processor-owned IEC map to `M_ME_NC_1` `ExportRecord` values; it does not
-implement the full LFR preferred-frequency algorithm. The LFR seed evaluates configured multi-PMU frequency and voltage
-inputs per UTC second and writes its preferred frequency to `LiveMeasurement`;
-it does not yet produce IEC 104 export requests. A future gateway may use its
-own repository only as an explicit
+implement the full LFR preferred-frequency algorithm. A future gateway may use
+its own repository only as an explicit
 gateway-deployment test; it does not move the deprecated `pmu-gateway` fixture or any other
 infrastructure service out of this checkout. Processor containers connect
 through the external `wama-infra` Docker network; they do not include, modify,
 or redeploy this Compose project.
 
-[`forgejo-repos/gateway-c37-118-onboarding/`](forgejo-repos/gateway-c37-118-onboarding/)
+The standard `processor-frequency-measurement-session` seed consumes
+`LiveMeasurement` and produces bounded `MeasurementSession` requests for
+Frequency Capture Episodes. Its five-source capture policy and PoC timing
+limits are documented in the
+[data-flow contract](docs/reference/wama-data-flow-contracts.md); it does not
+represent Alarm lifecycle.
+
+[`forgejo-repos/gateway-c37-118/`](forgejo-repos/gateway-c37-118/)
 is the explicit C37.118 gateway-deployment-test seed. A reviewed legacy-v2
 source catalog reconciles raw-Protobuf Masterdata records and tombstones to
 Kafka, then reconciles one source-scoped adapter per active catalog source. It
 does not modify the deprecated `pmu-gateway` fixture or run root Compose services.
 An operator manually starts the matching five-PMU V2 fixture from
 `~/c37-118-simulator` after the root stack has created `wama-infra`. A fresh
-onboarding seed uses its initial `main` push to trigger the workflow; an
-existing private onboarding repository receives one scoped `gateway.yaml`
+C37.118 gateway source uses its initial `main` push to trigger the workflow; an
+existing private C37.118 gateway repository receives one scoped `gateway.yaml`
 dispatch per retained runner state. The successful workflow verifies every reviewed catalog MRID on
 `LiveMeasurement` and is the demonstration-ready signal.
 
@@ -93,10 +109,14 @@ service owns its fragment, configuration, and scripts beneath
 | [services/gateway-dashboard-provisioner/](services/gateway-dashboard-provisioner/) | `gateway-dashboard-provisioner` | Root-owned compacted-Masterdata consumer and generated Grafana gateway dashboards |
 | [services/iec104-exporter/](services/iec104-exporter/) | `iec104-exporter` | One-way IEC 104 controlled station consuming raw-Protobuf `Export` records |
 | [services/iec104-receiver/](services/iec104-receiver/) | `iec104-receiver` | Profile-gated test control center for IEC 104 protocol verification |
-| [services/iec104-browser/](services/iec104-browser/) | `iec104-browser` | On-demand browser control center for wire-received IEC 104 values |
+| [services/iec104-browser/](services/iec104-browser/) | `iec104-browser` | Persistent viewer-only browser control center for wire-received IEC 104 values |
 | [services/druid/](services/druid/) | `druid` | Persistent single-server Druid image, canonical Protobuf descriptor build, and Router API |
 | [services/druid-init/](services/druid-init/) | `druid-init` | Idempotent `LiveMeasurement` Kafka supervisor initializer and tests |
 | [services/postgres/](services/postgres/) | `postgres` | Compose fragment, trusted local credentials, and persistent prepared database |
+| [services/alerta-postgres/](services/alerta-postgres/) | `alerta-postgres` | Isolated durable PostgreSQL backend for root-owned Alerta |
+| [services/mailpit/](services/mailpit/) | `mailpit` | Internal SMTP test inbox with loopback-only UI |
+| [services/alerta/](services/alerta/) | `alerta` | Loopback-only Alerta API/UI, explicit SMTP configuration, and first-episode plugin |
+| [services/alarm-alerta-ingress/](services/alarm-alerta-ingress/) | `alarm-alerta-ingress` | Root-owned compacted raw-Protobuf Alarm-to-Alerta reconciliation service |
 | [services/trino-init/](services/trino-init/) | `trino-init` | Idempotent PostgreSQL reader-role bootstrap for federation |
 | [services/trino/](services/trino/) | `trino` | Read-only Druid, Blobmeta, and Iceberg session SQL federation coordinator |
 | [services/trino-session-writer/](services/trino-session-writer/) | `trino-session-writer` | Internal-only Iceberg metadata writer for verified session artifacts |
@@ -129,7 +149,8 @@ directory. Provision each in its own separate processor repository seed.
 
 - Docker Engine with Docker Compose v2 or newer
 - Host ports `127.0.0.1:29092`, `127.0.0.1:8428`, `8080`, `8085`, `8333`,
-  `23646`, `3000`, `3001`, `3003`, `3004`, `3005`, `5432`, `8888`, `2222`, and
+  `23646`, `3000`, `3001`, `3003`, `3004`, `3005`, `5432`, `8081` (or the
+  configured `ALERTA_HOST_PORT`, such as `18081`), `8025`, `8888`, `2222`, and
   `127.0.0.1:2404` available
 
 ## Start and stop
@@ -142,11 +163,12 @@ infrastructure with one command:
 docker compose up -d
 ```
 
-This starts the root infrastructure and queues the explicitly scoped onboarding
-workflow; Compose returns before that asynchronous Actions run completes. Start
-the five-PMU V2 source separately from `~/c37-118-simulator` before the
-onboarding adapters need it. A green `gateway.yaml` run in Forgejo proves the
-catalog-derived adapters, Kafka records, and their raw-Protobuf contract.
+This starts the root infrastructure and queues the explicitly scoped C37.118
+gateway workflow; Compose returns before that asynchronous Actions run
+completes. Start the five-PMU V2 source separately from `~/c37-118-simulator`
+before the C37.118 gateway adapters need it. A green `gateway.yaml` run in
+Forgejo proves the catalog-derived adapters, Kafka records, and their
+raw-Protobuf contract.
 
 Kafka-dependent services wait for the broker to become healthy and topic
 initialization to complete before starting, including after `docker compose stop`
@@ -169,6 +191,10 @@ not treat an HTTP registry as trusted by default.
 [ -e .env ] || install -m 600 .env.example .env
 ```
 
+The example sets `ALERTA_HOST_PORT=18081` for hosts where a local simulator
+already occupies `8081`. Remove or unset that value to retain Compose's `8081`
+default.
+
 Check the service state:
 
 ```sh
@@ -180,7 +206,8 @@ docker compose logs infra-readiness
 
 `kafka`, `druid`, `postgres`, `seaweedfs`, `victoria-metrics`, `grafana`,
 `iec104-exporter`, `iec104-browser`, `measurement-session-api`, and
-`measurement-session-exporter` should be `healthy`; `kafka-init` and
+`measurement-session-exporter`, `alerta-postgres`, `mailpit`, `alerta`, and
+`alarm-alerta-ingress` should be `healthy`; `kafka-init` and
 `druid-init` should have exited with status `0`; and `kafka-ui`,
 `kafka-exporter`, `measurement-session-processor`,
 `blobmeta-catalog`, `node-exporter`, `cadvisor`, `forgejo`, and
@@ -189,7 +216,7 @@ docker compose logs infra-readiness
 latter verifies the Kafka contract, service control planes, PostgreSQL,
 SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener. Live PMU traffic
 and Druid/Grafana sample queries remain outside its default infrastructure-only
-gate; the green onboarding workflow is the ordinary demonstration data proof.
+gate; the green C37.118 gateway workflow is the ordinary demonstration data proof.
 Set `INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT=true` to additionally require
 live records in a root readiness run. The profile-gated measurement-session
 request-flow verifier and IEC 104 test receiver run only when explicitly
@@ -215,7 +242,21 @@ docker compose down -v
 
 This removes the Forgejo administrator, all repositories, and the runner
 registration as well as Kafka data, every PostgreSQL database, every SeaweedFS
-object, Druid metadata and segments, Grafana state, and VictoriaMetrics history.
+object, Druid metadata and segments, Grafana state, VictoriaMetrics history, and
+the isolated Alerta PostgreSQL state.
+
+To also stop and remove known Forgejo-deployed processors, the explicit
+C37.118 gateway adapters, the separately managed simulator, and every
+container attached to the dedicated WAMA network, use the scoped clean-slate
+utility:
+
+```sh
+scripts/reset-wama.sh --yes
+```
+
+It removes those containers, their anonymous and named volumes, the root
+Compose volumes, and `wama-infra` (or `WAMA_INFRA_NETWORK` when overridden).
+It deliberately retains images and Docker resources outside the WAMA setup.
 
 ## Lifecycle validation
 
@@ -261,26 +302,52 @@ Run the browser wire-to-page validation:
 scripts/test-iec104-browser.sh
 ```
 
-The script opens the browser's transient WebSocket control center, publishes a
-unique three-ASDU fixture through Kafka, proves the live page stream receives
-each typed value, then requires the browser to release IEC 104 after the stream
-closes.
+The script opens a transient browser WebSocket viewer, publishes a unique
+three-ASDU fixture through Kafka, proves the live page stream receives each
+typed value, then requires the browser to retain its IEC 104 connection after
+the stream closes.
 
-Open the live IEC 104 monitor at `http://localhost:3003`. Opening the page
-starts its read-only control-center connection and shows only values received on
-that IEC connection. Closing the final page disconnects it and discards the
-page's value list. The browser and the profile-gated receiver cannot be active
-at the same time because the exporter permits one control center.
+Run the focused root Alarm-to-Alerta flow validation:
+
+```sh
+scripts/test-alerta-alarm-flow.sh
+```
+
+By default, the script creates and removes a project-scoped disposable KRaft
+Kafka, Alerta, Mailpit, and PostgreSQL topology using the same built images. It
+does not start or mutate the root stack. To run it against an already-ready root
+stack, use the exact opt-in:
+
+```sh
+WAMA_RUN_ROOT_ALARM_FLOW_TEST=run-root-alarm-flow-test \
+  scripts/test-alerta-alarm-flow.sh
+```
+
+Root mode requires `infra-readiness` to have exited successfully before any
+root mutation. It uses the root services' published ports, unique test
+identities, and cleanup tombstones without resetting root state. Both modes
+verify initial email delivery, refresh and rule-revision suppression,
+acknowledgement preservation, tombstone closure, a new episode, restart snapshot
+reconciliation, and foreign-alert isolation.
+
+Open the live IEC 104 monitor at `http://localhost:3003`. The browser's
+outgoing read-only IEC 104 control-center connection starts with its process
+and persists with zero WebSocket viewers. Its UI pages are transient viewers
+that show only values received on that connection. Closing the final page
+discards its value list but leaves the IEC 104 connection running. The browser
+and the profile-gated receiver cannot be active at the same time because the
+exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator, private
-`<owner>/processor-frequency-scale`, `<owner>/processor-apparent-power`, and
-`<owner>/processor-frequency-iec104-export`, and
-`<owner>/processor-lfr-frequency-provision`, and
-`<owner>/gateway-c37-118-onboarding` repositories. The four processor roots
-use `.wama-forgejo-processor-root`; the onboarding root uses
-`.wama-forgejo-gateway-onboarding-root`. Bootstrap skips seeding without
+`forgejo-init` creates the configured administrator and six private managed
+repositories: `<owner>/processor-frequency-scale`,
+`<owner>/processor-apparent-power`, `<owner>/processor-frequency-iec104-export`,
+`<owner>/processor-alarm-threshold`,
+`<owner>/processor-frequency-measurement-session`, and
+`<owner>/gateway-c37-118`. The five processor roots use
+`.wama-forgejo-processor-root`; the C37.118 gateway root uses
+`.wama-forgejo-gateway-c37-118-root`. Bootstrap skips seeding without
 modifying any existing repository that already has refs, and it fails without
 mutation if an existing repository is not private. Its generated runner
 credentials remain in the `forgejo-runner-data` volume.
@@ -293,21 +360,21 @@ git clone "https://<forgejo-host>/<owner>/processor-frequency-scale.git"
 cd processor-frequency-scale
 ```
 
-For the existing private `gateway-c37-118-onboarding` checkout, bootstrap
+For the co-located private `forgejo-repos/gateway-c37-118` checkout, bootstrap
 creates a restricted non-admin collaborator automatically. Install its local
 credential without creating or copying a token by hand:
 
 ```sh
-sh scripts/configure-forgejo-gateway-onboarding-agent.sh \
-  --checkout ../gateway-c37-118-onboarding
+sh scripts/configure-forgejo-gateway-c37-118-agent.sh \
+  --checkout forgejo-repos/gateway-c37-118
 ```
 
-The installer accepts only that external checkout, preserves its `origin`, and
-rejects this parent checkout and `forgejo-repos/gateway-c37-118-onboarding`.
+The installer accepts only that co-located checkout, preserves its `origin`, and
+rejects this parent infrastructure checkout.
 Normal Git pushes then use the local credential helper. For Forgejo REST calls,
 run the command through
-`scripts/with-forgejo-gateway-onboarding-agent.sh --checkout
-../gateway-c37-118-onboarding -- <command>`; the generated token is exported
+`scripts/with-forgejo-gateway-c37-118-agent.sh --checkout
+forgejo-repos/gateway-c37-118 -- <command>`; the generated token is exported
 only to that child command. Re-run the installer after `docker compose down -v`.
 
 Each processor workflow validates pull requests. A trusted `main` push tests
@@ -317,7 +384,7 @@ Forgejo only in a deliberately declared gateway-deployment test; that exception
 must not deploy, modify, or take ownership of the deprecated `pmu-gateway` fixture or any
 root infrastructure service.
 
-The `gateway-c37-118-onboarding` workflow follows the same trusted
+The `gateway-c37-118` workflow follows the same trusted
 `validate -> publish -> deploy` sequence. Its deploy step runs
 `masterdata-publisher` once through `docker compose run --rm`, then uses the
 marker-owned deployment guard to reconcile only generated legacy-v2 source
@@ -325,26 +392,27 @@ adapters and verifies every approved MRID on `LiveMeasurement`. It cannot
 control the deprecated root `pmu-gateway` fixture, root Compose project, or any
 adapter absent from its approved catalog.
 
-Validate the canonical Masterdata contract, onboarding seed, isolated Compose
-project, Forgejo bootstrap guard, and onboarding credential bridge together:
+Validate the canonical Masterdata contract, C37.118 gateway source, isolated Compose
+project, Forgejo bootstrap guard, and C37.118 gateway credential bridge together:
 
 ```sh
-sh scripts/test-masterdata-onboarding.sh
+sh scripts/test-masterdata-gateway-c37-118.sh
 ```
 
-Each managed repository has distinct repository-scoped CI and deployment runner
-connections, all handled by the same capacity-one runner daemon. The deployment
-connection runs in the runner container with the host Docker socket and its
-matching deployment root mounted at the same path. This is trusted local-PoC
-access: managed-repository workflow authors can control the Docker host. Do not
-expose this runner to untrusted repositories, users, or production workloads.
+Each of the six managed repositories has distinct repository-scoped CI and
+deployment runner connections, twelve in total, all handled by the same
+capacity-one runner daemon. The deployment connection runs in the runner
+container with the host Docker socket and its matching deployment root mounted
+at the same path. This is trusted local-PoC access: managed-repository workflow
+authors can control the Docker host. Do not expose this runner to untrusted
+repositories, users, or production workloads.
 
 Create or adapt processors only from the instructions in the individual
 [frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
 [apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
 [frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
-[LFR frequency provision README](forgejo-repos/processor-lfr-frequency-provision/README.md), or
-[C37.118 onboarding README](forgejo-repos/gateway-c37-118-onboarding/README.md).
+[alarm-threshold README](forgejo-repos/processor-alarm-threshold/README.md) or
+[C37.118 gateway README](forgejo-repos/gateway-c37-118/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 
 ## Deprecated PMU fixture
@@ -388,7 +456,7 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 
 The manually operated C37.118 simulator lives in
 `~/c37-118-simulator` and is the five-PMU C37.118.2-2011 V2 source fixture for
-the onboarding demonstration. It remains a standalone TCP source and
+the C37.118 gateway demonstration. It remains a standalone TCP source and
 protocol-test service: it neither implements nor validates a gateway, and it
 has no Kafka, Common Format, or Druid dependency. V2 performs HDR -> CFG-1 ->
 CFG-2 -> start -> periodic data -> stop; V3 performs capability -> stream
@@ -633,7 +701,8 @@ remain only for immutable-object hash, schema, and row-identity verification.
 | --- | --- | --- | --- |
 | `LiveMeasurement` | stream | `delete` | `MCCSMeasurementValue` Common Format measurements and derived values |
 | `MeasurementSession` | stream | `delete` | Raw-Protobuf bounded historical session requests |
-| `Alarm` | stream | `delete` | Alarm records |
+| `Alarm` | compacted | `compact` | Raw-Protobuf current active `AlarmDesiredState` values; same-key tombstones clear them |
+| `AlarmEvaluationWatermark` | compacted | `compact` | Raw-Protobuf latest qualifying evaluation time keyed exactly like `Alarm` |
 | `Export` | stream | `delete` | Records for real-time and file export |
 | `Masterdata` | compacted | `compact` | Raw-Protobuf C37.118 source, endpoint, and signal-to-MRID masterdata |
 | `Schema` | compacted | `compact` | Common Format schema definitions |
@@ -645,6 +714,37 @@ and `BLOBMETA_TOPIC_PARTITIONS`. All other topics have one partition, and every
 topic has one replica because this is a single-broker PoC. Automatic topic
 creation is disabled. No retention period is set beyond Kafka's broker default
 because the data-retention decision remains open.
+
+`Alarm` is a root-owned compacted desired-active-state topic. Live processors
+publish a non-null raw-Protobuf `AlarmDesiredState` while an alarm is active and
+a null-valued same-key tombstone to clear it. Its deterministic UTF-8 key and
+payload `alarm_key` are identical:
+`alarm/v1/<base64url-no-padding(UTF-8(rule_id))>/<base64url-no-padding(UTF-8(mrid))>`.
+The payload carries its immutable episode ID, stable rule ID, exact MRID,
+warning/critical severity, activation timestamp, current rule revision, and
+current evidence; acknowledgement, notification, and audit fields are outside
+the topic contract.
+
+`kafka-init` reconciles `Alarm` separately from the generic topic policies. An
+absent topic is created compacted with one partition and one replica. An empty,
+legacy one-partition/one-replica `delete` topic changes only its cleanup policy.
+A nonempty legacy topic fails closed unless
+`WAMA_ALARM_LEGACY_MIGRATION=discard-delete-retained-alarm-v1` is explicitly
+set; only then does the initializer delete literal `Alarm`, wait for it to
+disappear, and recreate and verify it. This legacy discard/recreate cutover
+intentionally drops its retained active state; it does not recover it. The
+Compose default is blank.
+`KAFKA_DELETE_TOPIC_ENABLE=true` exists solely to support that guarded legacy
+recreation; the initializer does not delete any other topic.
+
+A separate forward-only cutover applies when a compact `Alarm` retains active
+state but `AlarmEvaluationWatermark` is absent. Set
+`WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION=accept-forward-only-alarm-evaluation-watermark-v1`
+exactly to create and verify only `AlarmEvaluationWatermark`. It preserves the
+existing `Alarm` topic ID, retained bytes, and end offsets; it does not rewrite
+or backfill `Alarm`. This establishes the late-data boundary for future
+evaluations without claiming historical reconstruction; see
+[ADR 0002](docs/adr/0002-alarm-evaluation-watermark.md).
 
 The request/Blobmeta contracts, v2 queryable Parquet artifact, and 12-partition
 worker topics replace the old finalized-session exporter, catalog API, browser,
@@ -665,6 +765,10 @@ JSON console messages as application data on that topic.
 payload carries only the bounded extraction command. `Blobmeta` uses raw
 Protobuf, serialized from [the result schema](docs/wama/schema/blobmeta.proto),
 and is keyed by immutable `blob_id`; Parquet bytes remain in SeaweedFS.
+
+`Alarm` uses raw Protobuf, serialized from
+[the desired-state schema](docs/wama/schema/alarm.proto). Live processors, not
+the MeasurementSession worker, emit active values and same-key clear tombstones.
 
 `Export` uses raw Protobuf, serialized from
 [the IEC 104 export schema](docs/wama/schema/iec104_export.proto). The current

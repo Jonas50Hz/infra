@@ -28,6 +28,9 @@ in SharePoint; update these summaries when the source docs change.
   `rtd_schema.v1`). Same schema as MCCS. PoC uses its own MRIDs first.
 - schema/masterdata.proto — raw-Protobuf C37.118 source masterdata contract
   (`wama.masterdata.v1.SourceMasterdata`) for compacted Kafka runtime state.
+- schema/alarm.proto — root-owned raw-Protobuf desired-active-state contract
+  (`wama.alarm.v1.AlarmDesiredState`) for compacted `Alarm` records and
+  same-key clearance tombstones.
 - schema/iec104_export.proto — PoC raw-Protobuf contract for one-way IEC 104
   export records (`wama.iec104.v1`).
 - [image.png](../wama/image.png) — authoritative target component model and component

@@ -13,6 +13,7 @@ from infra_readiness.checks import (
     TOPIC_PARTITION_COUNTS,
     check_postgres,
     topic_configurations_from_responses,
+    validate_alerta_health,
     validate_grafana_dashboard,
     validate_grafana_gateway_fleet_dashboard,
     validate_grafana_datasource,
@@ -62,14 +63,19 @@ class KafkaContractTests(unittest.TestCase):
         validate_topic_descriptions(descriptions)
         validate_topic_configurations(configurations)
 
-    def test_rejects_missing_compacted_cleanup_policy(self) -> None:
+    def test_rejects_delete_cleanup_policy_for_compacted_alarm_topics(self) -> None:
         configurations = {
-            topic: {"cleanup.policy": "delete"}
-            for topic in REQUIRED_TOPICS
+            topic: {"cleanup.policy": cleanup_policy}
+            for topic, cleanup_policy in TOPIC_CLEANUP_POLICIES.items()
         }
 
-        with self.assertRaisesRegex(ReadinessError, "Masterdata"):
-            validate_topic_configurations(configurations)
+        for topic in ("Alarm", "AlarmEvaluationWatermark"):
+            with self.subTest(topic=topic):
+                invalid_configurations = configurations.copy()
+                invalid_configurations[topic] = {"cleanup.policy": "delete"}
+
+                with self.assertRaisesRegex(ReadinessError, topic):
+                    validate_topic_configurations(invalid_configurations)
 
     def test_parses_kafka_python_tuple_config_response(self) -> None:
         response = SimpleNamespace(
@@ -138,6 +144,13 @@ class ControlPlaneTests(unittest.TestCase):
             },
             "live_measurements",
         )
+
+    def test_accepts_alerta_good_to_go_health(self) -> None:
+        validate_alerta_health("OK\n")
+
+    def test_rejects_unready_alerta_health(self) -> None:
+        with self.assertRaisesRegex(ReadinessError, "Alerta health"):
+            validate_alerta_health("FAILED")
 
     def test_accepts_measurement_session_api_health(self) -> None:
         validate_measurement_session_api_health({"status": "ok"})
@@ -313,7 +326,7 @@ class ControlPlaneTests(unittest.TestCase):
                 "empty": False,
                 "default_branch": "main",
             },
-            "gateway-c37-118-onboarding",
+            "gateway-c37-118",
         )
 
     def test_rejects_unseeded_managed_repository(self) -> None:
@@ -410,6 +423,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_accepts_idle_or_active_iec104_browser_status(self) -> None:
         validate_iec104_browser_status({"active": False, "state": "idle", "viewers": 0})
         validate_iec104_browser_status({"active": True, "state": "active", "viewers": 1})
+        validate_iec104_browser_status({"active": True, "state": "active", "viewers": 0})
 
     def test_rejects_inconsistent_iec104_browser_status(self) -> None:
         with self.assertRaisesRegex(ReadinessError, "active state"):

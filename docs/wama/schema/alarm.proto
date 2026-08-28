@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package wama.alarm.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// The current desired active state for one stable (rule_id, mrid) identity.
+// A non-null value is published to the compacted Alarm topic. A null-valued
+// record with the same Kafka key clears the active state automatically.
+message AlarmDesiredState {
+    // Exact UTF-8 Kafka key. It deterministically encodes rule_id and mrid.
+    string alarm_key = 1;
+
+    // Immutable canonical UUID for one activation. It changes only after a
+    // tombstone clears the alarm and a later activation begins a new episode.
+    string episode_id = 2;
+
+    // Stable identity of the alarm rule and the exact Common Format MRID.
+    string rule_id = 3;
+    string mrid = 4;
+
+    AlarmSeverity severity = 5;
+    google.protobuf.Timestamp activated_at = 6;
+
+    // A rule revision may refresh an active alarm without opening a new
+    // episode. It is not part of the stable Kafka-key identity.
+    string rule_revision = 7;
+    AlarmEvidence current_evidence = 8;
+
+    reserved 9 to 15;
+}
+
+// The current evaluation watermark for one stable (rule_id, mrid) identity.
+// Compaction retains only the latest qualifying evaluation time; this is not
+// an audit, episode, notification, or acknowledgement projection.
+message AlarmEvaluationWatermark {
+    // Exact UTF-8 Kafka key, byte-for-byte equal to the AlarmDesiredState key.
+    string alarm_key = 1;
+
+    // Repeated identity fields validate the Kafka key's canonical identity.
+    string rule_id = 2;
+    string mrid = 3;
+
+    google.protobuf.Timestamp last_evaluated_at = 4;
+
+    reserved 5 to 15;
+}
+
+enum AlarmSeverity {
+    ALARM_SEVERITY_UNSPECIFIED = 0;
+    ALARM_SEVERITY_WARNING = 1;
+    ALARM_SEVERITY_CRITICAL = 2;
+}
+
+// Current evidence for the active desired state. This replaces prior evidence
+// on refresh; the Alarm topic is not an audit trail.
+message AlarmEvidence {
+    google.protobuf.Timestamp observed_at = 1;
+    string summary = 2;
+    repeated EvidenceAttribute attributes = 3;
+}
+
+message EvidenceAttribute {
+    string name = 1;
+    string value = 2;
+}

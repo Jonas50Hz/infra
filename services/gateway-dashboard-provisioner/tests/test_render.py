@@ -55,6 +55,57 @@ class DashboardRenderTests(unittest.TestCase):
         self.assertNotIn('"quality_valid" = \'true\'', latest_query)
         self.assertIn('"quality_valid"', latest_query)
 
+    def test_scopes_ordered_series_context_without_changing_rendered_sql(self) -> None:
+        dashboard = render_gateway_dashboard(_source())
+        panels = {panel["title"]: panel for panel in dashboard["panels"]}
+
+        series_target = panels["Phase Voltages"]["targets"][0]
+        freshness_target = panels["Last Measurement"]["targets"][0]
+        latest_records_target = panels["Latest Records"]["targets"][0]
+
+        self.assertEqual(
+            series_target["settings"]["contextParameters"],
+            [{"name": "maxSegmentPartitionsOrderedInMemory", "value": 75}],
+        )
+        self.assertEqual(freshness_target["settings"]["contextParameters"], [])
+        self.assertEqual(latest_records_target["settings"]["contextParameters"], [])
+        self.assertEqual(
+            series_target["builder"]["query"],
+            'SELECT "__time", CASE "mrid" '
+            "WHEN 'urn:wama:poc:pmu:bay-01:voltage-o''hara' THEN 'voltage-l1' "
+            'END AS "signal", "double_value" '
+            'FROM "live_measurements" '
+            "WHERE \"mrid\" IN ('urn:wama:poc:pmu:bay-01:voltage-o''hara') "
+            'AND "double_value" IS NOT NULL '
+            'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
+            'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '
+            'ORDER BY "__time" ASC',
+        )
+        self.assertEqual(
+            freshness_target["builder"]["query"],
+            'SELECT MAX("__time") AS "last_measurement" '
+            'FROM "live_measurements" '
+            "WHERE \"mrid\" IN ('urn:wama:poc:pmu:bay-01:voltage-o''hara', "
+            "'urn:wama:poc:pmu:bay-01:current-l1', "
+            "'urn:wama:poc:pmu:bay-01:frequency', "
+            "'urn:wama:poc:pmu:bay-01:rocof') "
+            'AND "double_value" IS NOT NULL',
+        )
+        self.assertEqual(
+            latest_records_target["builder"]["query"],
+            'SELECT "__time", "mrid", "double_value", "timestamp_field", '
+            '"timestamp_gateway", "timestamp_mccs", "quality_valid" '
+            'FROM "live_measurements" '
+            "WHERE \"mrid\" IN ('urn:wama:poc:pmu:bay-01:voltage-o''hara', "
+            "'urn:wama:poc:pmu:bay-01:current-l1', "
+            "'urn:wama:poc:pmu:bay-01:frequency', "
+            "'urn:wama:poc:pmu:bay-01:rocof') "
+            'AND "double_value" IS NOT NULL '
+            'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
+            'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '
+            'ORDER BY "__time" DESC LIMIT 32',
+        )
+
     def test_renders_empty_fleet_and_stable_source_files(self) -> None:
         dashboard = render_fleet_dashboard(())
 
@@ -72,7 +123,7 @@ class DashboardRenderTests(unittest.TestCase):
     def test_fleet_links_follow_source_id_order(self) -> None:
         later = GatewaySource(
             source_id="pmu-bay-02",
-            catalog_id="wama-c37-118-onboarding",
+            catalog_id="wama-c37-118",
             catalog_revision="def456",
             published_at=datetime(2026, 8, 21, 12, 1, tzinfo=timezone.utc),
             site_id="wama-poc-bay-02",
@@ -110,7 +161,7 @@ class DashboardRenderTests(unittest.TestCase):
             first_source = _source()
             second_source = GatewaySource(
                 source_id="pmu-bay-02",
-                catalog_id="wama-c37-118-onboarding",
+                catalog_id="wama-c37-118",
                 catalog_revision="def456",
                 published_at=datetime(2026, 8, 21, 12, 1, tzinfo=timezone.utc),
                 site_id="wama-poc-bay-02",
@@ -159,7 +210,7 @@ class DashboardRenderTests(unittest.TestCase):
 def _source() -> GatewaySource:
     return GatewaySource(
         source_id="pmu-bay-01",
-        catalog_id="wama-c37-118-onboarding",
+        catalog_id="wama-c37-118",
         catalog_revision="abc123",
         published_at=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc),
         site_id="wama-poc-bay-01",

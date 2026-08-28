@@ -1,0 +1,32 @@
+services:
+  alerta:
+    build:
+      context: ../..
+      dockerfile: services/alerta/Dockerfile
+    depends_on:
+      alerta-postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    environment:
+      ALERTA_SVR_CONF_FILE: /app/alertad.conf
+      ADMIN_KEY: wama-alerta-ingress-local-api-key-0001
+      ADMIN_PASSWORD: wama-alerta-admin
+      ADMIN_USERS: wama-alerta-admin@local.test
+    ports:
+        - "0.0.0.0:${ALERTA_HOST_PORT:-8081}:8080"
+    volumes:
+      - ./config/alertad.conf:/app/alertad.conf:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/venv/bin/python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/api/management/gtg', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+    restart: unless-stopped

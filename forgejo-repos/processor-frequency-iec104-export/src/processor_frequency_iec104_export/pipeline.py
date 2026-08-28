@@ -9,7 +9,7 @@ from quixstreams import Application
 from quixstreams.models.serializers.protobuf import ProtobufDeserializer, ProtobufSerializer
 
 from processor_frequency_iec104_export.config import Settings
-from processor_frequency_iec104_export.export import ExportEnvelope, build_export
+from processor_frequency_iec104_export.export import ExportEnvelope, FrequencySecondAggregator
 from processor_frequency_iec104_export.generated import iec104_export_pb2, rtd_schema_pb2
 
 
@@ -17,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def build_transformation_stream(application: Application, settings: Settings) -> Any:
-    """Build the raw-Protobuf input filter and typed IEC export transformation."""
+    """Build the raw-Protobuf event-time aggregation and IEC export transformation."""
 
     input_topic = application.topic(
         settings.input_topic,
@@ -28,8 +28,9 @@ def build_transformation_stream(application: Application, settings: Settings) ->
         ),
     )
     stream = application.dataframe(input_topic)
+    aggregator = FrequencySecondAggregator(settings)
     stream = stream.apply(
-        lambda source, key, timestamp, _headers: build_export(source, key, timestamp, settings),
+        lambda source, key, _timestamp, _headers: aggregator.process(source, key),
         metadata=True,
     )
     stream = stream.filter(lambda envelope: envelope is not None)
@@ -66,11 +67,11 @@ def build_application(settings: Settings | None = None) -> tuple[Application, An
 
 
 def run_processor() -> None:
-    """Start the direct configured frequency export pipeline."""
+    """Start the configured per-event-second frequency export pipeline."""
 
     settings = Settings.from_environment()
     LOGGER.info(
-        "Starting direct frequency IEC 104 export group %s from %s to %s with %s mappings",
+        "Starting per-event-second frequency IEC 104 export group %s from %s to %s with %s mappings",
         settings.consumer_group,
         settings.input_topic,
         settings.output_topic,

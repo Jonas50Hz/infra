@@ -32,6 +32,10 @@ operator starts its separate Compose project.
 | [`druid/`](druid/) | `druid` |
 | [`druid-init/`](druid-init/) | `druid-init` |
 | [`postgres/`](postgres/) | `postgres` |
+| [`alerta-postgres/`](alerta-postgres/) | `alerta-postgres` |
+| [`mailpit/`](mailpit/) | `mailpit` |
+| [`alerta/`](alerta/) | `alerta` |
+| [`alarm-alerta-ingress/`](alarm-alerta-ingress/) | `alarm-alerta-ingress` |
 | [`trino-init/`](trino-init/) | `trino-init` |
 | [`trino/`](trino/) | `trino` |
 | [`trino-session-writer/`](trino-session-writer/) | `trino-session-writer` |

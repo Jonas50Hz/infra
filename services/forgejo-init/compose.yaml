@@ -14,16 +14,18 @@ services:
       FORGEJO_FREQUENCY_SCALE_REPOSITORY: "${FORGEJO_FREQUENCY_SCALE_REPOSITORY:-processor-frequency-scale}"
       FORGEJO_APPARENT_POWER_REPOSITORY: "${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
       FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY: "${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
-      FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY: "${FORGEJO_LFR_FREQUENCY_PROVISION_REPOSITORY:-processor-lfr-frequency-provision}"
-      FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_REPOSITORY:-gateway-c37-118-onboarding}"
-      FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_USERNAME:-wama-gateway-c37-118-onboarding-agent}"
-      FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL: "${FORGEJO_GATEWAY_C37_118_ONBOARDING_AGENT_EMAIL:-wama-gateway-c37-118-onboarding-agent@local}"
+      FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY: "${FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY:-processor-frequency-measurement-session}"
+      FORGEJO_ALARM_THRESHOLD_REPOSITORY: "${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-processor-alarm-threshold}"
+      FORGEJO_GATEWAY_C37_118_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_REPOSITORY:-gateway-c37-118}"
+      FORGEJO_GATEWAY_C37_118_AGENT_USERNAME: "${FORGEJO_GATEWAY_C37_118_AGENT_USERNAME:-wama-gateway-c37-118-agent}"
+      FORGEJO_GATEWAY_C37_118_AGENT_EMAIL: "${FORGEJO_GATEWAY_C37_118_AGENT_EMAIL:-wama-gateway-c37-118-agent@local}"
       FORGEJO_RUNNER_URL: "${FORGEJO_RUNNER_URL:-http://host.docker.internal:3000/}"
       WAMA_FREQUENCY_SCALE_DEPLOY_ROOT: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
       WAMA_APPARENT_POWER_DEPLOY_ROOT: "${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
       WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
-      WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
-      WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
+      WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT: "${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
+      WAMA_ALARM_THRESHOLD_DEPLOY_ROOT: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+      WAMA_GATEWAY_C37_118_DEPLOY_ROOT: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
       WAMA_INFRA_NETWORK: "${WAMA_INFRA_NETWORK:-wama-infra}"
     volumes:
       - forgejo-data:/data
@@ -42,12 +44,16 @@ services:
         target: /opt/wama/seeds/processor-frequency-iec104-export
         read_only: true
       - type: bind
-        source: ../../forgejo-repos/processor-lfr-frequency-provision
-        target: /opt/wama/seeds/processor-lfr-frequency-provision
+        source: ../../forgejo-repos/processor-frequency-measurement-session
+        target: /opt/wama/seeds/processor-frequency-measurement-session
         read_only: true
       - type: bind
-        source: ../../forgejo-repos/gateway-c37-118-onboarding
-        target: /opt/wama/seeds/gateway-c37-118-onboarding
+        source: ../../forgejo-repos/processor-alarm-threshold
+        target: /opt/wama/seeds/processor-alarm-threshold
+        read_only: true
+      - type: bind
+        source: ../../forgejo-repos/gateway-c37-118
+        target: /opt/wama/seeds/gateway-c37-118
         read_only: true
       - type: bind
         source: "${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
@@ -59,11 +65,14 @@ services:
         source: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
         target: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
       - type: bind
-        source: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
-        target: "${WAMA_LFR_FREQUENCY_PROVISION_DEPLOY_ROOT:-/var/lib/wama-processor-lfr-frequency-provision}"
+        source: "${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
+        target: "${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
       - type: bind
-        source: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
-        target: "${WAMA_GATEWAY_C37_118_ONBOARDING_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118-onboarding}"
+        source: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+        target: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+      - type: bind
+        source: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
+        target: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     entrypoint: ["/bin/sh", "/opt/wama/bootstrap.sh"]

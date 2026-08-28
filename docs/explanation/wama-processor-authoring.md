@@ -149,8 +149,9 @@ mode has a different typed output contract.
 `formula` and `latest-values` are the first implementation candidates. A
 `window` mode must not be offered until its event-time, idle-input, late-data,
 memory-bound, and replay semantics are fully specified and tested. The existing
-LFR processor remains a `custom` processor because its closed-second timing,
-state restoration, and persistent outbox are essential domain behavior.
+future LFR implementation should remain a `custom` processor because its
+closed-second timing, state restoration, and persistent outbox are essential
+domain behavior.
 
 ## Proposed repository contract
 

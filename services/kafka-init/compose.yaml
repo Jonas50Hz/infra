@@ -9,6 +9,8 @@ services:
     environment:
       BLOBMETA_TOPIC_PARTITIONS: "${BLOBMETA_TOPIC_PARTITIONS:-12}"
       MEASUREMENT_SESSION_TOPIC_PARTITIONS: "${MEASUREMENT_SESSION_TOPIC_PARTITIONS:-12}"
+      WAMA_ALARM_LEGACY_MIGRATION: "${WAMA_ALARM_LEGACY_MIGRATION:-}"
+      WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION: "${WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION:-}"
     volumes:
       - ./create-topics.sh:/opt/wama/create-topics.sh:ro
     entrypoint: ["/bin/bash", "/opt/wama/create-topics.sh"]

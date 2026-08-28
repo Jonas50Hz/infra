@@ -1,0 +1,27 @@
+services:
+  alarm-alerta-ingress:
+    build:
+      context: ../..
+      dockerfile: services/alarm-alerta-ingress/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      alerta:
+        condition: service_healthy
+    environment:
+      ALERTA_API_KEY: wama-alerta-ingress-local-api-key-0001
+      ALERTA_REQUEST_TIMEOUT_SECONDS: "${ALARM_ALERTA_INGRESS_ALERTA_TIMEOUT_SECONDS:-10}"
+      ALERTA_URL: http://alerta:8080
+      ALARM_ALERTA_INGRESS_READY_FILE: /tmp/wama-alarm-alerta-ingress-ready
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_RETRY_INTERVAL_SECONDS: "${ALARM_ALERTA_INGRESS_KAFKA_RETRY_INTERVAL_SECONDS:-2}"
+      KAFKA_TOPIC: Alarm
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/wama-alarm-alerta-ingress-ready"]
+      interval: 5s
+      timeout: 2s
+      retries: 24
+      start_period: 10s
+    restart: unless-stopped

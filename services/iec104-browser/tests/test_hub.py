@@ -16,6 +16,7 @@ class _FakeMonitor:
     status_callback: object
     started: bool = False
     stopped: bool = False
+    stop_calls: int = 0
 
     def start(self) -> None:
         self.started = True
@@ -23,6 +24,7 @@ class _FakeMonitor:
 
     def stop(self) -> None:
         self.stopped = True
+        self.stop_calls += 1
         self.status_callback(MonitorStatus(active=False, state="idle"))
 
     def emit(self, event: MonitorEvent) -> None:
@@ -30,7 +32,7 @@ class _FakeMonitor:
 
 
 class LiveHubTests(unittest.IsolatedAsyncioTestCase):
-    """Require monitor lifecycle and message state to follow browser viewers."""
+    """Require application-owned monitor lifecycle and transient browser streams."""
 
     async def asyncSetUp(self) -> None:
         self.monitors: list[_FakeMonitor] = []
@@ -45,7 +47,9 @@ class LiveHubTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.hub.shutdown()
 
-    async def test_first_viewer_starts_monitor_and_last_viewer_stops_it(self) -> None:
+    async def test_monitor_starts_once_and_outlives_final_viewer(self) -> None:
+        await self.hub.start()
+        await self.hub.start()
         first = await self.hub.subscribe()
         second = await self.hub.subscribe()
 
@@ -57,10 +61,36 @@ class LiveHubTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.monitors[0].stopped)
         await self.hub.unsubscribe(second)
 
+        self.assertFalse(self.monitors[0].stopped)
+        self.assertEqual(await self.hub.status(), {"active": False, "state": "connecting", "viewers": 0})
+
+        await self.hub.shutdown()
+
         self.assertTrue(self.monitors[0].stopped)
+        self.assertEqual(self.monitors[0].stop_calls, 1)
+        self.assertEqual(await self.hub.status(), {"active": False, "state": "idle", "viewers": 0})
+
+    async def test_subscription_only_manages_its_queue(self) -> None:
+        subscription = await self.hub.subscribe()
+
+        self.assertEqual(self.monitors, [])
+        self.assertEqual(await self.hub.status(), {"active": False, "state": "idle", "viewers": 1})
+
+        await self.hub.unsubscribe(subscription)
+
+        self.assertEqual(await self.hub.status(), {"active": False, "state": "idle", "viewers": 0})
+
+    async def test_shutdown_ignores_queued_monitor_status(self) -> None:
+        await self.hub.start()
+        self.monitors[0].status_callback(MonitorStatus(active=True, state="active"))
+
+        await self.hub.shutdown()
+
+        self.assertEqual(self.monitors[0].stop_calls, 1)
         self.assertEqual(await self.hub.status(), {"active": False, "state": "idle", "viewers": 0})
 
     async def test_message_is_broadcast_only_to_open_pages(self) -> None:
+        await self.hub.start()
         first = await self.hub.subscribe()
         await first.queue.get()
         event = _event()
@@ -78,6 +108,7 @@ class LiveHubTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_slow_page_queue_remains_bounded(self) -> None:
         hub = LiveHub(self._factory, queue_size=1)
+        await hub.start()
         subscription = await hub.subscribe()
         await subscription.queue.get()
 

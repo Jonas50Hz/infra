@@ -19,53 +19,88 @@
   </header>
 
   <main class="workspace">
-    <section class="event-log" aria-labelledby="event-log-title">
-      <div class="log-heading">
+    <section class="trend-panel" aria-labelledby="trend-title">
+      <div class="trend-heading">
         <div>
-          <p class="eyebrow">Wire-received values</p>
-          <h2 id="event-log-title">Monitor Stream</h2>
+          <p class="eyebrow">M_ME_NC_1 values</p>
+          <h2 id="trend-title">Numeric Trend</h2>
         </div>
-        <label class="filter-field">
-          <span class="visually-hidden">Filter received values</span>
-          <input id="event-filter" type="search" placeholder="Filter CA, IOA, type, or value" autocomplete="off">
+        <label class="series-field">
+          <span>Series</span>
+          <select id="trend-series" aria-describedby="trend-count" disabled>
+            <option value="">No numeric series</option>
+          </select>
         </label>
       </div>
-      <div class="table-wrap" tabindex="0">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Received UTC</th>
-              <th scope="col">CA</th>
-              <th scope="col">IOA</th>
-              <th scope="col">Type</th>
-              <th scope="col">Value</th>
-              <th scope="col">COT</th>
-              <th scope="col">Quality</th>
-            </tr>
-          </thead>
-          <tbody id="event-rows"></tbody>
-        </table>
-        <p class="table-state" id="table-state" aria-live="polite">Waiting for IEC 104 values.</p>
+      <div class="trend-canvas-wrap">
+        <canvas id="trend-canvas" role="img" aria-label="No numeric IEC 104 M_ME_NC_1 values have been received."></canvas>
       </div>
-      <div class="log-footer">
-        <p id="event-count" aria-live="polite">0 received in this view</p>
-        <p class="transient-note">Clears when this page closes</p>
+      <div class="trend-footer">
+        <p id="trend-state" aria-live="polite">No numeric M_ME_NC_1 values have been received.</p>
+        <p id="trend-count">Tracks up to 8 CA/IOA series and 128 numeric values per series.</p>
       </div>
     </section>
 
-    <aside class="detail-panel" aria-labelledby="detail-title">
-      <div class="detail-heading">
-        <p class="eyebrow">Selected ASDU</p>
-        <h2 id="detail-title">No Value Selected</h2>
-      </div>
-      <div class="detail-content" id="detail-content" aria-live="polite"></div>
-    </aside>
+    <div class="monitor-layout">
+      <section class="event-log" aria-labelledby="event-log-title">
+        <div class="log-heading">
+          <div>
+            <p class="eyebrow">Wire-received values</p>
+            <h2 id="event-log-title">Monitor Stream</h2>
+          </div>
+          <div class="log-controls">
+            <label class="window-field">
+              <span>Newest messages</span>
+              <select id="event-cap" aria-describedby="event-count">
+                <option value="32">32</option>
+                <option value="64">64</option>
+                <option value="128" selected>128</option>
+                <option value="256">256</option>
+              </select>
+            </label>
+            <label class="filter-field">
+              <span class="visually-hidden">Filter received values</span>
+              <input id="event-filter" type="search" placeholder="Filter CA, IOA, type, or value" autocomplete="off">
+            </label>
+          </div>
+        </div>
+        <div class="table-wrap" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Received UTC</th>
+                <th scope="col">CA</th>
+                <th scope="col">IOA</th>
+                <th scope="col">Type</th>
+                <th scope="col">Value</th>
+                <th scope="col">COT</th>
+                <th scope="col">Quality</th>
+              </tr>
+            </thead>
+            <tbody id="event-rows"></tbody>
+          </table>
+          <p class="table-state" id="table-state" aria-live="polite">Waiting for IEC 104 values.</p>
+        </div>
+        <div class="log-footer">
+          <p id="event-count" aria-live="polite">Showing 0 visible of 0 retained (newest 128).</p>
+          <p class="transient-note">Clears when this page closes</p>
+        </div>
+      </section>
+
+      <aside class="detail-panel" aria-labelledby="detail-title">
+        <div class="detail-heading">
+          <p class="eyebrow">Selected ASDU</p>
+          <h2 id="detail-title">No Value Selected</h2>
+        </div>
+        <div class="detail-content" id="detail-content" aria-live="polite"></div>
+      </aside>
+    </div>
   </main>
 
   <template id="empty-detail-template">
     <p class="empty-detail">Select a received value from the monitor stream.</p>
   </template>
 
-  <script src="/app.js" defer></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -8,6 +8,20 @@ RUN pip install --no-cache-dir --prefix=/install -r /build/requirements.txt
 COPY services/iec104-browser/src /build/src
 COPY services/iec104-browser/public /build/public
 
+FROM node:22-alpine AS frontend-test
+
+WORKDIR /test
+
+COPY services/iec104-browser/public/live_window.mjs /test/public/live_window.mjs
+COPY services/iec104-browser/public/app.js /test/public/app.js
+COPY services/iec104-browser/tests/live_window.test.mjs /test/tests/live_window.test.mjs
+COPY services/iec104-browser/tests/app_socket_lifecycle.test.mjs /test/tests/app_socket_lifecycle.test.mjs
+
+RUN node --experimental-vm-modules --test \
+    /test/tests/live_window.test.mjs \
+    /test/tests/app_socket_lifecycle.test.mjs \
+    && touch /test/passed
+
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
@@ -21,6 +35,7 @@ ENV PYTHONPATH=/app
 
 FROM runtime AS test
 
+COPY --from=frontend-test /test/passed /test/frontend-test-passed
 RUN python -m unittest discover -s /app/tests -v \
     && test -s /app/public/index.html \
     && test -s /app/public/app.js \

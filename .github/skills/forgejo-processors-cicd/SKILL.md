@@ -9,19 +9,27 @@ disable-model-invocation: false
 # Forgejo Processors CI/CD
 
 Use this skill for the separate Forgejo processor repositories and the explicit
-`gateway-c37-118-onboarding` gateway-deployment test. Processor repositories
-own one internal `processor-*` service; the onboarding repository owns one
+`gateway-c37-118` gateway-deployment test. Processor repositories
+own one internal `processor-*` service; the C37.118 gateway repository owns one
 one-shot Masterdata publisher plus catalog-derived legacy-v2 adapters in its
 isolated deployment root.
 
-## Boundaries
+## PoC delivery scope
 
+Implement and validate the requested happy path, plus only deployment or local
+operation failures highly probable for that path. Do not expand a change into
+production resilience, exhaustive failure matrices, or speculative recovery
+behavior unless explicitly requested. All ownership, credential, and deployment
+boundaries remain mandatory.
+
+## Boundaries
 - Forgejo owns internal `processor-*` services and their repository-local
+
   Compose project only.
 - A gateway is eligible only when the request explicitly declares a
   Forgejo-based gateway-deployment test. The current `pmu-gateway` is always
   root infrastructure and is never a Forgejo deployment target.
-- `gateway-c37-118-onboarding` is the only declared gateway exception. Its
+- `gateway-c37-118` is the only declared gateway exception. Its
    current workflow may validate and reconcile raw-Protobuf `Masterdata`, then
    create, restart, or remove only generated `c37-118-gateway-<source-id>`
    adapters for active reviewed catalog sources. It must not claim ownership of
@@ -39,7 +47,7 @@ isolated deployment root.
 | Inspect or bootstrap a private repository | Use the REST API as described in [API and operations](./references/api-and-operations.md). Only `forgejo-init` may seed a repository with no refs. |
 | Change a processor, test, contract copy, or workflow | Clone that processor's Forgejo repository, work on a feature branch, run local validation, push the branch, and open a pull request. |
 | Publish and deploy a processor revision | Merge or push an already validated change to `main`. The checked-in workflow performs the rest. |
-| Change C37.118 source masterdata | Clone `gateway-c37-118-onboarding`, validate the catalog and guard, and open a pull request. An approved `main` revision reconciles `Masterdata` and only catalog-derived legacy-v2 adapters. |
+| Change C37.118 source masterdata | Clone `gateway-c37-118`, validate the catalog and guard, and open a pull request. An approved `main` revision reconciles `Masterdata` and only catalog-derived legacy-v2 adapters. |
 | Run a known `main` revision again | Manually dispatch that repository's checked-in workflow only after confirming that deployment is intended; it also publishes and deploys. |
 | Change root infrastructure or `pmu-gateway` | Stop here and work in the parent infrastructure repository, outside Forgejo. |
 
@@ -49,26 +57,28 @@ isolated deployment root.
    client, derive `FORGEJO_API_URL` from the public `FORGEJO_ROOT_URL`; the
    bootstrap container alone uses its internal `http://forgejo:3000/api/v1`
    endpoint. Confirm the server health and private repository before making a
-   change. For the local `gateway-c37-118-onboarding` route, do not ask for or
+   change. For the local `gateway-c37-118` route, do not ask for or
    create a personal token: from the parent checkout run
-   `sh scripts/configure-forgejo-gateway-onboarding-agent.sh --checkout
-   ../gateway-c37-118-onboarding`. It installs the bootstrap-created restricted
-   collaborator credential only into the external private checkout and rejects
-   the parent and seed. Use
-   `scripts/with-forgejo-gateway-onboarding-agent.sh --checkout
-   ../gateway-c37-118-onboarding -- <command>` for REST calls. Other managed
-   repositories still use a personal token only through an environment variable
-   or credential manager, never in a remote URL, commit, workflow file, or log.
+   `sh scripts/configure-forgejo-gateway-c37-118-agent.sh --checkout
+   forgejo-repos/gateway-c37-118`. It installs the bootstrap-created
+   restricted collaborator credential only into the co-located private checkout
+   and rejects the parent infrastructure checkout. Use
+   `scripts/with-forgejo-gateway-c37-118-agent.sh --checkout
+   forgejo-repos/gateway-c37-118 -- <command>` for REST calls. Other
+   managed repositories still use a personal token only through an environment
+   variable or credential manager, never in a remote URL, commit, workflow file,
+   or log.
 
 2. For a new, empty Forgejo instance, let `forgejo-init` perform the idempotent
    API create-and-check operation for every approved processor repository and
-   `gateway-c37-118-onboarding`. It must create each as private with
+   `gateway-c37-118`. It must create each as private with
    `auto_init: false`, inspect each remote's refs, seed only when there are no
    refs, and leave a nonempty repository unchanged. Do not replace this with a
    forced Git push or a manual reseed.
 
-3. For normal development, clone the Forgejo repository rather than the seed or
-   parent checkout. A feature branch and pull request are the preferred review
+3. For normal development, use a managed repository checkout rather than the
+   parent infrastructure checkout. Clone a repository when no co-located
+   checkout exists. A feature branch and pull request are the preferred review
    route. Create a feature branch, run the repository checks, commit an
    intentional change, and push the branch:
 
@@ -99,7 +109,7 @@ isolated deployment root.
    connection, and serialized `deploy` on that repository's deployment
    connection. Publishing tags its one image with both `sha-$FORGEJO_SHA` and
    `main`; deployment pulls `main` and verifies the OCI revision label matches
-   `FORGEJO_SHA`. The onboarding repository's deploy job is an exception only
+   `FORGEJO_SHA`. The C37.118 gateway repository's deploy job is an exception only
    in operation: it runs `masterdata-publisher` once with `docker compose run
    --rm`, then its guarded reconciler uses a generated application-local Compose
    overlay for catalog-derived legacy-v2 adapters only.
@@ -119,10 +129,10 @@ isolated deployment root.
 8. If deployment fails, inspect the failed job before retrying. Confirm the
    deployment root remains marker-owned and outside the runner workspace. A
    processor project may contain only its expected `processor-*` service; the
-   onboarding project may contain `masterdata-publisher` plus only generated
-   catalog-derived `c37-118-gateway-<source-id>` services. Do not compensate by
-   running the root infrastructure Compose project or modifying the root stack
-   from a workflow.
+   C37.118 gateway project may contain `masterdata-publisher` plus only
+   generated catalog-derived `c37-118-gateway-<source-id>` services. Do not
+   compensate by running the root infrastructure Compose project or modifying
+   the root stack from a workflow.
 
 ## Completion Checks
 

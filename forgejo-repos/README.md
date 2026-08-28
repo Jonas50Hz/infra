@@ -1,13 +1,16 @@
-# Forgejo Repository Seeds
+# Forgejo Repository Checkouts and Seeds
 
-This directory contains tracked seed content for repositories that may be
-initialized and pushed to Forgejo. Each child directory is a separate
-repository boundary. The parent `infra` repository is infrastructure-only and
-must never be added as a Forgejo remote or pushed to Forgejo. Forgejo is
-reserved for internal processor deployment and a deliberately declared
-gateway-deployment test, not for any other infrastructure or repository asset.
+This directory contains source content for repositories that may be initialized
+and pushed to Forgejo. `processor-alarm-threshold/` and
+`gateway-c37-118/` are co-located private Git worktrees; the
+remaining entries are tracked bootstrap seeds. Each child directory is a
+separate repository boundary. The parent `infra` repository is
+infrastructure-only and must never be added as a Forgejo remote or pushed to
+Forgejo. Forgejo is reserved for internal processor deployment and a
+deliberately declared gateway-deployment test, not for any other infrastructure
+or repository asset.
 
-Each active processor has its own seed and private Forgejo repository:
+The tracked bootstrap processor seeds are:
 
 - [`processor-frequency-scale/`](processor-frequency-scale/) owns only
 	`processor-frequency-scale`.
@@ -15,24 +18,32 @@ Each active processor has its own seed and private Forgejo repository:
 	`processor-apparent-power`.
 - [`processor-frequency-iec104-export/`](processor-frequency-iec104-export/)
   owns only `processor-frequency-iec104-export`.
-- [`processor-lfr-frequency-provision/`](processor-lfr-frequency-provision/)
-	owns only `processor-lfr-frequency-provision`.
+- `processor-frequency-measurement-session` owns only the standard processor
+	that turns Frequency Capture Episodes from `LiveMeasurement` into bounded
+	`MeasurementSession` requests.
 
-The explicitly declared C37.118 gateway-deployment-test seed is
-[`gateway-c37-118-onboarding/`](gateway-c37-118-onboarding/). It owns only the
+Its five-source, EE-editable policy and PoC timing limits are defined in the
+[data-flow contract](../docs/reference/wama-data-flow-contracts.md). It does
+not represent Alarm lifecycle.
+
+The co-located private
+[`processor-alarm-threshold/`](processor-alarm-threshold/) worktree owns only
+`processor-alarm-threshold`. The explicitly declared C37.118
+gateway-deployment-test checkout is
+[`gateway-c37-118/`](gateway-c37-118/). It owns only the
 one-shot `masterdata-publisher` and guarded generated legacy-v2 adapters for
 active approved sources in this increment.
 
-This tracked directory is a seed only, not the deployed private repository or
-the development checkout. Work in the separate private
-`gateway-c37-118-onboarding` clone. The onboarding credential installer accepts
-that external clone only and rejects both this seed and the parent
-infrastructure checkout.
+The two co-located worktrees are development checkouts and bootstrap sources.
+When a Forgejo remote has no refs, `forgejo-init` copies their working content
+while omitting nested `.git` metadata. The C37.118 gateway credential installer
+accepts the co-located gateway checkout and rejects the parent infrastructure
+checkout.
 
 `forgejo-init` seeds each repository only when its remote has no refs; an
 existing nonempty private repository is left unchanged. Processor workflows
 deploy only their one processor into their own marker-owned deployment root.
-The onboarding workflow uses its separate marker-owned root to publish
+The C37.118 gateway workflow uses its separate marker-owned root to publish
 Masterdata once and reconcile only its catalog-derived source adapters. The
 parent `infra` repository retains all other assets, including the current
 `pmu-gateway` and every infrastructure service.
@@ -43,8 +54,3 @@ and writes direct reviewed gateway-frequency `M_ME_NC_1` requests to `Export`
 through its processor-owned mapping file. It is not the full LFR
 preferred-frequency algorithm. It must not take ownership of the root-owned IEC
 104 exporter, receiver, or browser.
-
-`processor-lfr-frequency-provision` is the separate multi-PMU per-second LFR
-core. It publishes a configured preferred-frequency Common Format value back to
-`LiveMeasurement`; it does not yet create `Export` records or replace the
-direct-export demonstration.

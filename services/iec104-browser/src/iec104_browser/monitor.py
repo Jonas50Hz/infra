@@ -1,4 +1,4 @@
-"""On-demand c104 control center that observes monitor-direction values only."""
+"""Persistent c104 control center that observes monitor-direction values only."""
 
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -69,7 +69,7 @@ class Iec104Monitor:
         return MonitorStatus(active=False, state="connecting")
 
     def start(self) -> None:
-        """Start a read-only control center only while a browser is subscribed."""
+        """Start the read-only control center for the browser process lifetime."""
 
         with self._lock:
             if self._client is not None:

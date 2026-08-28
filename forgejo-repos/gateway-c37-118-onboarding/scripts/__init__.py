@@ -1,1 +1,0 @@
-"""Deployment tooling for the standalone gateway-onboarding repository."""

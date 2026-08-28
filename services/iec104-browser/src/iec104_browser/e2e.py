@@ -1,4 +1,4 @@
-"""One-shot WebSocket probe for the on-demand IEC 104 browser stream."""
+"""One-shot WebSocket probe for the persistent IEC 104 browser stream."""
 
 from __future__ import annotations
 

@@ -9,6 +9,10 @@ include:
   - ./services/iec104-receiver/compose.yaml
   - ./services/iec104-browser/compose.yaml
   - ./services/postgres/compose.yaml
+  - ./services/alerta-postgres/compose.yaml
+  - ./services/mailpit/compose.yaml
+  - ./services/alerta/compose.yaml
+  - ./services/alarm-alerta-ingress/compose.yaml
   - ./services/trino-init/compose.yaml
   - ./services/trino/compose.yaml
   - ./services/trino-session-writer/compose.yaml
@@ -34,6 +38,7 @@ include:
 volumes:
   kafka-data:
   postgres-data:
+  alerta-postgres-data:
   seaweedfs-data:
   forgejo-data:
   forgejo-runner-data:

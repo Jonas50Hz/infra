@@ -21,11 +21,11 @@ A single use case can run on a locally optimized architecture; the shared
 foundation matters once multiple use cases reuse and extend it.
 
 ## Core processes
-### Onboarding a source
+### Activating a source
 - V1 masterdata is a reviewed Git record containing a stable source ID, site
   ID, display name, literal IP address, TCP port, C37.118 PMU IDCODE, legacy
   wire version 2, and explicit signal-to-MRID mappings.
-- The private `gateway-c37-118-onboarding` repository validates an approved
+- The private `gateway-c37-118` repository validates an approved
   catalog revision, projects it as keyed raw-Protobuf `SourceMasterdata`
   records on compacted `Masterdata`, and reconciles one isolated legacy-v2 TCP
   adapter per active catalog source. The current root-owned `pmu-gateway` is
@@ -44,7 +44,7 @@ foundation matters once multiple use cases reuse and extend it.
   provide an audit-safe trace.
 - An accepted configuration is executed in the gateway, storage, and live-data
   processing components. The Power User receives the deployment outcome.
-- For source onboarding, the Systemexperte-approved `main` revision publishes
+- For source activation, the Systemexperte-approved `main` revision publishes
   Masterdata and reconciles only catalog-derived adapters in its marker-owned
   deployment root. It does not alter root infrastructure, including the root
   `pmu-gateway` fixture or the simulator.
@@ -100,7 +100,7 @@ default service or a C37.118 endpoint. The separately managed, memory-bounded
 C37.118 TCP simulator is specified in
 [the C37.118 simulator reference](../reference/c37-118-simulator.md).
 An operator manually starts its five-PMU V2 fixture from
-`~/c37-118-simulator` as the reviewed source for the declared onboarding
+`~/c37-118-simulator` as the reviewed source for the declared C37.118 gateway
 demonstration. It remains a standalone source and protocol-test service: it
 does not implement, deploy, or validate a gateway or publish `LiveMeasurement`
 records itself.

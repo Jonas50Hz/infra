@@ -1,6 +1,6 @@
 ---
 name: grill-me
-description: A relentless interview to sharpen a plan or design.
+description: A focused PoC interview to sharpen a plan or design around its happy path and likely failures.
 disable-model-invocation: true
 ---
 
