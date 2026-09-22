@@ -32,7 +32,7 @@ Common Format scalar, not a C37.118 frame.
 | Signal shape | 250 PMUs, each with 8 MRIDs at 50 Hz, or $250 \times 8 \times 50 = 100{,}000$ records per second |
 
 Known PoC fixtures establish context, not a storage benchmark. The
-[five-PMU C37.118 gateway fixture](../reference/c37-118-masterdata-gateway.md)
+[three-PMU C37.118 gateway fixture](../reference/c37-118-masterdata-gateway.md)
 produces approximately 2,000 normalised records per second. The manually armed
 [one-hundred-PMU V2 profile](../../../c37-118-simulator/profiles/one-hundred-pmu-v2.yaml)
 corresponds to a derived post-adapter workload shape of 40,000 normalised rows

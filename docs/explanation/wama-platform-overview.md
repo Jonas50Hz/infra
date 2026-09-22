@@ -99,7 +99,7 @@ The retained `pmu-gateway` is a deprecated fast Common-Format fixture, not a
 default service or a C37.118 endpoint. The separately managed, memory-bounded
 C37.118 TCP simulator is specified in
 [the C37.118 simulator reference](../reference/c37-118-simulator.md).
-An operator manually starts its five-PMU V2 fixture from
+An operator manually starts its three-PMU V2 fixture from
 `~/c37-118-simulator` as the reviewed source for the declared C37.118 gateway
 demonstration. It remains a standalone source and protocol-test service: it
 does not implement, deploy, or validate a gateway or publish `LiveMeasurement`

@@ -22,7 +22,7 @@ The tracked bootstrap processor seeds are:
 	that turns Frequency Capture Episodes from `LiveMeasurement` into bounded
 	`MeasurementSession` requests.
 
-Its five-source, EE-editable policy and PoC timing limits are defined in the
+Its three-source, EE-editable policy and PoC timing limits are defined in the
 [data-flow contract](../docs/reference/wama-data-flow-contracts.md). It does
 not represent Alarm lifecycle.
 

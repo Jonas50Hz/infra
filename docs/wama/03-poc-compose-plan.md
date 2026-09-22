@@ -30,7 +30,7 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `kafka-ui` — topic/message inspection.
 - `pmu-gateway` — deprecated fake PMU reference fixture, excluded from default
    Compose startup. Live-measurement checks require an explicit producer.
-- External `c37-118-simulator` repository — manually started default five-PMU
+- External `c37-118-simulator` repository — manually started default three-PMU
    V2 standalone C37.118 TCP source simulator with up to 100 independent PMU
    listeners. It joins the existing `wama-infra` network but is not a root
    Compose service; alternate profiles and its large fleet tests remain
@@ -202,15 +202,16 @@ retroactive correctness for pre-cutover state; see
    contract, and deployment-guard tests -> Systemexperte decision -> audited
    Masterdata and source-gateway reconciliation. The guarded adapter path is
    limited to reviewed legacy-v2 C37.118 TCP sources. An operator manually
-   starts the matching five-PMU V2 fixture from `~/c37-118-simulator`, but only
+   starts the matching three-PMU V2 fixture from `~/c37-118-simulator`, but only
    the C37.118 gateway workflow owns adapter reconciliation.
 
 ### Phase 5 — CI/CD loop (automates deploy)
-13. **Forgejo + Actions runner + registry** — infrastructure provisions five
+13. **Forgejo + Actions runner + registry** — infrastructure provisions six
    managed repositories: the private `processor-frequency-scale`,
-   `processor-apparent-power`, `processor-frequency-iec104-export`, and
+   `processor-apparent-power`, `processor-frequency-iec104-export`,
+   `processor-frequency-measurement-session`, and
    `processor-alarm-threshold` processor repositories plus the explicit
-   `gateway-c37-118` test repository. It registers ten
+   `gateway-c37-118` test repository. It registers twelve
    repository-scoped runner connections on one daemon. Each processor seed owns
    CI: test + build image + push for exactly one processor. The gateway-c37-118 seed owns catalog validation, a
    one-shot Masterdata publisher, and source-scoped v2 adapters generated from

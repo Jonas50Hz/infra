@@ -222,6 +222,15 @@ assert_not_contains() {
   fi
 }
 
+file_mode() {
+  path="$1"
+  if stat -f '%Lp' "$path" >/dev/null 2>&1; then
+    stat -f '%Lp' "$path"
+    return
+  fi
+  stat -c '%a' "$path"
+}
+
 test_seeds_and_registers_all_processor_repositories() {
   setup_case seed-new
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
@@ -256,7 +265,7 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains 'owner=wama-admin' "$case_directory/runner/forgejo-gateway-c37-118-agent.identity"
   assert_contains 'repository=gateway-c37-118' "$case_directory/runner/forgejo-gateway-c37-118-agent.identity"
   assert_contains 'username=wama-gateway-c37-118-agent' "$case_directory/runner/forgejo-gateway-c37-118-agent.identity"
-  test "$(stat -c '%a' "$case_directory/runner/forgejo-gateway-c37-118-agent.token")" = 600
+  test "$(file_mode "$case_directory/runner/forgejo-gateway-c37-118-agent.token")" = 600
   if grep -Eq 'test-(gateway-c37-118-agent-token|package-token)' "$case_directory/bootstrap.log"; then
     printf '%s\n' "Bootstrap wrote a Forgejo token to its log" >&2
     exit 1

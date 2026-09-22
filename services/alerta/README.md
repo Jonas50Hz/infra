@@ -7,8 +7,12 @@ release and installs the local `alerta.plugins` entry-point package.
 
 The mounted `config/alertad.conf` explicitly configures the isolated
 `alerta-postgres` database and Mailpit SMTP settings. It sets
-`AUTH_REQUIRED=False`; the UI/API is published on all host interfaces at port
-`18081`.
+`AUTH_REQUIRED=False` and defaults the alert list to open or acknowledged WAMA
+incidents; the UI/API is published on all host interfaces at port `18081`.
+
+Operators can open the filtered
+[WAMA incident view](http://localhost:18081/alerts#environment:WAMA;status:open,ack;dateRange:,;sb:default;sd:0;asi:0)
+to observe a live threshold incident during the simulator excursion.
 
 The image's built-in admin-key bootstrap creates one fixed trusted-PoC key used
 only by `alarm-alerta-ingress` to set the required `customer=wama` mapping. It

@@ -12,7 +12,7 @@ Edit only
 [policy.py](src/processor_frequency_measurement_session/policy.py) to add,
 remove, or revise reviewed source mappings. It declares each approved frequency
 MRID and the exact eight sorted MRIDs included in that source's session. The
-initial policy is the reviewed `pmu-bay-01` through `pmu-bay-05` catalog. It
+initial policy is the reviewed `pmu-bay-01` through `pmu-bay-03` catalog. It
 does not read YAML, consume `Masterdata`, or infer MRIDs from a prefix.
 
 Update [test_policy.py](tests/test_policy.py) when changing reviewed mappings.

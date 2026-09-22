@@ -1,7 +1,7 @@
 # Forgejo API and Operations
 
 Use the public endpoint for developer and automation clients. The current
-Forgejo service is version 16.0.2 and exposes its versioned REST API under
+Forgejo service is version 16.0.1 and exposes its versioned REST API under
 `/api/v1`.
 
 ```sh

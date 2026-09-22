@@ -313,7 +313,7 @@ defaults of 32 MRIDs and 24 hours. It contains no raw samples.
 The standard Forgejo `processor-frequency-measurement-session` seed consumes
 `LiveMeasurement` and publishes one bounded raw-Protobuf
 `MeasurementSessionRequest` for each eligible Frequency Capture Episode. Its
-explicit five-source, EE-editable Python policy evaluates each source
+explicit three-source, EE-editable Python policy evaluates each source
 independently: a valid `f > 50.2 Hz` opens an episode, and a valid
 `f <= 50.2 Hz` closes it. The request bounds are
 `[onset - 10s, clearance + 10s)`.
