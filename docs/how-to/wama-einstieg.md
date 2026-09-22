@@ -46,7 +46,9 @@ docker compose up -d --build
 Der Simulator ist eine Quelle für C37.118-Telegramme. Er schreibt nicht selbst
 nach Kafka und kennt weder Druid noch Grafana. Die Gateway-Demonstration
 verbindet ihn mit der Infrastruktur. Nach dem Start können Provisionierung und
-Gateway-Workflow einige Sekunden benötigen.
+Gateway-Workflow einige Sekunden benötigen. Die Infrastruktur startet oder
+steuert den Simulator nicht; ohne das passende externe Drei-PMU-V2-Profil kann
+die Live-Verifikation des Gateway-Workflows nicht grün werden.
 
 ## 3. Vom PMU-Wert zur Anzeige
 

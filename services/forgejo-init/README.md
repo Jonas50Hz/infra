@@ -12,13 +12,20 @@ Each mounted repository source is pushed to `main` only when its remote has no r
 existing nonempty private repository is left unchanged; an existing nonprivate
 repository makes bootstrap fail without changing it.
 
-For the default C37.118 demonstration, a fresh C37.118 gateway source uses that
-initial `main` push to trigger its existing workflow. For an existing private
-`gateway-c37-118` repository, bootstrap dispatches only its
-`gateway.yaml` workflow at `main` once per retained runner state after it
-writes the scoped runner configuration. The root service never runs the gateway
-Compose project; the workflow remains responsible for its marker-owned source
-adapters.
+For a fresh empty remote, that initial `main` push triggers its repository
+workflow, so bootstrap does not also dispatch it. For every existing nonempty
+managed repository, bootstrap waits until all repository checks, scoped runner
+registrations, and runner configuration writes finish, then dispatches its
+`processor.yaml` or `gateway.yaml` workflow at `main` through the administrator
+API. It repeats those existing-repository dispatches on every `forgejo-init`
+invocation. The optional alarm workflow is included only when
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` is nonempty.
+
+The root service never runs the gateway Compose project or starts, stops, or
+controls the separate simulator; the gateway workflow remains responsible only
+for its marker-owned source adapters. Its live verification requires the
+matching externally started C37.118 simulator, so a queued gateway workflow may
+not become green until that source is available.
 
 Configure the values in the root `.env`; a duplicate
 [forgejo-init.env.example](forgejo-init.env.example) is available as a focused

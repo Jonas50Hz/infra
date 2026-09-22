@@ -13,7 +13,10 @@ explicitly enabled and repositories are forced private for this trusted PoC.
 The one-shot [`../forgejo-init/`](../forgejo-init/) service creates the initial
 administrator, private seeded `processor-frequency-scale`,
 `processor-apparent-power`, `processor-frequency-iec104-export`,
-`processor-frequency-measurement-session`, and `processor-alarm-threshold`
-repositories, plus the `gateway-c37-118` repository, with separate
-CI/deployment runner connections scoped to each repository. The parent
-infrastructure repository is never pushed to this Forgejo instance.
+`processor-frequency-measurement-session`, and `gateway-c37-118` repositories,
+with separate CI/deployment runner connections scoped to each repository.
+`processor-alarm-threshold` is included only when configured. A fresh empty
+remote is seeded with `main` and relies on that push to start its workflow;
+every existing managed remote receives a `main` workflow dispatch on each
+bootstrap invocation. The parent infrastructure repository is never pushed to
+this Forgejo instance.

@@ -29,6 +29,12 @@ registers `wama-processor-alarm-threshold-ci` and
 `wama-processor-alarm-threshold-deploy`, bringing the total to twelve. The
 alarm-threshold application is otherwise disabled.
 
+After runner configuration is written, bootstrap dispatches `main` for every
+existing managed repository on each invocation. Fresh empty repositories rely
+on their initial seed push to trigger the same workflow and receive no duplicate
+manual dispatch. The runner executes only those repository-scoped application
+workflows; it does not deploy or control the root Compose project.
+
 The service mounts `/var/run/docker.sock` plus all individual managed roots.
 This grants trusted workflow code broad control of the Docker host. Limit write
 access to all managed repositories and do not reuse this

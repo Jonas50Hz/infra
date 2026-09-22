@@ -72,11 +72,12 @@ This is NOT the production target (production is Kubernetes-based).
 - The legacy Phase 1 `pmu-gateway` fixture is retained for reference only and
   is excluded from the root Compose assembly. The standalone C37.118 simulator
   lives in the separately managed `~/c37-118-simulator` repository. It is
-  manually started with its default three-PMU V2 profile and does not publish
-  Kafka or Common Format records.
+  manually started with its default five-PMU V2 profile, matching catalog
+  sources `pmu-bay-01` through `pmu-bay-05` at listeners `4712` through
+  `4716`, and does not publish Kafka or Common Format records.
 - `c37-118-simulator` is never a root Compose service. Its separate Compose
   project joins the external `wama-infra` network at the reviewed
-  `172.30.0.10` address only after an operator starts its default three-PMU V2
+  `172.30.0.10` address only after an operator starts its default five-PMU V2
   profile. It has no Kafka, Common Format, gateway, or Forgejo dependency. Its
   large fleet checks remain manually armed and isolated from `wama-infra`.
 - Druid owns `services/druid/` and persists its single-server state in

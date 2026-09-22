@@ -40,10 +40,13 @@ while omitting nested `.git` metadata. The C37.118 gateway credential installer
 accepts the co-located gateway checkout and rejects the parent infrastructure
 checkout.
 
-`forgejo-init` seeds each repository only when its remote has no refs; an
-existing nonempty private repository is left unchanged. Processor workflows
-deploy only their one processor into their own marker-owned deployment root.
-The C37.118 gateway workflow uses its separate marker-owned root to publish
+`forgejo-init` seeds each repository only when its remote has no refs; that
+initial `main` push starts the repository workflow without a duplicate manual
+dispatch. An existing nonempty private repository is left unchanged, then its
+`processor.yaml` or `gateway.yaml` workflow is dispatched at `main` after
+runner configuration on every bootstrap invocation. Processor workflows deploy
+only their one processor into their own marker-owned deployment root. The
+C37.118 gateway workflow uses its separate marker-owned root to publish
 Masterdata once and reconcile only its catalog-derived source adapters. The
 parent `infra` repository retains all other assets, including the current
 `pmu-gateway` and every infrastructure service.

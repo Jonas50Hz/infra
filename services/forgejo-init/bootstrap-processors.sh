@@ -10,7 +10,6 @@ runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
 runner_layout=ten-connections-v7
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
-gateway_c37_118_workflow_trigger_file="$runner_dir/gateway-c37-118.workflow-triggered"
 gateway_c37_118_agent_username="${FORGEJO_GATEWAY_C37_118_AGENT_USERNAME:-wama-gateway-c37-118-agent}"
 gateway_c37_118_agent_email="${FORGEJO_GATEWAY_C37_118_AGENT_EMAIL:-wama-gateway-c37-118-agent@local}"
 gateway_c37_118_agent_token_name=wama-gateway-c37-118-agent
@@ -186,14 +185,16 @@ forgejo_api_as_admin() {
     "$@"
 }
 
-dispatch_gateway_c37_118_workflow() {
+dispatch_workflow() {
+  repository="$1"
+  workflow="$2"
   forgejo_api_as_admin \
     --request POST \
     --header "Accept: application/json" \
     --header "Content-Type: application/json" \
     --data '{"ref":"main"}' \
-    "$api_url/repos/$admin_username/$gateway_c37_118_repository/actions/workflows/gateway.yaml/dispatches"
-  printf '%s\n' "Queued gateway-c37-118 workflow for main."
+    "$api_url/repos/$admin_username/$repository/actions/workflows/$workflow/dispatches"
+  printf '%s\n' "Queued $repository workflow $workflow for main."
 }
 
 lookup_gateway_c37_118_agent() {
@@ -399,6 +400,11 @@ umask 077
 mkdir -p "$runner_dir"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
+frequency_seeded_file="$temporary_directory/processor-frequency-scale.seeded"
+apparent_seeded_file="$temporary_directory/processor-apparent-power.seeded"
+frequency_iec104_export_seeded_file="$temporary_directory/processor-frequency-iec104-export.seeded"
+frequency_measurement_session_seeded_file="$temporary_directory/processor-frequency-measurement-session.seeded"
+alarm_threshold_seeded_file="$temporary_directory/processor-alarm-threshold.seeded"
 gateway_c37_118_seeded_file="$temporary_directory/gateway-c37-118.seeded"
 initialize_deploy_root "$frequency_repository" "$frequency_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$apparent_repository" "$apparent_deploy_root" "$processor_deploy_marker"
@@ -417,12 +423,27 @@ if [ -n "$alarm_threshold_repository" ]; then
   ensure_repository "$alarm_threshold_repository"
 fi
 ensure_repository "$gateway_c37_118_repository"
-seed_repository_if_empty "$frequency_repository" "$seed_root/processor-frequency-scale"
-seed_repository_if_empty "$apparent_repository" "$seed_root/processor-apparent-power"
-seed_repository_if_empty "$frequency_iec104_export_repository" "$seed_root/processor-frequency-iec104-export"
-seed_repository_if_empty "$frequency_measurement_session_repository" "$seed_root/processor-frequency-measurement-session"
+seed_repository_if_empty \
+  "$frequency_repository" \
+  "$seed_root/processor-frequency-scale" \
+  "$frequency_seeded_file"
+seed_repository_if_empty \
+  "$apparent_repository" \
+  "$seed_root/processor-apparent-power" \
+  "$apparent_seeded_file"
+seed_repository_if_empty \
+  "$frequency_iec104_export_repository" \
+  "$seed_root/processor-frequency-iec104-export" \
+  "$frequency_iec104_export_seeded_file"
+seed_repository_if_empty \
+  "$frequency_measurement_session_repository" \
+  "$seed_root/processor-frequency-measurement-session" \
+  "$frequency_measurement_session_seeded_file"
 if [ -n "$alarm_threshold_repository" ]; then
-  seed_repository_if_empty "$alarm_threshold_repository" "$seed_root/processor-alarm-threshold"
+  seed_repository_if_empty \
+    "$alarm_threshold_repository" \
+    "$seed_root/processor-alarm-threshold" \
+    "$alarm_threshold_seeded_file"
 fi
 seed_repository_if_empty \
   "$gateway_c37_118_repository" \
@@ -523,9 +544,25 @@ server:
 $runner_connections
 EOF
 
-if [ -e "$gateway_c37_118_seeded_file" ]; then
-  : > "$gateway_c37_118_workflow_trigger_file"
-elif [ ! -e "$gateway_c37_118_workflow_trigger_file" ]; then
-  dispatch_gateway_c37_118_workflow
-  : > "$gateway_c37_118_workflow_trigger_file"
+# Older bootstrap versions used this file to suppress future gateway dispatches.
+# Dispatches are now intentionally per bootstrap invocation.
+rm -f "$runner_dir/gateway-c37-118.workflow-triggered"
+
+if [ ! -e "$frequency_seeded_file" ]; then
+  dispatch_workflow "$frequency_repository" processor.yaml
+fi
+if [ ! -e "$apparent_seeded_file" ]; then
+  dispatch_workflow "$apparent_repository" processor.yaml
+fi
+if [ ! -e "$frequency_iec104_export_seeded_file" ]; then
+  dispatch_workflow "$frequency_iec104_export_repository" processor.yaml
+fi
+if [ ! -e "$frequency_measurement_session_seeded_file" ]; then
+  dispatch_workflow "$frequency_measurement_session_repository" processor.yaml
+fi
+if [ -n "$alarm_threshold_repository" ] && [ ! -e "$alarm_threshold_seeded_file" ]; then
+  dispatch_workflow "$alarm_threshold_repository" processor.yaml
+fi
+if [ ! -e "$gateway_c37_118_seeded_file" ]; then
+  dispatch_workflow "$gateway_c37_118_repository" gateway.yaml
 fi

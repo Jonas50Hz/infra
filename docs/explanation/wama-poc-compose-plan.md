@@ -36,7 +36,7 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `kafka-ui` — topic/message inspection.
 - `pmu-gateway` — deprecated fake PMU reference fixture, excluded from default
    Compose startup. Live-measurement checks require an explicit producer.
-- External `c37-118-simulator` repository — manually started default three-PMU
+- External `c37-118-simulator` repository — manually started default five-PMU
    V2 standalone C37.118 TCP source simulator with up to 100 independent PMU
    listeners. It joins the existing `wama-infra` network but is not a root
    Compose service; alternate profiles and its large fleet tests remain
@@ -207,7 +207,7 @@ retroactive correctness for pre-cutover state; see
    contract, and deployment-guard tests -> Systemexperte decision -> audited
    Masterdata and source-gateway reconciliation. The guarded adapter path is
    limited to reviewed legacy-v2 C37.118 TCP sources. An operator manually
-   starts the matching three-PMU V2 fixture from `~/c37-118-simulator`, but only
+   starts the matching five-PMU V2 fixture from `~/c37-118-simulator`, but only
    the C37.118 gateway workflow owns adapter reconciliation.
 
 ### Phase 5 — CI/CD loop (automates deploy)
@@ -221,9 +221,12 @@ retroactive correctness for pre-cutover state; see
    connections. Each processor seed owns CI: test + build image + push for
    exactly one processor. The gateway-c37-118 seed owns catalog validation, a
    one-shot Masterdata publisher, and source-scoped v2 adapters generated from
-   its reviewed catalog. A fresh C37.118 gateway source uses its initial `main` push
-   to start this flow; bootstrap dispatches only this workflow once per
-   retained runner state for an existing private C37.118 gateway remote.
+   its reviewed catalog. A fresh managed remote uses its initial `main` push to
+   start its flow without a duplicate manual dispatch; after runner
+   configuration, bootstrap dispatches each existing enabled repository's
+   `processor.yaml` or `gateway.yaml` workflow at `main` on every invocation.
+   The gateway live verifier needs the matching separately started C37.118
+   simulator, so its queued workflow may not become green without that source.
    The standard `processor-frequency-measurement-session` seed turns Frequency
    Capture Episodes from `LiveMeasurement` into bounded `MeasurementSession`
    requests. Its timing is PoC best effort, does not guarantee Druid visibility

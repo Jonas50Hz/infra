@@ -27,12 +27,13 @@ holds the proposal and approval trail. Each published record also contains a
 catalog ID, Forgejo revision, and publication time. PostgreSQL remains limited
 to the root-owned Blobmeta projection in this phase.
 
-For the local demonstration, an operator separately starts the fixed three-PMU
-V2 source fixture. A fresh C37.118 gateway source uses its initial `main` push
-to trigger the repository workflow; bootstrap dispatches only that same workflow
-at `main` once per retained runner state for an existing private C37.118 gateway
-repository. Root Compose does not run the C37.118 gateway Compose project or
-manage its adapters.
+For the local demonstration, an operator separately starts the fixed five-PMU
+V2 source fixture. A fresh C37.118 gateway remote uses its initial `main` push
+to trigger the repository workflow without a duplicate manual dispatch. After
+runner configuration, bootstrap dispatches each existing nonempty managed
+repository's `processor.yaml` or `gateway.yaml` workflow at `main` on every
+invocation. Root Compose does not run the C37.118 gateway Compose project,
+manage its adapters, or start and control the simulator.
 
 ## Wire Contract
 
@@ -116,23 +117,27 @@ Future field timestamps are rejected. Generic Common Format quality is limited
 to `valid` and `substituted` from conservative v2 `STAT` handling; a separate
 status-evidence contract remains necessary for LFR audit use.
 
-## Three-PMU Demonstration
+## Five-PMU Demonstration
 
 The manually operated `~/c37-118-simulator` repository provides the separate
 V2 source fixture for this declared Forgejo gateway-deployment test. An
-operator starts its `three-pmu-v2.yaml` profile at the stable `wama-infra`
-address `172.30.0.10`, listeners `4712` through `4714`, and matching C37.118
-PMU IDCODEs `1001` through `1003`. The C37.118 gateway repository neither
+operator starts its `five-pmu-v2.yaml` profile at the stable `wama-infra`
+address `172.30.0.10`, listeners `4712` through `4716`, and matching C37.118
+PMU IDCODEs `1001` through `1005`. The C37.118 gateway repository neither
 deploys, restarts, nor stops the simulator.
 
-The initial approved Forgejo catalog contains `pmu-bay-01` through
-`pmu-bay-03`, one source for each listener. Each source maps six phasor
+The gateway workflow's bounded live verification requires this matching
+externally running source fixture. Root startup can queue the workflow, but it
+may not become green until the simulator is started with the matching profile.
+
+The approved Forgejo catalog contains `pmu-bay-01` through `pmu-bay-05`, one
+source for each listener. Each source maps six phasor
 magnitudes, frequency, and ROCOF to eight immutable MRIDs. Source YAML files
 are the reviewed enrollment surface: adding or removing one changes the active
 Masterdata record, generated adapter, and verifier expectation while the
-operator-managed simulator runs its fixed three-PMU fixture. When all three
-initial sources are active, the adapters produce approximately
-$3 \times 8 \times 50 = 1{,}200$ records per second at the fixture's 50 Hz
+operator-managed simulator runs its fixed five-PMU fixture. When all five
+catalog sources are active, the adapters produce approximately
+$5 \times 8 \times 50 = 2{,}000$ records per second at the fixture's 50 Hz
 rate.
 
 When catalog-derived adapters are active, a successful Forgejo deployment runs
