@@ -5,7 +5,7 @@ Apache Kafka broker in KRaft combined mode, initializes the WAMA topic
 contract, provides Kafka UI to inspect brokers, topics, consumer groups, and
 messages, retains an optional legacy PMU fixture for reference, provides Forgejo with one
 Actions runner, provides the `wama-infra` network for a manually started
-five-PMU C37.118 V2 source fixture and queues the approved C37.118 gateway workflow
+three-PMU C37.118 V2 source fixture and queues the approved C37.118 gateway workflow
 for source-scoped adapters, includes SeaweedFS as
 authenticated S3-compatible blob storage, and accepts browser-confirmed bounded measurement-session requests before
 materializing them from Druid into integrity-checked Parquet artifacts.
@@ -78,7 +78,7 @@ processor applications.
 
 The standard `processor-frequency-measurement-session` seed consumes
 `LiveMeasurement` and produces bounded `MeasurementSession` requests for
-Frequency Capture Episodes. Its five-source capture policy and PoC timing
+Frequency Capture Episodes. Its three-source capture policy and PoC timing
 limits are documented in the
 [data-flow contract](docs/reference/wama-data-flow-contracts.md); it does not
 represent Alarm lifecycle.
@@ -88,7 +88,7 @@ is the explicit C37.118 gateway-deployment-test seed. A reviewed legacy-v2
 source catalog reconciles raw-Protobuf Masterdata records and tombstones to
 Kafka, then reconciles one source-scoped adapter per active catalog source. It
 does not modify the deprecated `pmu-gateway` fixture or run root Compose services.
-An operator manually starts the matching five-PMU V2 fixture from
+An operator manually starts the matching three-PMU V2 fixture from
 `~/c37-118-simulator` after the root stack has created `wama-infra`. A fresh
 C37.118 gateway source uses its initial `main` push to trigger the workflow; an
 existing private C37.118 gateway repository receives one scoped `gateway.yaml`
@@ -169,7 +169,7 @@ docker compose up -d
 
 This starts the root infrastructure and queues the explicitly scoped C37.118
 gateway workflow; Compose returns before that asynchronous Actions run
-completes. Start the five-PMU V2 source separately from `~/c37-118-simulator`
+completes. Start the three-PMU V2 source separately from `~/c37-118-simulator`
 before the C37.118 gateway adapters need it. A green `gateway.yaml` run in
 Forgejo proves the catalog-derived adapters, Kafka records, and their
 raw-Protobuf contract.
@@ -333,6 +333,21 @@ verify initial email delivery, refresh and rule-revision suppression,
 acknowledgement preservation, tombstone closure, a new episode, restart snapshot
 reconciliation, and foreign-alert isolation.
 
+Run the complete C37.118 high-frequency Alarm proof only after the separate
+three-PMU V2 simulator, the green `gateway-c37-118` workflow, and the green
+`processor-alarm-threshold` workflow are running:
+
+```sh
+WAMA_RUN_C37_118_ALARM_WORKFLOW_TEST=run-c37-118-alarm-workflow-test \
+  scripts/test-c37-118-alarm-workflow.sh
+```
+
+The test requires successful `infra-readiness`, uses the simulator Control
+Console's normal prepare/confirm API to run the PMU Bay 01 `signal-excursion`,
+and proves the resulting `frequency-high` incident opens and later closes in
+Alerta. It never starts, stops, or deploys root infrastructure, the simulator,
+the gateway, or the processor.
+
 Open the live IEC 104 monitor at `http://localhost:3003`. The browser's
 outgoing read-only IEC 104 control-center connection starts with its process
 and persists with zero WebSocket viewers. Its UI pages are transient viewers
@@ -355,6 +370,13 @@ roots use
 modifying any existing repository that already has refs, and it fails without
 mutation if an existing repository is not private. Its generated runner
 credentials remain in the `forgejo-runner-data` volume.
+
+If one of these managed Forgejo repositories was lost, retain or restore its
+co-located seed under [`forgejo-repos/`](forgejo-repos/) and start the root
+stack. `forgejo-init` recreates a missing or empty private remote from that
+seed, including the alarm processor and C37.118 gateway sources. It
+intentionally never overwrites a nonempty remote; resolve that repository
+through its own review workflow instead.
 
 After bootstrap, clone the individual managed repository you intend to work on.
 These commands must never be run from this infrastructure checkout:
@@ -459,7 +481,7 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 ## C37.118 Simulator
 
 The manually operated C37.118 simulator lives in
-`~/c37-118-simulator` and is the five-PMU C37.118.2-2011 V2 source fixture for
+`~/c37-118-simulator` and is the three-PMU C37.118.2-2011 V2 source fixture for
 the C37.118 gateway demonstration. It remains a standalone TCP source and
 protocol-test service: it neither implements nor validates a gateway, and it
 has no Kafka, Common Format, or Druid dependency. V2 performs HDR -> CFG-1 ->

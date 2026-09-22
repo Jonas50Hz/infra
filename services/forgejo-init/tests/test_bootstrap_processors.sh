@@ -224,11 +224,12 @@ assert_not_contains() {
 }
 
 file_mode() {
-  if stat -c '%a' "$1" >/dev/null 2>&1; then
-    stat -c '%a' "$1"
-  else
-    stat -f '%Lp' "$1"
+  path="$1"
+  if stat -f '%Lp' "$path" >/dev/null 2>&1; then
+    stat -f '%Lp' "$path"
+    return
   fi
+  stat -c '%a' "$path"
 }
 
 test_seeds_and_registers_all_processor_repositories() {

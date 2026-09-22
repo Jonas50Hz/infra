@@ -25,6 +25,15 @@ assert_contains() {
   grep -Fq "$expected" "$path" || fail "Expected $path to contain $expected"
 }
 
+file_mode() {
+  path="$1"
+  if stat -f '%Lp' "$path" >/dev/null 2>&1; then
+    stat -f '%Lp' "$path"
+    return
+  fi
+  stat -c '%a' "$path"
+}
+
 create_fake_docker() {
   fake_bin="$1"
   mkdir "$fake_bin"

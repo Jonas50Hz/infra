@@ -16,12 +16,12 @@ from processor_frequency_iec104_export.config import (
 class SettingsTests(unittest.TestCase):
     """Keep reviewed direct-PoC mappings explicit and bounded."""
 
-    def test_loads_the_packaged_five_gateway_map(self) -> None:
+    def test_loads_the_packaged_three_gateway_map(self) -> None:
         settings = Settings.from_environment({})
 
         self.assertEqual(settings.config_path, "/etc/wama/frequency-iec104-export.yaml")
-        self.assertEqual(len(settings.mappings), 5)
-        for bay in range(1, 6):
+        self.assertEqual(len(settings.mappings), 3)
+        for bay in range(1, 4):
             mapping = settings.mapping_for(f"urn:wama:poc:pmu:bay-{bay:02}:frequency")
             self.assertIsNotNone(mapping)
             assert mapping is not None
