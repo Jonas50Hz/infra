@@ -27,6 +27,10 @@ download links without publishing a request or exporting data. It checks the
 IEC 104 browser HTTP health and accepts its persistent active status, including
 zero UI viewers. It does not open a second IEC control-center connection.
 
+`processor-alarm-threshold` is not required by default. When
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` is nonempty, readiness adds that configured
+repository to its Forgejo repository and runner-connection checks.
+
 The probe deliberately does not require PostgreSQL to have no application
 tables. The Blobmeta catalog is an app-owned schema and is verified by its own
 request-to-Blobmeta test, not by this infrastructure-only gate.

@@ -155,6 +155,7 @@ EOF
 }
 
 setup_case() {
+  unset FORGEJO_ALARM_THRESHOLD_REPOSITORY
   case_directory="$temporary_root/$1"
   mkdir -p \
     "$case_directory/seeds/processor-frequency-scale" \
@@ -222,8 +223,17 @@ assert_not_contains() {
   fi
 }
 
+file_mode() {
+  if stat -c '%a' "$1" >/dev/null 2>&1; then
+    stat -c '%a' "$1"
+  else
+    stat -f '%Lp' "$1"
+  fi
+}
+
 test_seeds_and_registers_all_processor_repositories() {
   setup_case seed-new
+  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor-alarm-threshold
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
   export BOOTSTRAP_TEST_REPOSITORY_REFS=
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
@@ -256,7 +266,7 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains 'owner=wama-admin' "$case_directory/runner/forgejo-gateway-c37-118-agent.identity"
   assert_contains 'repository=gateway-c37-118' "$case_directory/runner/forgejo-gateway-c37-118-agent.identity"
   assert_contains 'username=wama-gateway-c37-118-agent' "$case_directory/runner/forgejo-gateway-c37-118-agent.identity"
-  test "$(stat -c '%a' "$case_directory/runner/forgejo-gateway-c37-118-agent.token")" = 600
+  test "$(file_mode "$case_directory/runner/forgejo-gateway-c37-118-agent.token")" = 600
   if grep -Eq 'test-(gateway-c37-118-agent-token|package-token)' "$case_directory/bootstrap.log"; then
     printf '%s\n' "Bootstrap wrote a Forgejo token to its log" >&2
     exit 1
@@ -273,8 +283,22 @@ test_seeds_and_registers_all_processor_repositories() {
   test -f "$case_directory/gateway-c37-118-deploy/.wama-forgejo-gateway-c37-118-root"
 }
 
+test_skips_unconfigured_alarm_threshold_repository() {
+  setup_case skip-unconfigured-alarm-threshold
+  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
+  export BOOTSTRAP_TEST_REPOSITORY_REFS=
+  run_bootstrap > "$case_directory/bootstrap.log" 2>&1
+  assert_not_contains processor-alarm-threshold "$case_directory/git.log"
+  assert_not_contains processor-alarm-threshold "$case_directory/wget.log"
+  assert_not_contains processor-alarm-threshold "$case_directory/runner/config.yaml"
+  assert_not_contains processor-alarm-threshold "$case_directory/runner/forgejo-managed-repositories.scope"
+  assert_contains ten-connections-v7 "$case_directory/runner/forgejo-managed-repositories.layout"
+  test ! -e "$case_directory/alarm-threshold-deploy"
+}
+
 test_skips_nonempty_repositories() {
   setup_case skip-nonempty
+  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor-alarm-threshold
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
   export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
@@ -347,6 +371,7 @@ test_rejects_unmarked_nonempty_frequency_measurement_session_root() {
 
 test_rejects_unmarked_nonempty_alarm_threshold_root() {
   setup_case reject-alarm-threshold-root
+  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor-alarm-threshold
   mkdir "$case_directory/alarm-threshold-deploy"
   printf '%s\n' unmanaged > "$case_directory/alarm-threshold-deploy/file"
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
@@ -356,6 +381,31 @@ test_rejects_unmarked_nonempty_alarm_threshold_root() {
     exit 1
   fi
   assert_contains "must be empty before bootstrap creates its marker" "$case_directory/bootstrap.log"
+}
+
+test_rejects_missing_configured_alarm_threshold_seed() {
+  setup_case reject-missing-alarm-threshold-seed
+  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor-alarm-threshold
+  rm -rf "$case_directory/seeds/processor-alarm-threshold"
+  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
+  export BOOTSTRAP_TEST_REPOSITORY_REFS=
+  if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
+    printf '%s\n' "Bootstrap accepted a configured alarm-threshold repository without a seed" >&2
+    exit 1
+  fi
+  assert_contains "Forgejo seed is unavailable for processor-alarm-threshold" "$case_directory/bootstrap.log"
+}
+
+test_rejects_invalid_configured_alarm_threshold_repository() {
+  setup_case reject-invalid-alarm-threshold-repository
+  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor/alarm-threshold
+  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
+  export BOOTSTRAP_TEST_REPOSITORY_REFS=
+  if run_bootstrap > "$case_directory/bootstrap.log" 2>&1; then
+    printf '%s\n' "Bootstrap accepted an invalid configured alarm-threshold repository" >&2
+    exit 1
+  fi
+  assert_contains "FORGEJO_ALARM_THRESHOLD_REPOSITORY must contain only letters" "$case_directory/bootstrap.log"
 }
 
 test_rejects_unmarked_nonempty_gateway_c37_118_root() {
@@ -372,10 +422,13 @@ test_rejects_unmarked_nonempty_gateway_c37_118_root() {
 }
 
 test_seeds_and_registers_all_processor_repositories
+test_skips_unconfigured_alarm_threshold_repository
 test_skips_nonempty_repositories
 test_preserves_gateway_workflow_marker_across_runner_scope_reset
 test_rejects_unmarked_nonempty_processor_root
 test_rejects_unmarked_nonempty_frequency_iec104_export_root
 test_rejects_unmarked_nonempty_frequency_measurement_session_root
 test_rejects_unmarked_nonempty_alarm_threshold_root
+test_rejects_missing_configured_alarm_threshold_seed
+test_rejects_invalid_configured_alarm_threshold_repository
 test_rejects_unmarked_nonempty_gateway_c37_118_root

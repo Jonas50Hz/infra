@@ -1,4 +1,4 @@
-FROM codeberg.org/forgejo/forgejo:16.0.2
+FROM codeberg.org/forgejo/forgejo:16.0.1
 
 USER root
 

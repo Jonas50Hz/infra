@@ -12,7 +12,6 @@ DEFAULT_FORGEJO_MANAGED_REPOSITORIES = (
     "processor-apparent-power",
     "processor-frequency-iec104-export",
     "processor-frequency-measurement-session",
-    "processor-alarm-threshold",
     "gateway-c37-118",
 )
 
@@ -122,11 +121,7 @@ class Settings:
                 "FORGEJO_ADMIN_USERNAME",
                 "wama-admin",
             ),
-            forgejo_managed_repositories=_repositories(
-                values,
-                "FORGEJO_MANAGED_REPOSITORIES",
-                DEFAULT_FORGEJO_MANAGED_REPOSITORIES,
-            ),
+            forgejo_managed_repositories=_managed_repositories(values),
             forgejo_url=_url(values, "FORGEJO_URL", "http://forgejo:3000"),
             grafana_password=_required(values, "GF_SECURITY_ADMIN_PASSWORD", "wama-admin"),
             grafana_url=_url(values, "GRAFANA_URL", "http://grafana:3000"),
@@ -243,6 +238,27 @@ def _buckets(values: Mapping[str, str]) -> tuple[str, ...]:
     return buckets
 
 
+def _managed_repositories(values: Mapping[str, str]) -> tuple[str, ...]:
+    repositories = _repositories(
+        values,
+        "FORGEJO_MANAGED_REPOSITORIES",
+        DEFAULT_FORGEJO_MANAGED_REPOSITORIES,
+    )
+    alarm_threshold_repository = values.get(
+        "FORGEJO_ALARM_THRESHOLD_REPOSITORY",
+        "",
+    ).strip()
+    if not alarm_threshold_repository:
+        return repositories
+    _validate_repository_identifier(
+        alarm_threshold_repository,
+        "FORGEJO_ALARM_THRESHOLD_REPOSITORY",
+    )
+    if alarm_threshold_repository in repositories:
+        return repositories
+    return (*repositories, alarm_threshold_repository)
+
+
 def _repositories(
     values: Mapping[str, str],
     name: str,
@@ -258,12 +274,16 @@ def _repositories(
     if len(set(repositories)) != len(repositories):
         raise ConfigurationError(f"{name} must not repeat repositories")
     for repository in repositories:
-        normalized = repository.replace("-", "").replace("_", "").replace(".", "")
-        if not normalized.isalnum():
-            raise ConfigurationError(
-                f"{name} repositories must use letters, numbers, dots, underscores, or hyphens"
-            )
+        _validate_repository_identifier(repository, name)
     return repositories
+
+
+def _validate_repository_identifier(value: str, name: str) -> None:
+    normalized = value.replace("-", "").replace("_", "").replace(".", "")
+    if not normalized.isalnum():
+        raise ConfigurationError(
+            f"{name} repositories must use letters, numbers, dots, underscores, or hyphens"
+        )
 
 
 def _finite_float(values: Mapping[str, str], name: str, default: float) -> float:

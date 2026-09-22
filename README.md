@@ -54,7 +54,6 @@ never added as a Forgejo remote and is never pushed to Forgejo.
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
 [`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),
 [`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/),
-[`forgejo-repos/processor-alarm-threshold/`](forgejo-repos/processor-alarm-threshold/),
 and the standard `processor-frequency-measurement-session` seed
 are separate processor-repository seeds. `forgejo-init` automatically creates
 one private Forgejo repository per seed and seeds each `main` branch only when
@@ -69,6 +68,13 @@ gateway-deployment test; it does not move the deprecated `pmu-gateway` fixture o
 infrastructure service out of this checkout. Processor containers connect
 through the external `wama-infra` Docker network; they do not include, modify,
 or redeploy this Compose project.
+
+`processor-alarm-threshold` is an optional Forgejo application and is disabled
+by default because its source is not part of this checkout. Set
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` only after supplying its source at
+`forgejo-repos/processor-alarm-threshold`; bootstrap then applies the same
+private-repository, seed, deployment-root, and runner checks as for the other
+processor applications.
 
 The standard `processor-frequency-measurement-session` seed consumes
 `LiveMeasurement` and produces bounded `MeasurementSession` requests for
@@ -337,12 +343,13 @@ exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator and six private managed
+`forgejo-init` creates the configured administrator and five private managed
 repositories: `<owner>/processor-frequency-scale`,
 `<owner>/processor-apparent-power`, `<owner>/processor-frequency-iec104-export`,
-`<owner>/processor-alarm-threshold`,
 `<owner>/processor-frequency-measurement-session`, and
-`<owner>/gateway-c37-118`. The five processor roots use
+`<owner>/gateway-c37-118`. When `FORGEJO_ALARM_THRESHOLD_REPOSITORY` is
+configured, it also creates `<owner>/processor-alarm-threshold`. The processor
+roots use
 `.wama-forgejo-processor-root`; the C37.118 gateway root uses
 `.wama-forgejo-gateway-c37-118-root`. Bootstrap skips seeding without
 modifying any existing repository that already has refs, and it fails without
@@ -396,19 +403,19 @@ project, Forgejo bootstrap guard, and C37.118 gateway credential bridge together
 sh scripts/test-masterdata-gateway-c37-118.sh
 ```
 
-Each of the six managed repositories has distinct repository-scoped CI and
-deployment runner connections, twelve in total, all handled by the same
-capacity-one runner daemon. The deployment connection runs in the runner
-container with the host Docker socket and its matching deployment root mounted
-at the same path. This is trusted local-PoC access: managed-repository workflow
-authors can control the Docker host. Do not expose this runner to untrusted
-repositories, users, or production workloads.
+Each of the five default managed repositories has distinct repository-scoped CI
+and deployment runner connections, ten in total, all handled by the same
+capacity-one runner daemon. Configuring `processor-alarm-threshold` adds its two
+connections. The deployment connection runs in the runner container with the
+host Docker socket and its matching deployment root mounted at the same path.
+This is trusted local-PoC access: managed-repository workflow authors can
+control the Docker host. Do not expose this runner to untrusted repositories,
+users, or production workloads.
 
 Create or adapt processors only from the instructions in the individual
 [frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
 [apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
 [frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
-[alarm-threshold README](forgejo-repos/processor-alarm-threshold/README.md) or
 [C37.118 gateway README](forgejo-repos/gateway-c37-118/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 

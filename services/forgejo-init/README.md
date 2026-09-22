@@ -1,11 +1,13 @@
 # Forgejo bootstrap
 
 `forgejo-init` runs after Forgejo becomes healthy. It creates the configured
-administrator and ensures six private repositories through the Forgejo API:
+administrator and ensures five private repositories through the Forgejo API:
 `processor-frequency-scale`, `processor-apparent-power`, and
-`processor-frequency-iec104-export`, `processor-alarm-threshold`,
-`processor-frequency-measurement-session`, and
-`gateway-c37-118`.
+`processor-frequency-iec104-export`, `processor-frequency-measurement-session`,
+and `gateway-c37-118`. `processor-alarm-threshold` is disabled by default. Set
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` only when its source is available at
+`forgejo-repos/processor-alarm-threshold`; bootstrap then validates, seeds, and
+registers it as a sixth repository.
 Each mounted repository source is pushed to `main` only when its remote has no refs. An
 existing nonempty private repository is left unchanged; an existing nonprivate
 repository makes bootstrap fail without changing it.
@@ -27,7 +29,8 @@ Runner credentials and a `write:package` token for the configured administrator
 are stored only in the `forgejo-runner-data` volume. The bootstrap script uses
 the administrator credential transiently, creates the scoped package token only
 when its runner-volume file is absent, and registers separate CI and deployment
-connections for all six repositories on the one runner daemon. The generic
+connections for the five default repositories on the one runner daemon. Enabling
+`processor-alarm-threshold` adds its two repository-scoped connections. The generic
 labels remain `wama-processors-ci` and `wama-processors-deploy`; runner
 registration names include the owning repository.
 
@@ -51,9 +54,10 @@ is exported only to the invoked command. Re-run the installer after
 
 `WAMA_FREQUENCY_SCALE_DEPLOY_ROOT`, `WAMA_APPARENT_POWER_DEPLOY_ROOT`,
 `WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT`,
-`WAMA_ALARM_THRESHOLD_DEPLOY_ROOT`,
 `WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT`, and
 `WAMA_GATEWAY_C37_118_DEPLOY_ROOT` must be absolute and not `/`.
+`WAMA_ALARM_THRESHOLD_DEPLOY_ROOT` has the same requirement only when
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` is configured.
 Bootstrap creates `.wama-forgejo-processor-root` only in new or empty processor
 roots and `.wama-forgejo-gateway-c37-118-root` only in the C37.118 gateway root;
 it rejects every unmarked nonempty path. A repository deployment helper copies

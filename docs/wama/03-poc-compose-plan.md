@@ -207,12 +207,14 @@ retroactive correctness for pre-cutover state; see
 
 ### Phase 5 — CI/CD loop (automates deploy)
 13. **Forgejo + Actions runner + registry** — infrastructure provisions five
-   managed repositories: the private `processor-frequency-scale`,
+   default managed repositories: the private `processor-frequency-scale`,
    `processor-apparent-power`, `processor-frequency-iec104-export`, and
-   `processor-alarm-threshold` processor repositories plus the explicit
-   `gateway-c37-118` test repository. It registers ten
-   repository-scoped runner connections on one daemon. Each processor seed owns
-   CI: test + build image + push for exactly one processor. The gateway-c37-118 seed owns catalog validation, a
+   `processor-frequency-measurement-session` processor repositories plus the
+   explicit `gateway-c37-118` test repository. It registers ten
+   repository-scoped runner connections on one daemon. Configuring the optional
+   `processor-alarm-threshold` repository with an available source adds its two
+   connections. Each processor seed owns CI: test + build image + push for
+   exactly one processor. The gateway-c37-118 seed owns catalog validation, a
    one-shot Masterdata publisher, and source-scoped v2 adapters generated from
    its reviewed catalog. A fresh C37.118 gateway source uses its initial `main` push
    to start this flow; bootstrap dispatches only this workflow once per

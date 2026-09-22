@@ -64,7 +64,8 @@ services:
       ALERTA_URL: http://alerta:8080
       FORGEJO_ADMIN_PASSWORD: "${FORGEJO_BOOTSTRAP_ADMIN_PASSWORD:-wama-admin}"
       FORGEJO_ADMIN_USERNAME: "${FORGEJO_BOOTSTRAP_ADMIN_USERNAME:-wama-admin}"
-      FORGEJO_MANAGED_REPOSITORIES: "${FORGEJO_MANAGED_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-frequency-measurement-session,processor-alarm-threshold,gateway-c37-118}"
+      FORGEJO_ALARM_THRESHOLD_REPOSITORY: "${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-}"
+      FORGEJO_MANAGED_REPOSITORIES: "${FORGEJO_MANAGED_REPOSITORIES:-processor-frequency-scale,processor-apparent-power,processor-frequency-iec104-export,processor-frequency-measurement-session,gateway-c37-118}"
       FORGEJO_URL: http://forgejo:3000
       DRUID_DATASOURCE: live_measurements
       DRUID_EXPECTED_DOUBLE_VALUE: "${DRUID_EXPECTED_DOUBLE_VALUE:-50.01}"

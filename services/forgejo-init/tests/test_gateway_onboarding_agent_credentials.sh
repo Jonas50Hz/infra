@@ -67,6 +67,14 @@ run_installer() {
     sh "$installer" "$@"
 }
 
+file_mode() {
+  if stat -c '%a' "$1" >/dev/null 2>&1; then
+    stat -c '%a' "$1"
+  else
+    stat -f '%Lp' "$1"
+  fi
+}
+
 test_configures_the_colocated_onboarding_checkout() {
   : > "$temporary_root/docker.log"
   checkout="$infrastructure_root/forgejo-repos/gateway-c37-118-onboarding"
@@ -75,8 +83,8 @@ test_configures_the_colocated_onboarding_checkout() {
   run_installer > "$temporary_root/installer.log" 2>&1
   test "$(git -C "$checkout" remote get-url origin)" = "$origin_before"
   credential_file="$temporary_root/config/wama-forgejo/gateway-c37-118-onboarding.credentials"
-  test "$(stat -c '%a' "$temporary_root/config/wama-forgejo")" = 700
-  test "$(stat -c '%a' "$credential_file")" = 600
+  test "$(file_mode "$temporary_root/config/wama-forgejo")" = 700
+  test "$(file_mode "$credential_file")" = 600
   assert_contains 'test-gateway-onboarding-agent-token' "$credential_file"
   test "$(git -C "$checkout" config --local --get credential.useHttpPath)" = true
   test "$(git -C "$checkout" config --local --get credential.helper)" = "store --file=$credential_file"
