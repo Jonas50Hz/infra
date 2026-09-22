@@ -67,6 +67,11 @@ class DashboardRenderTests(unittest.TestCase):
             series_target["settings"]["contextParameters"],
             [{"name": "maxSegmentPartitionsOrderedInMemory", "value": 75}],
         )
+        self.assertEqual(series_target["settings"]["format"], "long")
+        self.assertEqual(
+            panels["Phase Voltages"]["transformations"],
+            [{"id": "partitionByValues", "options": {"fields": ["signal"]}}],
+        )
         self.assertEqual(freshness_target["settings"]["contextParameters"], [])
         self.assertEqual(latest_records_target["settings"]["contextParameters"], [])
         self.assertEqual(

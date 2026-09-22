@@ -260,11 +260,14 @@ def _series_panel(
         "targets": [
             _druid_target(
                 _series_query(signals),
-                "wide",
+                "long",
                 context_parameters=_ORDERED_SERIES_CONTEXT_PARAMETERS,
             )
         ],
         "title": title,
+        "transformations": [
+            {"id": "partitionByValues", "options": {"fields": ["signal"]}}
+        ],
         "type": "timeseries",
     }
 
