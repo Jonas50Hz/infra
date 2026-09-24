@@ -1,0 +1,26 @@
+name: ${WAMA_PROCESSOR_COMPOSE_PROJECT_NAME:-wama-processor-alarm-threshold}
+
+services:
+  processor-alarm-threshold:
+    image: "${WAMA_PROCESSOR_IMAGE:-wama.local/processor-alarm-threshold:main}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ALARM_THRESHOLD_CONFIG_PATH: "${ALARM_THRESHOLD_CONFIG_PATH:-/etc/wama/alarm-threshold.yaml}"
+      WAMA_ALARM_TOPIC: "${WAMA_ALARM_TOPIC:-Alarm}"
+      WAMA_ALARM_EVALUATION_WATERMARK_TOPIC: "${WAMA_ALARM_EVALUATION_WATERMARK_TOPIC:-AlarmEvaluationWatermark}"
+      WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION: "${WAMA_ALARM_EVALUATION_WATERMARK_MIGRATION:-}"
+      WAMA_INPUT_TOPIC: "${WAMA_INPUT_TOPIC:-LiveMeasurement}"
+      WAMA_KAFKA_BOOTSTRAP_SERVERS: "${WAMA_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+      WAMA_MASTERDATA_TOPIC: "${WAMA_MASTERDATA_TOPIC:-Masterdata}"
+      WAMA_PROCESSOR_CONSUMER_GROUP: "${WAMA_PROCESSOR_CONSUMER_GROUP:-processor-alarm-threshold}"
+    networks:
+      - wama-infra
+    restart: unless-stopped
+    stop_grace_period: 3m
+
+networks:
+  wama-infra:
+    external: true
+    name: ${WAMA_INFRA_NETWORK:-wama-infra}

@@ -147,16 +147,17 @@ This is NOT the production target (production is Kubernetes-based).
   preferred-frequency algorithm.
 - Forgejo services own `services/forgejo/`, `services/forgejo-init/`, and
   `services/forgejo-runner/`.
-- This repository is never pushed to Forgejo. The co-located worktrees at
-  `forgejo-repos/processor-alarm-threshold/` and
-  `forgejo-repos/gateway-c37-118/` are independent Forgejo-pushable
-  repositories; the remaining `forgejo-repos/processor-*/` entries are tracked
-  bootstrap seeds. Each processor repository owns one internal `processor-*`
-  service, its workflow, code, app Compose fragment, and deployment script. The
-  C37.118 gateway worktree owns the explicit C37.118 Masterdata publication and
-  catalog-derived legacy-v2 adapter test only. All other assets remain in this
-  repository. Every managed repository source connects to infrastructure only
-  through the external `wama-infra` Docker network.
+- This repository is never pushed to Forgejo. Every `forgejo-repos/` child is a
+  tracked bootstrap seed in this checkout, not an independent nested worktree.
+  `forgejo-init` creates the private Forgejo repositories from those sources;
+  portable committed history for the former gateway and alarm-threshold
+  worktrees is retained under `forgejo-repos/history/` but is not seeded. Each
+  processor repository owns one internal `processor-*` service, its workflow,
+  code, app Compose fragment, and deployment script. The C37.118 gateway seed
+  owns the explicit C37.118 Masterdata publication and catalog-derived legacy-v2
+  adapter test only. All other assets remain in this repository. Every managed
+  repository source connects to infrastructure only through the external
+  `wama-infra` Docker network.
 - Infrastructure monitoring services own `services/victoria-metrics/`,
   `services/node-exporter/`, `services/cadvisor/`, `services/kafka-exporter/`,
   and `services/grafana/`. VictoriaMetrics holds infrastructure telemetry only;

@@ -48,8 +48,15 @@ and every asset outside the narrow Forgejo deployment scope. The legacy
 `pmu-gateway` fixture is retained for reference but excluded from the default
 Compose stack. The separate `~/c37-118-simulator` repository owns the manually
 started C37.118 source fixture and is also excluded from the root Compose
-stack. This checkout is
-never added as a Forgejo remote and is never pushed to Forgejo.
+stack. This checkout is never added as a Forgejo remote and is never pushed to
+Forgejo.
+
+All Forgejo bootstrap source is tracked under
+[`forgejo-repos/`](forgejo-repos/), so a clone of this repository includes
+every seed that `forgejo-init` mounts. The portable committed histories from
+the two former standalone worktrees are retained in
+[`forgejo-repos/history/`](forgejo-repos/history/) and are not used during
+bootstrap.
 
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
 [`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),

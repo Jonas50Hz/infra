@@ -1,0 +1,1 @@
+"""Generated Protobuf bindings for the standalone C37.118 gateway repository."""
