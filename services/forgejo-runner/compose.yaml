@@ -31,6 +31,9 @@ services:
         source: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
         target: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
       - type: bind
+        source: "${WAMA_WEATHER_MAP_DEPLOY_ROOT:-/var/lib/wama-processor-weather-map}"
+        target: "${WAMA_WEATHER_MAP_DEPLOY_ROOT:-/var/lib/wama-processor-weather-map}"
+      - type: bind
         source: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
         target: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
     command: ["/bin/forgejo-runner", "daemon", "--config", "/data/config.yaml"]

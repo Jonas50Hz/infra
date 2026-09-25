@@ -16,6 +16,7 @@ services:
       FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY: "${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
       FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY: "${FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY:-processor-frequency-measurement-session}"
       FORGEJO_ALARM_THRESHOLD_REPOSITORY: "${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-processor-alarm-threshold}"
+      FORGEJO_WEATHER_MAP_REPOSITORY: "${FORGEJO_WEATHER_MAP_REPOSITORY:-processor-weather-map}"
       FORGEJO_GATEWAY_C37_118_REPOSITORY: "${FORGEJO_GATEWAY_C37_118_REPOSITORY:-gateway-c37-118}"
       FORGEJO_GATEWAY_C37_118_AGENT_USERNAME: "${FORGEJO_GATEWAY_C37_118_AGENT_USERNAME:-wama-gateway-c37-118-agent}"
       FORGEJO_GATEWAY_C37_118_AGENT_EMAIL: "${FORGEJO_GATEWAY_C37_118_AGENT_EMAIL:-wama-gateway-c37-118-agent@local}"
@@ -25,6 +26,7 @@ services:
       WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT: "${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
       WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT: "${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
       WAMA_ALARM_THRESHOLD_DEPLOY_ROOT: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+      WAMA_WEATHER_MAP_DEPLOY_ROOT: "${WAMA_WEATHER_MAP_DEPLOY_ROOT:-/var/lib/wama-processor-weather-map}"
       WAMA_GATEWAY_C37_118_DEPLOY_ROOT: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
       WAMA_INFRA_NETWORK: "${WAMA_INFRA_NETWORK:-wama-infra}"
     volumes:
@@ -50,6 +52,9 @@ services:
       - type: bind
         source: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
         target: "${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+      - type: bind
+        source: "${WAMA_WEATHER_MAP_DEPLOY_ROOT:-/var/lib/wama-processor-weather-map}"
+        target: "${WAMA_WEATHER_MAP_DEPLOY_ROOT:-/var/lib/wama-processor-weather-map}"
       - type: bind
         source: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
         target: "${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"

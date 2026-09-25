@@ -5,7 +5,7 @@ Runner plus Git, Node, Python 3.12, Protocol Buffer tooling, Docker CLI,
 Docker Compose, and rsync. The image is the default container for the
 `wama-processors-ci` Actions label.
 
-The bootstrap service registers twelve repository-scoped connections on the same
+The bootstrap service registers fourteen repository-scoped connections on the same
 capacity-one runner daemon by default:
 
 - `wama-processor-frequency-scale-ci` and
@@ -22,6 +22,8 @@ capacity-one runner daemon by default:
 - `wama-processor-alarm-threshold-ci` and
   `wama-processor-alarm-threshold-deploy` validate/publish and deploy only the
   alarm-threshold processor.
+- `wama-processor-weather-map-ci` and `wama-processor-weather-map-deploy`
+  validate/publish and deploy only the five-minute Open-Meteo weather processor.
 - `wama-gateway-c37-118-ci` and
   `wama-gateway-c37-118-deploy` validate/publish the combined image,
   run the one-shot C37.118 Masterdata publisher, and reconcile only

@@ -165,12 +165,14 @@ setup_case() {
     "$case_directory/seeds/processor-frequency-iec104-export" \
     "$case_directory/seeds/processor-frequency-measurement-session" \
     "$case_directory/seeds/processor-alarm-threshold" \
+    "$case_directory/seeds/processor-weather-map" \
     "$case_directory/seeds/gateway-c37-118"
   printf '%s\n' frequency > "$case_directory/seeds/processor-frequency-scale/README.md"
   printf '%s\n' apparent > "$case_directory/seeds/processor-apparent-power/README.md"
   printf '%s\n' frequency-iec104-export > "$case_directory/seeds/processor-frequency-iec104-export/README.md"
   printf '%s\n' frequency-measurement-session > "$case_directory/seeds/processor-frequency-measurement-session/README.md"
   printf '%s\n' alarm-threshold > "$case_directory/seeds/processor-alarm-threshold/README.md"
+  printf '%s\n' weather-map > "$case_directory/seeds/processor-weather-map/README.md"
   printf '%s\n' gateway-c37-118 > "$case_directory/seeds/gateway-c37-118/README.md"
   mkdir "$case_directory/seeds/gateway-c37-118/.git"
   printf '%s\n' copied-git-metadata > "$case_directory/seeds/gateway-c37-118/.git/config"
@@ -198,6 +200,7 @@ run_bootstrap() {
     WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT="$case_directory/frequency-iec104-export-deploy" \
     WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT="$case_directory/frequency-measurement-session-deploy" \
     WAMA_ALARM_THRESHOLD_DEPLOY_ROOT="$case_directory/alarm-threshold-deploy" \
+    WAMA_WEATHER_MAP_DEPLOY_ROOT="$case_directory/weather-map-deploy" \
     WAMA_GATEWAY_C37_118_DEPLOY_ROOT="$case_directory/gateway-c37-118-deploy" \
     BOOTSTRAP_TEST_AGENT_USER_FILE="$case_directory/gateway-c37-118-agent-user" \
     BOOTSTRAP_TEST_CURL_LOG="$case_directory/curl.log" \
@@ -245,6 +248,7 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains processor-frequency-iec104-export.git "$case_directory/git.log"
   assert_contains processor-frequency-measurement-session.git "$case_directory/git.log"
   assert_contains processor-alarm-threshold.git "$case_directory/git.log"
+  assert_contains processor-weather-map.git "$case_directory/git.log"
   assert_contains gateway-c37-118.git "$case_directory/git.log"
   assert_contains wama-processor-frequency-scale-ci: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-frequency-scale-deploy: "$case_directory/runner/config.yaml"
@@ -256,13 +260,17 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains wama-processor-frequency-measurement-session-deploy: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-alarm-threshold-ci: "$case_directory/runner/config.yaml"
   assert_contains wama-processor-alarm-threshold-deploy: "$case_directory/runner/config.yaml"
+  assert_contains wama-processor-weather-map-ci: "$case_directory/runner/config.yaml"
+  assert_contains wama-processor-weather-map-deploy: "$case_directory/runner/config.yaml"
   assert_contains wama-gateway-c37-118-ci: "$case_directory/runner/config.yaml"
   assert_contains wama-gateway-c37-118-deploy: "$case_directory/runner/config.yaml"
-  assert_contains twelve-connections-v6 "$case_directory/runner/forgejo-managed-repositories.layout"
+  assert_contains fourteen-connections-v7 "$case_directory/runner/forgejo-managed-repositories.layout"
   assert_contains 'wama-admin/processor-frequency-measurement-session' "$case_directory/runner/forgejo-managed-repositories.scope"
   assert_contains 'wama-admin/processor-alarm-threshold' "$case_directory/runner/forgejo-managed-repositories.scope"
+  assert_contains 'wama-admin/processor-weather-map' "$case_directory/runner/forgejo-managed-repositories.scope"
   assert_contains "$case_directory/frequency-measurement-session-deploy" "$case_directory/runner/config.yaml"
   assert_contains "$case_directory/alarm-threshold-deploy" "$case_directory/runner/config.yaml"
+  assert_contains "$case_directory/weather-map-deploy" "$case_directory/runner/config.yaml"
   assert_contains 'PUT http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118/collaborators/wama-gateway-c37-118-agent {"permission":"write"}' "$case_directory/curl.log"
   assert_not_contains '/actions/workflows/' "$case_directory/curl.log"
   test ! -e "$case_directory/runner/gateway-c37-118.workflow-triggered"
@@ -282,13 +290,15 @@ test_seeds_and_registers_all_processor_repositories() {
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-frequency-iec104-export/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-frequency-measurement-session/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-alarm-threshold/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
+  assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-weather-map/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118/actions/workflows/gateway.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
-  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 6
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 7
   test -f "$case_directory/frequency-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/apparent-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/frequency-iec104-export-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/frequency-measurement-session-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/alarm-threshold-deploy/.wama-forgejo-processor-root"
+  test -f "$case_directory/weather-map-deploy/.wama-forgejo-processor-root"
   test -f "$case_directory/gateway-c37-118-deploy/.wama-forgejo-gateway-c37-118-root"
 }
 
@@ -306,17 +316,19 @@ test_dispatches_existing_repositories_on_every_bootstrap() {
   assert_contains "processor-frequency-iec104-export already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "processor-frequency-measurement-session already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "processor-alarm-threshold already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
+  assert_contains "processor-weather-map already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains "gateway-c37-118 already has refs; leaving it unchanged" "$case_directory/bootstrap.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-frequency-scale/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-apparent-power/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-frequency-iec104-export/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-frequency-measurement-session/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-alarm-threshold/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
+  assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/processor-weather-map/actions/workflows/processor.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118/actions/workflows/gateway.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
-  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 6
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 7
   test ! -e "$case_directory/runner/gateway-c37-118.workflow-triggered"
   run_bootstrap >> "$case_directory/bootstrap.log" 2>&1
-  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 12
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 14
 }
 
 test_removes_legacy_gateway_workflow_marker_and_dispatches() {
@@ -329,7 +341,7 @@ test_removes_legacy_gateway_workflow_marker_and_dispatches() {
   export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118/actions/workflows/gateway.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
-  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 6
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 7
   test ! -e "$case_directory/runner/gateway-c37-118.workflow-triggered"
 }
 
