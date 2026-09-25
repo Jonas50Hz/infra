@@ -512,6 +512,9 @@ run as part of normal infrastructure lifecycle validation.
 
 ## Access
 
+For a browser-ready list of the default local endpoints and dashboard
+shortcuts, see [WAMA local access links](docs/reference/wama-local-access.md).
+
 | Purpose | Address |
 | --- | --- |
 | Kafka UI | `http://<host-ip>:8080` (including <http://127.0.0.1:8080>) |

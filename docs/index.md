@@ -27,6 +27,7 @@ models, the approved C37.118 standard copy, and the architecture image.
 
 ## Reference
 
+- [WAMA local access links](reference/wama-local-access.md)
 - [C37.118 implementation reference](reference/c37-118-implementation-reference.md)
 - [WAMA data flow and contracts](reference/wama-data-flow-contracts.md)
 - [LFR per-second frequency provision](reference/lfr-frequency-provision.md)
