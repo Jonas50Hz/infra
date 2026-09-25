@@ -151,8 +151,7 @@ This is NOT the production target (production is Kubernetes-based).
 - This repository is never pushed to Forgejo. The co-located
   `forgejo-repos/gateway-c37-118/` worktree is an independent Forgejo-pushable
   repository; the `forgejo-repos/processor-*/` entries are tracked bootstrap
-  seeds. `processor-alarm-threshold` is optional and disabled unless
-  `FORGEJO_ALARM_THRESHOLD_REPOSITORY` is configured with an available source.
+  seeds, including `processor-alarm-threshold`.
   Each processor repository owns one internal `processor-*` service, its
   workflow, code, app Compose fragment, and deployment script. The C37.118
   gateway worktree owns the explicit C37.118 Masterdata publication and

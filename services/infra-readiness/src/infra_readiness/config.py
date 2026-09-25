@@ -12,6 +12,7 @@ DEFAULT_FORGEJO_MANAGED_REPOSITORIES = (
     "processor-apparent-power",
     "processor-frequency-iec104-export",
     "processor-frequency-measurement-session",
+    "processor-alarm-threshold",
     "gateway-c37-118",
 )
 
@@ -246,10 +247,10 @@ def _managed_repositories(values: Mapping[str, str]) -> tuple[str, ...]:
     )
     alarm_threshold_repository = values.get(
         "FORGEJO_ALARM_THRESHOLD_REPOSITORY",
-        "",
+        "processor-alarm-threshold",
     ).strip()
     if not alarm_threshold_repository:
-        return repositories
+        raise ConfigurationError("FORGEJO_ALARM_THRESHOLD_REPOSITORY must not be empty")
     _validate_repository_identifier(
         alarm_threshold_repository,
         "FORGEJO_ALARM_THRESHOLD_REPOSITORY",

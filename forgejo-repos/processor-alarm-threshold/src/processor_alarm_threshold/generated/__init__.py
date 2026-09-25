@@ -1,0 +1,1 @@
+"""Generated raw-Protobuf bindings created in the Docker build."""

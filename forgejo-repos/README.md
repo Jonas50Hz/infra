@@ -1,9 +1,8 @@
 # Forgejo Repository Checkouts and Seeds
 
 This directory contains source content for repositories that may be initialized
-and pushed to Forgejo. `processor-alarm-threshold/` and
-`gateway-c37-118/` are co-located private Git worktrees; the
-remaining entries are tracked bootstrap seeds. Each child directory is a
+and pushed to Forgejo. `gateway-c37-118/` is a co-located private Git worktree;
+the `processor-*/` entries are tracked bootstrap seeds. Each child directory is a
 separate repository boundary. The parent `infra` repository is
 infrastructure-only and must never be added as a Forgejo remote or pushed to
 Forgejo. Forgejo is reserved for internal processor deployment and a
@@ -18,6 +17,8 @@ The tracked bootstrap processor seeds are:
 	`processor-apparent-power`.
 - [`processor-frequency-iec104-export/`](processor-frequency-iec104-export/)
   owns only `processor-frequency-iec104-export`.
+- [`processor-alarm-threshold/`](processor-alarm-threshold/) owns only
+  `processor-alarm-threshold`.
 - `processor-frequency-measurement-session` owns only the standard processor
 	that turns Frequency Capture Episodes from `LiveMeasurement` into bounded
 	`MeasurementSession` requests.
@@ -26,19 +27,16 @@ Its three-source, EE-editable policy and PoC timing limits are defined in the
 [data-flow contract](../docs/reference/wama-data-flow-contracts.md). It does
 not represent Alarm lifecycle.
 
-The co-located private
-[`processor-alarm-threshold/`](processor-alarm-threshold/) worktree owns only
-`processor-alarm-threshold`. The explicitly declared C37.118
-gateway-deployment-test checkout is
+The explicitly declared C37.118 gateway-deployment-test checkout is
 [`gateway-c37-118/`](gateway-c37-118/). It owns only the
 one-shot `masterdata-publisher` and guarded generated legacy-v2 adapters for
 active approved sources in this increment.
 
-The two co-located worktrees are development checkouts and bootstrap sources.
-When a Forgejo remote has no refs, `forgejo-init` copies their working content
-while omitting nested `.git` metadata. The C37.118 gateway credential installer
-accepts the co-located gateway checkout and rejects the parent infrastructure
-checkout.
+The co-located gateway worktree and tracked processor seeds are development
+checkouts and bootstrap sources. When a Forgejo remote has no refs,
+`forgejo-init` copies their working content while omitting nested `.git`
+metadata. The C37.118 gateway credential installer accepts the co-located
+gateway checkout and rejects the parent infrastructure checkout.
 
 `forgejo-init` seeds each repository only when its remote has no refs; that
 initial `main` push starts the repository workflow without a duplicate manual

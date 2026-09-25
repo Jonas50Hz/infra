@@ -28,7 +28,7 @@ fi
 simulator_console_url="${C37_118_SIMULATOR_CONSOLE_URL:-http://127.0.0.1:8081}"
 alerta_api_url="${ALERTA_API_URL:-http://127.0.0.1:18081/api}"
 stream_id="${C37_118_ALARM_WORKFLOW_STREAM_ID:-1001}"
-rule_id="${C37_118_ALARM_WORKFLOW_RULE_ID:-frequency-high}"
+rule_id="${C37_118_ALARM_WORKFLOW_RULE_ID:-frequency-over-50-1-hz}"
 mrid="${C37_118_ALARM_WORKFLOW_MRID:-urn:wama:poc:pmu:bay-01:frequency}"
 operator_label="${C37_118_ALARM_WORKFLOW_OPERATOR_LABEL:-alarm-workflow-$(python3 -c 'import uuid; print(uuid.uuid4())')}"
 

@@ -30,9 +30,8 @@ It does not wait for or evaluate Forgejo application workflow completion; that
 would make this infrastructure-only gate depend on separately managed
 applications and the external C37.118 simulator.
 
-`processor-alarm-threshold` is not required by default. When
-`FORGEJO_ALARM_THRESHOLD_REPOSITORY` is nonempty, readiness adds that configured
-repository to its Forgejo repository and runner-connection checks.
+The standard `processor-alarm-threshold` repository and its two runner
+connections are included in the readiness checks.
 
 The probe deliberately does not require PostgreSQL to have no application
 tables. The Blobmeta catalog is an app-owned schema and is verified by its own

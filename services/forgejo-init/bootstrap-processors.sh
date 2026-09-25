@@ -7,7 +7,7 @@ runner_dir="${FORGEJO_RUNNER_DIRECTORY:-/runner}"
 runner_config_file="$runner_dir/config.yaml"
 runner_layout_file="$runner_dir/forgejo-managed-repositories.layout"
 runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
-runner_layout=ten-connections-v7
+runner_layout=twelve-connections-v6
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
 gateway_c37_118_agent_username="${FORGEJO_GATEWAY_C37_118_AGENT_USERNAME:-wama-gateway-c37-118-agent}"
@@ -23,7 +23,7 @@ frequency_repository="${FORGEJO_FREQUENCY_SCALE_REPOSITORY:-processor-frequency-
 apparent_repository="${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-power}"
 frequency_iec104_export_repository="${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
 frequency_measurement_session_repository="${FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY:-processor-frequency-measurement-session}"
-alarm_threshold_repository="${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-}"
+alarm_threshold_repository="${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-processor-alarm-threshold}"
 gateway_c37_118_repository="${FORGEJO_GATEWAY_C37_118_REPOSITORY:-gateway-c37-118}"
 frequency_deploy_root="${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
 apparent_deploy_root="${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
@@ -38,10 +38,6 @@ processor_deploy_marker=.wama-forgejo-processor-root
 gateway_c37_118_deploy_marker=.wama-forgejo-gateway-c37-118-root
 runner_ci_label=wama-processors-ci:docker://wama-forgejo-runner:local
 runner_deploy_label=wama-processors-deploy:host
-
-if [ -n "$alarm_threshold_repository" ]; then
-  runner_layout=twelve-connections-v6
-fi
 
 forgejo_as_git() {
   s6-setuidgid git forgejo --config "$server_config" "$@"
@@ -364,28 +360,22 @@ require_value WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 require_value WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 require_value WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
 require_value WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT "$frequency_measurement_session_deploy_root"
+require_value WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
 require_value WAMA_GATEWAY_C37_118_DEPLOY_ROOT "$gateway_c37_118_deploy_root"
-if [ -n "$alarm_threshold_repository" ]; then
-  require_value WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
-fi
 validate_identifier FORGEJO_BOOTSTRAP_ADMIN_USERNAME "$admin_username"
 validate_identifier FORGEJO_FREQUENCY_SCALE_REPOSITORY "$frequency_repository"
 validate_identifier FORGEJO_APPARENT_POWER_REPOSITORY "$apparent_repository"
 validate_identifier FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY "$frequency_iec104_export_repository"
 validate_identifier FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY "$frequency_measurement_session_repository"
+validate_identifier FORGEJO_ALARM_THRESHOLD_REPOSITORY "$alarm_threshold_repository"
 validate_identifier FORGEJO_GATEWAY_C37_118_REPOSITORY "$gateway_c37_118_repository"
-if [ -n "$alarm_threshold_repository" ]; then
-  validate_identifier FORGEJO_ALARM_THRESHOLD_REPOSITORY "$alarm_threshold_repository"
-fi
 validate_identifier FORGEJO_GATEWAY_C37_118_AGENT_USERNAME "$gateway_c37_118_agent_username"
 validate_deploy_root WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
 validate_deploy_root WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT "$frequency_measurement_session_deploy_root"
+validate_deploy_root WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
 validate_deploy_root WAMA_GATEWAY_C37_118_DEPLOY_ROOT "$gateway_c37_118_deploy_root"
-if [ -n "$alarm_threshold_repository" ]; then
-  validate_deploy_root WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
-fi
 
 if ! forgejo_as_git admin user list | awk -v username="$admin_username" '$2 == username { found = 1 } END { exit !found }'; then
   forgejo_as_git admin user create \
@@ -410,18 +400,14 @@ initialize_deploy_root "$frequency_repository" "$frequency_deploy_root" "$proces
 initialize_deploy_root "$apparent_repository" "$apparent_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$frequency_measurement_session_repository" "$frequency_measurement_session_deploy_root" "$processor_deploy_marker"
-if [ -n "$alarm_threshold_repository" ]; then
-  initialize_deploy_root "$alarm_threshold_repository" "$alarm_threshold_deploy_root" "$processor_deploy_marker"
-fi
+initialize_deploy_root "$alarm_threshold_repository" "$alarm_threshold_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$gateway_c37_118_repository" "$gateway_c37_118_deploy_root" "$gateway_c37_118_deploy_marker"
 api_auth_header="$(printf '%s:%s' "$admin_username" "$admin_password" | base64 | tr -d '\n')"
 ensure_repository "$frequency_repository"
 ensure_repository "$apparent_repository"
 ensure_repository "$frequency_iec104_export_repository"
 ensure_repository "$frequency_measurement_session_repository"
-if [ -n "$alarm_threshold_repository" ]; then
-  ensure_repository "$alarm_threshold_repository"
-fi
+ensure_repository "$alarm_threshold_repository"
 ensure_repository "$gateway_c37_118_repository"
 seed_repository_if_empty \
   "$frequency_repository" \
@@ -439,12 +425,10 @@ seed_repository_if_empty \
   "$frequency_measurement_session_repository" \
   "$seed_root/processor-frequency-measurement-session" \
   "$frequency_measurement_session_seeded_file"
-if [ -n "$alarm_threshold_repository" ]; then
-  seed_repository_if_empty \
-    "$alarm_threshold_repository" \
-    "$seed_root/processor-alarm-threshold" \
-    "$alarm_threshold_seeded_file"
-fi
+seed_repository_if_empty \
+  "$alarm_threshold_repository" \
+  "$seed_root/processor-alarm-threshold" \
+  "$alarm_threshold_seeded_file"
 seed_repository_if_empty \
   "$gateway_c37_118_repository" \
   "$seed_root/gateway-c37-118" \
@@ -452,11 +436,7 @@ seed_repository_if_empty \
 ensure_package_token
 ensure_gateway_c37_118_agent
 
-scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$frequency_measurement_session_repository"
-if [ -n "$alarm_threshold_repository" ]; then
-  scope_manifest="$scope_manifest,$admin_username/$alarm_threshold_repository"
-fi
-scope_manifest="$scope_manifest,$admin_username/$gateway_c37_118_repository"
+scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$frequency_measurement_session_repository,$admin_username/$alarm_threshold_repository,$admin_username/$gateway_c37_118_repository"
 if [ ! -f "$runner_layout_file" ] || [ "$(cat "$runner_layout_file")" != "$runner_layout" ]; then
   reset_runner_state
 fi
@@ -472,6 +452,8 @@ frequency_iec104_export_ci_name=wama-processor-frequency-iec104-export-ci
 frequency_iec104_export_deploy_name=wama-processor-frequency-iec104-export-deploy
 frequency_measurement_session_ci_name=wama-processor-frequency-measurement-session-ci
 frequency_measurement_session_deploy_name=wama-processor-frequency-measurement-session-deploy
+alarm_threshold_ci_name=wama-processor-alarm-threshold-ci
+alarm_threshold_deploy_name=wama-processor-alarm-threshold-deploy
 gateway_c37_118_ci_name=wama-gateway-c37-118-ci
 gateway_c37_118_deploy_name=wama-gateway-c37-118-deploy
 register_runner "$frequency_repository" "$frequency_ci_name" "$runner_ci_label"
@@ -482,12 +464,8 @@ register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_
 register_runner "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_name" "$runner_deploy_label"
 register_runner "$frequency_measurement_session_repository" "$frequency_measurement_session_ci_name" "$runner_ci_label"
 register_runner "$frequency_measurement_session_repository" "$frequency_measurement_session_deploy_name" "$runner_deploy_label"
-if [ -n "$alarm_threshold_repository" ]; then
-  alarm_threshold_ci_name=wama-processor-alarm-threshold-ci
-  alarm_threshold_deploy_name=wama-processor-alarm-threshold-deploy
-  register_runner "$alarm_threshold_repository" "$alarm_threshold_ci_name" "$runner_ci_label"
-  register_runner "$alarm_threshold_repository" "$alarm_threshold_deploy_name" "$runner_deploy_label"
-fi
+register_runner "$alarm_threshold_repository" "$alarm_threshold_ci_name" "$runner_ci_label"
+register_runner "$alarm_threshold_repository" "$alarm_threshold_deploy_name" "$runner_deploy_label"
 register_runner "$gateway_c37_118_repository" "$gateway_c37_118_ci_name" "$runner_ci_label"
 register_runner "$gateway_c37_118_repository" "$gateway_c37_118_deploy_name" "$runner_deploy_label"
 
@@ -497,11 +475,8 @@ package_token="$(cat "$runner_package_token_file")"
 runner_valid_volumes="    - \"$frequency_deploy_root\"
     - \"$apparent_deploy_root\"
     - \"$frequency_iec104_export_deploy_root\"
-    - \"$frequency_measurement_session_deploy_root\""
-if [ -n "$alarm_threshold_repository" ]; then
-  runner_valid_volumes="$runner_valid_volumes
+    - \"$frequency_measurement_session_deploy_root\"
     - \"$alarm_threshold_deploy_root\""
-fi
 runner_valid_volumes="$runner_valid_volumes
     - \"$gateway_c37_118_deploy_root\""
 runner_connections="$(
@@ -513,10 +488,8 @@ runner_connections="$(
   runner_connection "$frequency_iec104_export_deploy_name"
   runner_connection "$frequency_measurement_session_ci_name"
   runner_connection "$frequency_measurement_session_deploy_name"
-  if [ -n "$alarm_threshold_repository" ]; then
-    runner_connection "$alarm_threshold_ci_name"
-    runner_connection "$alarm_threshold_deploy_name"
-  fi
+  runner_connection "$alarm_threshold_ci_name"
+  runner_connection "$alarm_threshold_deploy_name"
   runner_connection "$gateway_c37_118_ci_name"
   runner_connection "$gateway_c37_118_deploy_name"
 )"
@@ -560,7 +533,7 @@ fi
 if [ ! -e "$frequency_measurement_session_seeded_file" ]; then
   dispatch_workflow "$frequency_measurement_session_repository" processor.yaml
 fi
-if [ -n "$alarm_threshold_repository" ] && [ ! -e "$alarm_threshold_seeded_file" ]; then
+if [ ! -e "$alarm_threshold_seeded_file" ]; then
   dispatch_workflow "$alarm_threshold_repository" processor.yaml
 fi
 if [ ! -e "$gateway_c37_118_seeded_file" ]; then

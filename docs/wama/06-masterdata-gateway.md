@@ -27,9 +27,10 @@ holds the proposal and approval trail. Each published record also contains a
 catalog ID, Forgejo revision, and publication time. PostgreSQL remains limited
 to the root-owned Blobmeta projection in this phase.
 
-For the local demonstration, an operator separately starts the fixed five-PMU
-V2 source fixture. A fresh C37.118 gateway remote uses its initial `main` push
-to trigger the repository workflow without a duplicate manual dispatch. After
+For the local demonstration, an operator may separately start the default
+five-PMU V2 source fixture and select any nonempty reviewed subset through the
+gateway catalog. A fresh C37.118 gateway remote uses its initial `main` push to
+trigger the repository workflow without a duplicate manual dispatch. After
 runner configuration, bootstrap dispatches each existing nonempty managed
 repository's `processor.yaml` or `gateway.yaml` workflow at `main` on every
 invocation. Root Compose does not run the C37.118 gateway Compose project,
@@ -117,7 +118,7 @@ Future field timestamps are rejected. Generic Common Format quality is limited
 to `valid` and `substituted` from conservative v2 `STAT` handling; a separate
 status-evidence contract remains necessary for LFR audit use.
 
-## Five-PMU Demonstration
+## Catalog-driven Demonstration
 
 The manually operated `~/c37-118-simulator` repository provides the separate
 V2 source fixture for this declared Forgejo gateway-deployment test. An
@@ -130,15 +131,15 @@ The gateway workflow's bounded live verification requires this matching
 externally running source fixture. Root startup can queue the workflow, but it
 may not become green until the simulator is started with the matching profile.
 
-The approved Forgejo catalog contains `pmu-bay-01` through `pmu-bay-05`, one
-source for each listener. Each source maps six phasor
-magnitudes, frequency, and ROCOF to eight immutable MRIDs. Source YAML files
-are the reviewed enrollment surface: adding or removing one changes the active
-Masterdata record, generated adapter, and verifier expectation while the
-operator-managed simulator runs its fixed five-PMU fixture. When all five
-catalog sources are active, the adapters produce approximately
-$5 \times 8 \times 50 = 2{,}000$ records per second at the fixture's 50 Hz
-rate.
+The checked-in catalog contains `pmu-bay-01` through `pmu-bay-05`, one sample
+source for each listener. Each source maps six phasor magnitudes, frequency,
+and ROCOF to eight immutable MRIDs. The source YAML files are the reviewed
+enrollment surface, not a fixed topology: adding one starts its catalog-derived
+adapter; deleting one tombstones its owned Masterdata record and removes its
+previously recorded adapter. The verifier derives its expectation from the
+current catalog. When all five sample catalog sources are active, the adapters
+produce approximately $5 \times 8 \times 50 = 2{,}000$ records per second at
+the fixture's 50 Hz rate.
 
 When catalog-derived adapters are active, a successful Forgejo deployment runs
 the verifier from the marker-owned C37.118 gateway deployment root after adapter

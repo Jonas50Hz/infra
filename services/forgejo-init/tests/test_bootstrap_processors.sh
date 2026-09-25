@@ -237,7 +237,6 @@ file_mode() {
 
 test_seeds_and_registers_all_processor_repositories() {
   setup_case seed-new
-  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor-alarm-threshold
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=false
   export BOOTSTRAP_TEST_REPOSITORY_REFS=
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
@@ -293,24 +292,8 @@ test_seeds_and_registers_all_processor_repositories() {
   test -f "$case_directory/gateway-c37-118-deploy/.wama-forgejo-gateway-c37-118-root"
 }
 
-test_skips_unconfigured_alarm_threshold_repository() {
-  setup_case skip-unconfigured-alarm-threshold
-  export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
-  export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
-  run_bootstrap > "$case_directory/bootstrap.log" 2>&1
-  assert_not_contains processor-alarm-threshold "$case_directory/git.log"
-  assert_not_contains processor-alarm-threshold "$case_directory/wget.log"
-  assert_not_contains processor-alarm-threshold "$case_directory/runner/config.yaml"
-  assert_not_contains processor-alarm-threshold "$case_directory/runner/forgejo-managed-repositories.scope"
-  assert_not_contains 'processor-alarm-threshold/actions/workflows/processor.yaml/dispatches' "$case_directory/curl.log"
-  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 5
-  assert_contains ten-connections-v7 "$case_directory/runner/forgejo-managed-repositories.layout"
-  test ! -e "$case_directory/alarm-threshold-deploy"
-}
-
 test_dispatches_existing_repositories_on_every_bootstrap() {
   setup_case dispatch-existing
-  export FORGEJO_ALARM_THRESHOLD_REPOSITORY=processor-alarm-threshold
   export BOOTSTRAP_TEST_REPOSITORY_EXISTS=true
   export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
@@ -346,7 +329,7 @@ test_removes_legacy_gateway_workflow_marker_and_dispatches() {
   export BOOTSTRAP_TEST_REPOSITORY_REFS="deadbeef refs/heads/main"
   run_bootstrap > "$case_directory/bootstrap.log" 2>&1
   assert_contains 'POST http://forgejo.test/api/v1/repos/wama-admin/gateway-c37-118/actions/workflows/gateway.yaml/dispatches {"ref":"main"}' "$case_directory/curl.log"
-  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 5
+  test "$(grep -Fc '/actions/workflows/' "$case_directory/curl.log")" -eq 6
   test ! -e "$case_directory/runner/gateway-c37-118.workflow-triggered"
 }
 
@@ -442,7 +425,6 @@ test_rejects_unmarked_nonempty_gateway_c37_118_root() {
 }
 
 test_seeds_and_registers_all_processor_repositories
-test_skips_unconfigured_alarm_threshold_repository
 test_dispatches_existing_repositories_on_every_bootstrap
 test_removes_legacy_gateway_workflow_marker_and_dispatches
 test_rejects_unmarked_nonempty_processor_root

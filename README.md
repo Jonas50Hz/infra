@@ -54,6 +54,7 @@ never added as a Forgejo remote and is never pushed to Forgejo.
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
 [`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),
 [`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/),
+[`forgejo-repos/processor-alarm-threshold/`](forgejo-repos/processor-alarm-threshold/),
 and the standard `processor-frequency-measurement-session` seed
 are separate processor-repository seeds. `forgejo-init` automatically creates
 one private Forgejo repository per seed and seeds each `main` branch only when
@@ -72,12 +73,11 @@ infrastructure service out of this checkout. Processor containers connect
 through the external `wama-infra` Docker network; they do not include, modify,
 or redeploy this Compose project.
 
-`processor-alarm-threshold` is an optional Forgejo application and is disabled
-by default because its source is not part of this checkout. Set
-`FORGEJO_ALARM_THRESHOLD_REPOSITORY` only after supplying its source at
-`forgejo-repos/processor-alarm-threshold`; bootstrap then applies the same
-private-repository, seed, deployment-root, and runner checks as for the other
-processor applications.
+`processor-alarm-threshold` is a standard Forgejo application. It consumes
+reviewed catalog membership and qualifying `LiveMeasurement` values to maintain
+the compacted `Alarm` desired state and its matching
+`AlarmEvaluationWatermark` records. Its workflow deploys only its one
+marker-owned processor service through the external `wama-infra` network.
 
 The standard `processor-frequency-measurement-session` seed consumes
 `LiveMeasurement` and produces bounded `MeasurementSession` requests for
@@ -94,10 +94,11 @@ does not modify the deprecated `pmu-gateway` fixture or run root Compose service
 An operator manually starts the matching five-PMU V2 fixture from
 `~/c37-118-simulator` after the root stack has created `wama-infra`. Root
 startup can queue the gateway workflow but never starts or controls that
-simulator. The workflow's live verification needs the matching external source,
-so it may not become green until the simulator is running. The successful
-workflow verifies every reviewed catalog MRID on `LiveMeasurement` and is the
-demonstration-ready signal.
+simulator. The catalog may select any nonempty subset of that fixture or other
+reviewed compatible sources. The workflow's live verification needs the
+external sources currently named by the catalog, so it may not become green
+until they are running. The successful workflow verifies every reviewed catalog
+MRID on `LiveMeasurement` and is the demonstration-ready signal.
 
 ## Repository layout
 
@@ -352,7 +353,7 @@ WAMA_RUN_C37_118_ALARM_WORKFLOW_TEST=run-c37-118-alarm-workflow-test \
 
 The test requires successful `infra-readiness`, uses the simulator Control
 Console's normal prepare/confirm API to run the PMU Bay 01 `signal-excursion`,
-and proves the resulting `frequency-high` incident opens and later closes in
+and proves the resulting `frequency-over-50-1-hz` incident opens and later closes in
 Alerta. It never starts, stops, or deploys root infrastructure, the simulator,
 the gateway, or the processor.
 
@@ -366,13 +367,12 @@ exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator and five private managed
+`forgejo-init` creates the configured administrator and six private managed
 repositories: `<owner>/processor-frequency-scale`,
 `<owner>/processor-apparent-power`, `<owner>/processor-frequency-iec104-export`,
-`<owner>/processor-frequency-measurement-session`, and
-`<owner>/gateway-c37-118`. When `FORGEJO_ALARM_THRESHOLD_REPOSITORY` is
-configured, it also creates `<owner>/processor-alarm-threshold`. The processor
-roots use
+`<owner>/processor-frequency-measurement-session`,
+`<owner>/processor-alarm-threshold`, and `<owner>/gateway-c37-118`. The
+processor roots use
 `.wama-forgejo-processor-root`; the C37.118 gateway root uses
 `.wama-forgejo-gateway-c37-118-root`. Bootstrap skips seeding without
 modifying any existing repository that already has refs, and it fails without
@@ -438,19 +438,19 @@ project, Forgejo bootstrap guard, and C37.118 gateway credential bridge together
 sh scripts/test-masterdata-gateway-c37-118.sh
 ```
 
-Each of the five default managed repositories has distinct repository-scoped CI
-and deployment runner connections, ten in total, all handled by the same
-capacity-one runner daemon. Configuring `processor-alarm-threshold` adds its two
-connections. The deployment connection runs in the runner container with the
-host Docker socket and its matching deployment root mounted at the same path.
-This is trusted local-PoC access: managed-repository workflow authors can
-control the Docker host. Do not expose this runner to untrusted repositories,
-users, or production workloads.
+Each of the six default managed repositories has distinct repository-scoped CI
+and deployment runner connections, twelve in total, all handled by the same
+capacity-one runner daemon. The deployment connection runs in the runner
+container with the host Docker socket and its matching deployment root mounted
+at the same path. This is trusted local-PoC access: managed-repository workflow
+authors can control the Docker host. Do not expose this runner to untrusted
+repositories, users, or production workloads.
 
 Create or adapt processors only from the instructions in the individual
 [frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
 [apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
 [frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
+[alarm-threshold README](forgejo-repos/processor-alarm-threshold/README.md) or
 [C37.118 gateway README](forgejo-repos/gateway-c37-118/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 

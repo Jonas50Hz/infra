@@ -8,7 +8,7 @@ from infra_readiness.config import ConfigurationError, Settings
 
 
 class SettingsTests(unittest.TestCase):
-    """Ensure malformed optional overrides fail before any network call."""
+    """Ensure malformed environment overrides fail before any network call."""
 
     def test_uses_local_poc_defaults(self) -> None:
         settings = Settings.from_environment({})
@@ -35,6 +35,7 @@ class SettingsTests(unittest.TestCase):
                 "processor-apparent-power",
                 "processor-frequency-iec104-export",
                 "processor-frequency-measurement-session",
+                "processor-alarm-threshold",
                 "gateway-c37-118",
             ),
         )
@@ -51,24 +52,23 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.trino_session_schema, "wama")
         self.assertEqual(settings.trino_session_table, "measurement_values")
 
-    def test_includes_configured_optional_alarm_threshold_repository(self) -> None:
+    def test_includes_configured_alarm_threshold_repository(self) -> None:
         settings = Settings.from_environment(
-            {"FORGEJO_ALARM_THRESHOLD_REPOSITORY": "processor-alarm-threshold"}
+            {
+                "FORGEJO_MANAGED_REPOSITORIES": "processor-frequency-scale",
+                "FORGEJO_ALARM_THRESHOLD_REPOSITORY": "processor-alarm-threshold",
+            }
         )
 
         self.assertEqual(
             settings.forgejo_managed_repositories,
             (
                 "processor-frequency-scale",
-                "processor-apparent-power",
-                "processor-frequency-iec104-export",
-                "processor-frequency-measurement-session",
-                "gateway-c37-118",
                 "processor-alarm-threshold",
             ),
         )
 
-    def test_does_not_repeat_configured_optional_alarm_threshold_repository(self) -> None:
+    def test_does_not_repeat_configured_alarm_threshold_repository(self) -> None:
         settings = Settings.from_environment(
             {
                 "FORGEJO_MANAGED_REPOSITORIES": (
@@ -117,7 +117,7 @@ class SettingsTests(unittest.TestCase):
                 }
             )
 
-    def test_rejects_invalid_configured_optional_alarm_threshold_repository(self) -> None:
+    def test_rejects_invalid_configured_alarm_threshold_repository(self) -> None:
         with self.assertRaisesRegex(
             ConfigurationError,
             "FORGEJO_ALARM_THRESHOLD_REPOSITORY",
@@ -125,6 +125,13 @@ class SettingsTests(unittest.TestCase):
             Settings.from_environment(
                 {"FORGEJO_ALARM_THRESHOLD_REPOSITORY": "processor/alarm-threshold"}
             )
+
+    def test_rejects_empty_alarm_threshold_repository(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigurationError,
+            "FORGEJO_ALARM_THRESHOLD_REPOSITORY",
+        ):
+            Settings.from_environment({"FORGEJO_ALARM_THRESHOLD_REPOSITORY": ""})
 
     def test_rejects_non_http_service_url(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "FORGEJO_URL"):

@@ -1,0 +1,13 @@
+version: 1
+catalog_id: c37-118-poc-v1
+rules:
+  - rule_id: frequency-over-50-1-hz
+    revision: "1"
+    selector:
+      mrid_glob: urn:wama:poc:pmu:*:frequency
+      value_kind: double
+      quantity: frequency
+      unit: Hz
+    operator: gt
+    threshold: 50.1
+    severity: warning
