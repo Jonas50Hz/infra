@@ -5,8 +5,8 @@ Apache Kafka broker in KRaft combined mode, initializes the WAMA topic
 contract, provides Kafka UI to inspect brokers, topics, consumer groups, and
 messages, retains an optional legacy PMU fixture for reference, provides Forgejo with one
 Actions runner, provides the `wama-infra` network for a manually started
-five-PMU C37.118 V2 source fixture and queues the approved C37.118 gateway workflow
-for source-scoped adapters, includes SeaweedFS as
+five-PMU C37.118 V2 source fixture and queues enabled managed Forgejo application
+workflows for source-scoped adapters and processors, includes SeaweedFS as
 authenticated S3-compatible blob storage, and accepts browser-confirmed bounded measurement-session requests before
 materializing them from Druid into integrity-checked Parquet artifacts.
 Compacted raw-Protobuf `Blobmeta` results
@@ -54,13 +54,15 @@ never added as a Forgejo remote and is never pushed to Forgejo.
 [`forgejo-repos/processor-frequency-scale/`](forgejo-repos/processor-frequency-scale/),
 [`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),
 [`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/),
-[`forgejo-repos/processor-alarm-threshold/`](forgejo-repos/processor-alarm-threshold/),
 and the standard `processor-frequency-measurement-session` seed
 are separate processor-repository seeds. `forgejo-init` automatically creates
 one private Forgejo repository per seed and seeds each `main` branch only when
 its remote has no refs. An existing nonempty private repository is left
-unchanged. Each repository contains one internal processor, its one-service
-Compose fragment, deployment tooling, and a Forgejo Actions workflow. The IEC
+unchanged. A fresh seed push triggers its workflow without a duplicate manual
+dispatch; after runner configuration, every existing managed repository has its
+`main` workflow dispatched on each bootstrap invocation. Each repository
+contains one internal processor, its one-service Compose fragment, deployment
+tooling, and a Forgejo Actions workflow. The IEC
 104 seed maps reviewed gateway frequency MRIDs through an explicit
 processor-owned IEC map to `M_ME_NC_1` `ExportRecord` values; it does not
 implement the full LFR preferred-frequency algorithm. A future gateway may use
@@ -70,9 +72,16 @@ infrastructure service out of this checkout. Processor containers connect
 through the external `wama-infra` Docker network; they do not include, modify,
 or redeploy this Compose project.
 
+`processor-alarm-threshold` is an optional Forgejo application and is disabled
+by default because its source is not part of this checkout. Set
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` only after supplying its source at
+`forgejo-repos/processor-alarm-threshold`; bootstrap then applies the same
+private-repository, seed, deployment-root, and runner checks as for the other
+processor applications.
+
 The standard `processor-frequency-measurement-session` seed consumes
 `LiveMeasurement` and produces bounded `MeasurementSession` requests for
-Frequency Capture Episodes. Its five-source capture policy and PoC timing
+Frequency Capture Episodes. Its three-source capture policy and PoC timing
 limits are documented in the
 [data-flow contract](docs/reference/wama-data-flow-contracts.md); it does not
 represent Alarm lifecycle.
@@ -83,11 +92,12 @@ source catalog reconciles raw-Protobuf Masterdata records and tombstones to
 Kafka, then reconciles one source-scoped adapter per active catalog source. It
 does not modify the deprecated `pmu-gateway` fixture or run root Compose services.
 An operator manually starts the matching five-PMU V2 fixture from
-`~/c37-118-simulator` after the root stack has created `wama-infra`. A fresh
-C37.118 gateway source uses its initial `main` push to trigger the workflow; an
-existing private C37.118 gateway repository receives one scoped `gateway.yaml`
-dispatch per retained runner state. The successful workflow verifies every reviewed catalog MRID on
-`LiveMeasurement` and is the demonstration-ready signal.
+`~/c37-118-simulator` after the root stack has created `wama-infra`. Root
+startup can queue the gateway workflow but never starts or controls that
+simulator. The workflow's live verification needs the matching external source,
+so it may not become green until the simulator is running. The successful
+workflow verifies every reviewed catalog MRID on `LiveMeasurement` and is the
+demonstration-ready signal.
 
 ## Repository layout
 
@@ -161,12 +171,15 @@ infrastructure with one command:
 docker compose up -d
 ```
 
-This starts the root infrastructure and queues the explicitly scoped C37.118
-gateway workflow; Compose returns before that asynchronous Actions run
-completes. Start the five-PMU V2 source separately from `~/c37-118-simulator`
-before the C37.118 gateway adapters need it. A green `gateway.yaml` run in
-Forgejo proves the catalog-derived adapters, Kafka records, and their
-raw-Protobuf contract.
+This starts the root infrastructure. Fresh empty managed Forgejo remotes are
+seeded at `main`, whose push queues their workflows; existing managed remotes
+have their `processor.yaml` or `gateway.yaml` workflow dispatched at `main`
+after runner setup. Compose returns before those asynchronous Actions runs
+complete. Start the matching five-PMU V2 source separately from
+`~/c37-118-simulator` before the C37.118 gateway adapters need it: root startup
+does not start or control the simulator, and gateway live verification may not
+become green without it. A green `gateway.yaml` run in Forgejo proves the
+catalog-derived adapters, Kafka records, and their raw-Protobuf contract.
 
 Kafka-dependent services wait for the broker to become healthy and topic
 initialization to complete before starting, including after `docker compose stop`
@@ -213,7 +226,8 @@ docker compose logs infra-readiness
 latter verifies the Kafka contract, service control planes, PostgreSQL,
 SeaweedFS S3, Forgejo, monitoring path, and IEC 104 listener. Live PMU traffic
 and Druid/Grafana sample queries remain outside its default infrastructure-only
-gate; the green C37.118 gateway workflow is the ordinary demonstration data proof.
+gate. It does not wait for application workflow completion; the green C37.118
+gateway workflow is the ordinary demonstration data proof.
 Set `INFRA_READINESS_REQUIRE_LIVE_MEASUREMENT=true` to additionally require
 live records in a root readiness run. The profile-gated measurement-session
 request-flow verifier and IEC 104 test receiver run only when explicitly
@@ -327,6 +341,21 @@ verify initial email delivery, refresh and rule-revision suppression,
 acknowledgement preservation, tombstone closure, a new episode, restart snapshot
 reconciliation, and foreign-alert isolation.
 
+Run the complete C37.118 high-frequency Alarm proof only after the separate
+five-PMU V2 simulator, the green `gateway-c37-118` workflow, and the green
+`processor-alarm-threshold` workflow are running:
+
+```sh
+WAMA_RUN_C37_118_ALARM_WORKFLOW_TEST=run-c37-118-alarm-workflow-test \
+  scripts/test-c37-118-alarm-workflow.sh
+```
+
+The test requires successful `infra-readiness`, uses the simulator Control
+Console's normal prepare/confirm API to run the PMU Bay 01 `signal-excursion`,
+and proves the resulting `frequency-high` incident opens and later closes in
+Alerta. It never starts, stops, or deploys root infrastructure, the simulator,
+the gateway, or the processor.
+
 Open the live IEC 104 monitor at `http://localhost:3003`. The browser's
 outgoing read-only IEC 104 control-center connection starts with its process
 and persists with zero WebSocket viewers. Its UI pages are transient viewers
@@ -337,17 +366,28 @@ exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator and six private managed
+`forgejo-init` creates the configured administrator and five private managed
 repositories: `<owner>/processor-frequency-scale`,
 `<owner>/processor-apparent-power`, `<owner>/processor-frequency-iec104-export`,
-`<owner>/processor-alarm-threshold`,
 `<owner>/processor-frequency-measurement-session`, and
-`<owner>/gateway-c37-118`. The five processor roots use
+`<owner>/gateway-c37-118`. When `FORGEJO_ALARM_THRESHOLD_REPOSITORY` is
+configured, it also creates `<owner>/processor-alarm-threshold`. The processor
+roots use
 `.wama-forgejo-processor-root`; the C37.118 gateway root uses
 `.wama-forgejo-gateway-c37-118-root`. Bootstrap skips seeding without
 modifying any existing repository that already has refs, and it fails without
 mutation if an existing repository is not private. Its generated runner
 credentials remain in the `forgejo-runner-data` volume.
+
+If one of these managed Forgejo repositories was lost, retain or restore its
+co-located seed under [`forgejo-repos/`](forgejo-repos/) and start the root
+stack. `forgejo-init` recreates a missing or empty private remote from that
+seed, including the alarm processor and C37.118 gateway sources. It
+intentionally never overwrites a nonempty remote; resolve that repository
+through its own review workflow instead. A seed push triggers a fresh
+repository workflow without a manual duplicate; each existing managed
+repository is dispatched at `main` after runner configuration on every
+bootstrap invocation.
 
 After bootstrap, clone the individual managed repository you intend to work on.
 These commands must never be run from this infrastructure checkout:
@@ -387,7 +427,9 @@ The `gateway-c37-118` workflow follows the same trusted
 marker-owned deployment guard to reconcile only generated legacy-v2 source
 adapters and verifies every approved MRID on `LiveMeasurement`. It cannot
 control the deprecated root `pmu-gateway` fixture, root Compose project, or any
-adapter absent from its approved catalog.
+adapter absent from its approved catalog. It also cannot start or control the
+separate simulator; its live verifier needs the matching external five-PMU V2
+source and the workflow may remain non-green without it.
 
 Validate the canonical Masterdata contract, C37.118 gateway source, isolated Compose
 project, Forgejo bootstrap guard, and C37.118 gateway credential bridge together:
@@ -396,19 +438,19 @@ project, Forgejo bootstrap guard, and C37.118 gateway credential bridge together
 sh scripts/test-masterdata-gateway-c37-118.sh
 ```
 
-Each of the six managed repositories has distinct repository-scoped CI and
-deployment runner connections, twelve in total, all handled by the same
-capacity-one runner daemon. The deployment connection runs in the runner
-container with the host Docker socket and its matching deployment root mounted
-at the same path. This is trusted local-PoC access: managed-repository workflow
-authors can control the Docker host. Do not expose this runner to untrusted
-repositories, users, or production workloads.
+Each of the five default managed repositories has distinct repository-scoped CI
+and deployment runner connections, ten in total, all handled by the same
+capacity-one runner daemon. Configuring `processor-alarm-threshold` adds its two
+connections. The deployment connection runs in the runner container with the
+host Docker socket and its matching deployment root mounted at the same path.
+This is trusted local-PoC access: managed-repository workflow authors can
+control the Docker host. Do not expose this runner to untrusted repositories,
+users, or production workloads.
 
 Create or adapt processors only from the instructions in the individual
 [frequency-scale README](forgejo-repos/processor-frequency-scale/README.md) or
 [apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
 [frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
-[alarm-threshold README](forgejo-repos/processor-alarm-threshold/README.md) or
 [C37.118 gateway README](forgejo-repos/gateway-c37-118/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 

@@ -42,9 +42,24 @@ confirm_reset() {
 
 collect_container() {
   local container_id="$1"
+  local existing_container_id
 
   [[ -n "$container_id" ]] || return 0
-  target_containers["$container_id"]=1
+  for existing_container_id in "${target_containers[@]:-}"; do
+    [[ "$existing_container_id" == "$container_id" ]] && return 0
+  done
+  target_containers+=("$container_id")
+}
+
+collect_volume() {
+  local volume_name="$1"
+  local existing_volume_name
+
+  [[ -n "$volume_name" ]] || return 0
+  for existing_volume_name in "${target_volumes[@]:-}"; do
+    [[ "$existing_volume_name" == "$volume_name" ]] && return 0
+  done
+  target_volumes+=("$volume_name")
 }
 
 collect_project_containers() {
@@ -61,8 +76,7 @@ collect_project_volumes() {
   local volume_name
 
   while IFS= read -r volume_name; do
-    [[ -n "$volume_name" ]] || continue
-    target_volumes["$volume_name"]=1
+    collect_volume "$volume_name"
   done < <(docker volume ls --quiet --filter "label=com.docker.compose.project=$project_name")
 }
 
@@ -83,8 +97,7 @@ collect_container_volumes() {
   local volume_name
 
   while IFS= read -r volume_name; do
-    [[ -n "$volume_name" ]] || continue
-    target_volumes["$volume_name"]=1
+    collect_volume "$volume_name"
   done < <(
     docker inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' \
       "$container_id"
@@ -94,23 +107,24 @@ collect_container_volumes() {
 remove_collected_containers() {
   local container_id
 
-  for container_id in "${!target_containers[@]}"; do
-    collect_container_volumes "$container_id"
-  done
-
   if ((${#target_containers[@]})); then
-    docker rm --force --volumes "${!target_containers[@]}"
+    for container_id in "${target_containers[@]}"; do
+      collect_container_volumes "$container_id"
+    done
+    docker rm --force --volumes "${target_containers[@]}"
   fi
 }
 
 remove_collected_volumes() {
   local volume_name
 
-  for volume_name in "${!target_volumes[@]}"; do
-    if docker volume inspect "$volume_name" >/dev/null 2>&1; then
-      docker volume rm "$volume_name"
-    fi
-  done
+  if ((${#target_volumes[@]})); then
+    for volume_name in "${target_volumes[@]}"; do
+      if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+        docker volume rm "$volume_name"
+      fi
+    done
+  fi
 }
 
 if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--yes" && "$1" != "--help" && "$1" != "-h" ]]; }; then
@@ -131,8 +145,8 @@ if ! confirm_reset "${1:-}"; then
   exit 1
 fi
 
-declare -A target_containers=()
-declare -A target_volumes=()
+target_containers=()
+target_volumes=()
 
 for project_name in "${deployed_project_names[@]}"; do
   collect_project_containers "$project_name"

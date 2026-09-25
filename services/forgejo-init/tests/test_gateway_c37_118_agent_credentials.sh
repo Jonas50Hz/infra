@@ -25,6 +25,15 @@ assert_contains() {
   grep -Fq "$expected" "$path" || fail "Expected $path to contain $expected"
 }
 
+file_mode() {
+  path="$1"
+  if stat -f '%Lp' "$path" >/dev/null 2>&1; then
+    stat -f '%Lp' "$path"
+    return
+  fi
+  stat -c '%a' "$path"
+}
+
 create_fake_docker() {
   fake_bin="$1"
   mkdir "$fake_bin"
@@ -67,6 +76,14 @@ run_installer() {
     sh "$installer" "$@"
 }
 
+file_mode() {
+  if stat -c '%a' "$1" >/dev/null 2>&1; then
+    stat -c '%a' "$1"
+  else
+    stat -f '%Lp' "$1"
+  fi
+}
+
 test_configures_the_colocated_gateway_checkout() {
   : > "$temporary_root/docker.log"
   checkout="$infrastructure_root/forgejo-repos/gateway-c37-118"
@@ -75,8 +92,8 @@ test_configures_the_colocated_gateway_checkout() {
   run_installer > "$temporary_root/installer.log" 2>&1
   test "$(git -C "$checkout" remote get-url origin)" = "$origin_before"
   credential_file="$temporary_root/config/wama-forgejo/gateway-c37-118.credentials"
-  test "$(stat -c '%a' "$temporary_root/config/wama-forgejo")" = 700
-  test "$(stat -c '%a' "$credential_file")" = 600
+  test "$(file_mode "$temporary_root/config/wama-forgejo")" = 700
+  test "$(file_mode "$credential_file")" = 600
   assert_contains 'test-gateway-c37-118-agent-token' "$credential_file"
   test "$(git -C "$checkout" config --local --get credential.useHttpPath)" = true
   test "$(git -C "$checkout" config --local --get credential.helper)" = "store --file=$credential_file"

@@ -26,6 +26,13 @@ and CSV exporter HTTP health, plus Grafana's selected-MRID session and CSV
 download links without publishing a request or exporting data. It checks the
 IEC 104 browser HTTP health and accepts its persistent active status, including
 zero UI viewers. It does not open a second IEC control-center connection.
+It does not wait for or evaluate Forgejo application workflow completion; that
+would make this infrastructure-only gate depend on separately managed
+applications and the external C37.118 simulator.
+
+`processor-alarm-threshold` is not required by default. When
+`FORGEJO_ALARM_THRESHOLD_REPOSITORY` is nonempty, readiness adds that configured
+repository to its Forgejo repository and runner-connection checks.
 
 The probe deliberately does not require PostgreSQL to have no application
 tables. The Blobmeta catalog is an app-owned schema and is verified by its own

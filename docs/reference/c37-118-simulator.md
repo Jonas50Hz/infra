@@ -14,6 +14,11 @@ profile for the C37.118 gateway demonstration and attaches to the existing exter
 `wama-infra` network. It is not a gateway and has no Kafka, Common Format,
 Protobuf, Druid, SeaweedFS, Forgejo, or data-plane dependency.
 
+Root infrastructure startup can queue the C37.118 gateway workflow but never
+starts, stops, or controls this simulator. The gateway's live verification
+requires the matching externally running simulator profile, so its workflow may
+not become green without it.
+
 The normative wire reference is the approved local
 [`IEEE Std C37.118.2-2024.PDF`](../wama/IEEE%20Std%20C37.118.2%E2%84%A2-2024.PDF), SHA-256
 `ee776f9b78ccc95980d05e04e570f6dbbdad3993ae7412dc81ed772d5cbd7546`.
@@ -44,8 +49,8 @@ the high byte holds message time quality and the low 24 bits hold the
 quality and PMU time-quality status by default instead of claiming unavailable
 clock accuracy. The five-PMU V2 C37.118 gateway profile is the controlled exception:
 it sets STAT `0` for PMU IDs `1001` and `1002`, allowing their adapters to emit
-`quality.valid=true`; PMU IDs `1003` through `1005` retain the conservative
-status. The V2 message-time-quality byte remains unknown for every endpoint.
+`quality.valid=true`; PMU IDs `1003` through `1005` retain the conservative status. The V2
+message-time-quality byte remains unknown for every endpoint.
 
 | Purpose | SYNC byte | Command code when requested |
 | --- | ---: | ---: |
@@ -179,15 +184,17 @@ fleet:
     variation: 0.001
 ```
 
-Use `protocol_version: 2` for V2. The supplied profiles are
-`one-pmu-v2.yaml`, `five-pmu-v2.yaml`, `ten-pmu-v2.yaml`, `twenty-five-pmu-v2.yaml`, and
-`one-hundred-pmu-v2.yaml`; the existing names without `-v2` remain V3.
+Use `protocol_version: 2` for V2. The supplied profiles include
+`one-pmu-v2.yaml`, `three-pmu-v2.yaml`, `five-pmu-v2.yaml`, `ten-pmu-v2.yaml`,
+`twenty-five-pmu-v2.yaml`, and `one-hundred-pmu-v2.yaml`; the existing names
+without `-v2` remain V3.
 
 The default Forgejo C37.118 gateway demonstration profile is `five-pmu-v2.yaml`.
 The separate simulator Compose project assigns the manually started simulator
 its stable `172.30.0.10` address on the external `wama-infra` network; the
 profile configures listeners `4712` through `4716`, with matching stream and
-PMU IDs `1001` through `1005`. Its
+PMU IDs `1001` through `1005`; these are the endpoints used by reviewed
+gateway catalog sources `pmu-bay-01` through `pmu-bay-05`. Its
 `v2_good_stat_pmu_ids` lists only `1001` and `1002`:
 
 ```sh

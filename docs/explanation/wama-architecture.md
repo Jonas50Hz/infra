@@ -156,13 +156,14 @@ no Confluent Schema Registry. PoC uses its own MRIDs first.
   `wama-infra` Docker network. It is never pushed to Forgejo.
 - `forgejo-repos/processor-frequency-scale/`,
   `forgejo-repos/processor-apparent-power/`,
-  `forgejo-repos/processor-frequency-iec104-export/`, and
-  `forgejo-repos/processor-alarm-threshold/`, and the standard
+  `forgejo-repos/processor-frequency-iec104-export/`, and the standard
   `processor-frequency-measurement-session` seed are separate processor
-  repository seeds. `forgejo-init` creates their private Forgejo repositories,
-  seeds each `main` only when it is empty, and registers twelve separate CI and
-  deployment runner connections for the six managed repositories, including the
-  C37.118 gateway repository.
+  repository seeds. `forgejo-init` creates their private Forgejo repositories
+  plus the C37.118 gateway repository, seeds each `main` only when it is empty,
+  and registers ten separate CI and deployment runner connections. The
+  `processor-alarm-threshold` application is optional and disabled by default;
+  configuring it with an available source adds its private repository and two
+  runner connections.
 - Processor pull requests validate only their own code and local tooling. A
   trusted processor `main` push publishes only that processor OCI image and
   deploys only its one Compose service from an isolated deployment root.

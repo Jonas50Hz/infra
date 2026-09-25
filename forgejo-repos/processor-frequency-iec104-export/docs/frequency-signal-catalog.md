@@ -9,8 +9,6 @@ selection algorithm.
 | `frequency_hz_bay_01` | `urn:wama:poc:pmu:bay-01:frequency` | `double_value` | Hz | `1001` | `1001` | `3` |
 | `frequency_hz_bay_02` | `urn:wama:poc:pmu:bay-02:frequency` | `double_value` | Hz | `1002` | `1001` | `3` |
 | `frequency_hz_bay_03` | `urn:wama:poc:pmu:bay-03:frequency` | `double_value` | Hz | `1003` | `1001` | `3` |
-| `frequency_hz_bay_04` | `urn:wama:poc:pmu:bay-04:frequency` | `double_value` | Hz | `1004` | `1001` | `3` |
-| `frequency_hz_bay_05` | `urn:wama:poc:pmu:bay-05:frequency` | `double_value` | Hz | `1005` | `1001` | `3` |
 
 The exact mapping is versioned in
 [`../config/frequency-iec104-export.yaml`](../config/frequency-iec104-export.yaml).

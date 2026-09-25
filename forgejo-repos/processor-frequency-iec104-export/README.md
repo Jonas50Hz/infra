@@ -24,8 +24,6 @@ is the processor-owned reviewed mapping. Every current entry emits one
 | `urn:wama:poc:pmu:bay-01:frequency` | `1001` | `1001` | `3` |
 | `urn:wama:poc:pmu:bay-02:frequency` | `1002` | `1001` | `3` |
 | `urn:wama:poc:pmu:bay-03:frequency` | `1003` | `1001` | `3` |
-| `urn:wama:poc:pmu:bay-04:frequency` | `1004` | `1001` | `3` |
-| `urn:wama:poc:pmu:bay-05:frequency` | `1005` | `1001` | `3` |
 
 The current CA values deliberately match the reviewed source PMU IDCODEs, but
 they are explicit mapping data and are never inferred at runtime. A newly

@@ -5,8 +5,8 @@ Runner plus Git, Node, Python 3.12, Protocol Buffer tooling, Docker CLI,
 Docker Compose, and rsync. The image is the default container for the
 `wama-processors-ci` Actions label.
 
-The bootstrap service registers twelve repository-scoped connections on the same
-capacity-one runner daemon:
+The bootstrap service registers ten repository-scoped connections on the same
+capacity-one runner daemon by default:
 
 - `wama-processor-frequency-scale-ci` and
   `wama-processor-apparent-power-ci` run validation and publication jobs.
@@ -16,9 +16,6 @@ capacity-one runner daemon:
 - `wama-processor-frequency-iec104-export-ci` and
   `wama-processor-frequency-iec104-export-deploy` validate/publish and deploy
   only the direct frequency IEC 104 processor.
-- `wama-processor-alarm-threshold-ci` and
-  `wama-processor-alarm-threshold-deploy` validate/publish and deploy only the
-  alarm-threshold processor.
 - `wama-processor-frequency-measurement-session-ci` and
   `wama-processor-frequency-measurement-session-deploy` validate/publish and
   deploy only the frequency-capture MeasurementSession processor.
@@ -26,6 +23,17 @@ capacity-one runner daemon:
   `wama-gateway-c37-118-deploy` validate/publish the combined image,
   run the one-shot C37.118 Masterdata publisher, and reconcile only
   catalog-derived legacy-v2 adapters in their marker-owned deployment root.
+
+When `FORGEJO_ALARM_THRESHOLD_REPOSITORY` is configured, bootstrap also
+registers `wama-processor-alarm-threshold-ci` and
+`wama-processor-alarm-threshold-deploy`, bringing the total to twelve. The
+alarm-threshold application is otherwise disabled.
+
+After runner configuration is written, bootstrap dispatches `main` for every
+existing managed repository on each invocation. Fresh empty repositories rely
+on their initial seed push to trigger the same workflow and receive no duplicate
+manual dispatch. The runner executes only those repository-scoped application
+workflows; it does not deploy or control the root Compose project.
 
 The service mounts `/var/run/docker.sock` plus all individual managed roots.
 This grants trusted workflow code broad control of the Docker host. Limit write

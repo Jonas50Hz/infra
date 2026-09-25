@@ -46,7 +46,9 @@ docker compose up -d --build
 Der Simulator ist eine Quelle für C37.118-Telegramme. Er schreibt nicht selbst
 nach Kafka und kennt weder Druid noch Grafana. Die Gateway-Demonstration
 verbindet ihn mit der Infrastruktur. Nach dem Start können Provisionierung und
-Gateway-Workflow einige Sekunden benötigen.
+Gateway-Workflow einige Sekunden benötigen. Die Infrastruktur startet oder
+steuert den Simulator nicht; ohne das passende externe Drei-PMU-V2-Profil kann
+die Live-Verifikation des Gateway-Workflows nicht grün werden.
 
 ## 3. Vom PMU-Wert zur Anzeige
 
@@ -69,7 +71,7 @@ Von Kafka gehen die Werte in mehrere Richtungen:
 | Was | URL |
 | --- | --- |
 | PMU Control Console | <http://localhost:8081> |
-| Alerta | <http://localhost:18081> |
+| Alerta WAMA-Incidents | <http://localhost:18081/alerts#environment:WAMA;status:open,ack;dateRange:,;sb:default;sd:0;asi:0> |
 | Grafana | <http://localhost:3001> |
 | WAMA Measurements Dashboard | <http://localhost:3001/d/wama-measurement-sessions/wama-measurement-sessions> |
 | Kafka UI | <http://localhost:8080> |
@@ -106,9 +108,22 @@ Die **PMU Control Console** ist der sichtbare Einstieg in die Demo. Sie steuert
 nicht die Infrastruktur, sondern stellt kontrollierte Szenarien für die
 simulierte PMU bereit.
 
+Vor dem Auslösen muss der Forgejo-Workflow
+`processor-alarm-threshold` auf seinem freigegebenen `main` erfolgreich
+deployed sein. Der initiale `main`-Push eines frisch von `forgejo-init`
+erzeugten Repositorys löst diesen Workflow automatisch aus; bei einer bewussten
+erneuten Bereitstellung kann er in Forgejo für `main` manuell gestartet werden.
+Warte auf die Jobs `validate`, `publish` und `deploy`. Der Workflow startet ausschließlich seinen
+eigenen Processor im zugehörigen marker-geschützten Deployment-Root. Die
+aktuellen überwachten MRIDs und der Grenzwert stehen im README dieses
+Repositories.
+
 1. Öffne die [PMU Control Console](http://localhost:8081).
 2. Gib ein nichtleeres Operator-Label ein.
-3. Wähle bei der gewünschten PMU ein Szenario wie **Signal excursion** aus.
+3. Wähle bei PMU Bay 01 oder PMU Bay 02 das Szenario **Signal excursion** aus.
+   Das Basisszenario erhöht die Frequenz für
+   500 Frames bei 50 Hz um `0.5 Hz` und ist damit eine ungefähr zehnsekündige
+   Überfrequenz.
 4. Starte die Aktion über den Button und bestätige sie ausdrücklich.
 5. Beobachte anschließend die veränderten Live-Werte in Grafana und bei Bedarf
   im Kafka UI im Topic `LiveMeasurement`.
@@ -163,7 +178,14 @@ auch kein Ersatz für die Live-Messwertansicht.
 Ein Alarm entsteht über den Alarm-Processor und wird als aktueller, kompaktierter
 raw-Protobuf-Zustand im Kafka-Topic `Alarm` veröffentlicht. Der Dienst
 `alarm-alerta-ingress` gleicht diesen Zustand mit Alerta ab. Öffne danach die
-Alerta-Oberfläche und prüfe den zugehörigen WAMA-Incident.
+Alerta-[WAMA-Incident-Tab](http://localhost:18081/alerts#environment:WAMA;status:open,ack;dateRange:,;sb:default;sd:0;asi:0)
+**vor** der Szenarioaktivierung und prüfe den zugehörigen
+WAMA-Incident. Während der Überfrequenz ist der Incident offen; nach dem Ende
+des transienten Szenarios veröffentlicht der Processor einen gleichschlüssigen
+Tombstone und Alerta schließt genau diesen WAMA-Incident. Das Topic
+`AlarmEvaluationWatermark` hält dabei die jüngste qualifizierende Auswertung
+für denselben Regel/MRID-Schlüssel fest, damit ein verspäteter Wert den bereits
+geschlossenen Incident nicht erneut öffnen kann.
 
 Der fokussierte Alarm-Pfad kann reproduzierbar geprüft werden mit:
 
@@ -174,6 +196,18 @@ scripts/test-alerta-alarm-flow.sh
 
 Der Test verwendet standardmäßig eine eigene, vergängliche Compose-Umgebung.
 Er verändert den laufenden Root-Stack nicht.
+
+Der komplette C37.118-zu-Alerta-Nachweis verwendet dagegen den bereits
+deployed Gateway und Alarm-Processor sowie die separat gestartete Simulator-
+Console. Er aktiviert gezielt eine transiente Überfrequenz für PMU Bay 01 und
+wartet darauf, dass der zugehörige Incident nach Ende der Anregung geschlossen
+wird:
+
+```sh
+cd ~/infra
+WAMA_RUN_C37_118_ALARM_WORKFLOW_TEST=run-c37-118-alarm-workflow-test \
+  scripts/test-c37-118-alarm-workflow.sh
+```
 
 Alerta ist dabei die Incident-Oberfläche für den Operator. Der Dienst
 `alarm-alerta-ingress` liest das `Alarm`-Topic und gleicht nur WAMA-eigene

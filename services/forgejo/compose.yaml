@@ -1,6 +1,6 @@
 services:
   forgejo:
-    image: codeberg.org/forgejo/forgejo:16.0.2
+    image: codeberg.org/forgejo/forgejo:16.0.1
     env_file:
       - ./forgejo.env
     environment:

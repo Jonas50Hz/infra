@@ -4,6 +4,7 @@
 metrics to VictoriaMetrics on the internal Compose network. It has no published
 host port.
 
-The service uses the host PID namespace and read-only mounts of the host root,
-`/proc`, and `/sys`. It is therefore intended only for this trusted Linux
-Docker host.
+The service uses the host PID namespace and read-only mounts of the Docker
+host root, `/proc`, and `/sys`; it deliberately does not require recursive bind
+propagation so the local Compose PoC also starts on Docker Desktop. On macOS,
+the observed host is Docker Desktop's Linux VM rather than the macOS host.
