@@ -1,15 +1,38 @@
 # Forgejo Repository Checkouts and Seeds
 
 This directory contains source content for repositories that may be initialized
-and pushed to Forgejo. `gateway-c37-118/` is a co-located private Git worktree;
-the `processor-*/` entries are tracked bootstrap seeds. Each child directory is a
-separate repository boundary. The parent `infra` repository is
-infrastructure-only and must never be added as a Forgejo remote or pushed to
-Forgejo. Forgejo is reserved for internal processor deployment and a
-deliberately declared gateway-deployment test, not for any other infrastructure
-or repository asset.
+and pushed to Forgejo. Each child directory is a separate repository boundary.
+The parent `infra` repository is infrastructure-only and must never be added as
+a Forgejo remote or pushed to Forgejo. Forgejo is reserved for internal
+processor deployment and a deliberately declared gateway-deployment test, not
+for any other infrastructure or repository asset.
 
-The tracked bootstrap processor seeds are:
+## Each repository stands on its own
+
+Every directory here must build, test, and deploy using only files inside
+itself. A repository must not read the parent checkout at build time, and must
+not depend on a shared runtime package installed from elsewhere in `infra`.
+Concretely, each repository owns its own `Dockerfile` whose build context is its
+own directory, its own `contracts/` copy of any `.proto` it needs, its own
+tests, and its own `.forgejo/` workflow.
+
+Verify a repository in isolation with its own directory as the build context:
+
+```sh
+docker build --target test -f <repository>/Dockerfile <repository>
+```
+
+This duplicates some content between repositories, and that is the accepted
+trade. Independence is worth more here than removing the duplication: a shared
+runtime would couple every processor to one version and one release.
+
+`processor-authoring/` in the parent checkout is a scaffolding template library
+used to author a new repository. Nothing in this directory depends on it at
+build or deploy time, and nothing here may start doing so.
+
+## Tracked repositories
+
+Processors:
 
 - [`processor-frequency-scale/`](processor-frequency-scale/) owns only
 	`processor-frequency-scale`.
@@ -22,21 +45,29 @@ The tracked bootstrap processor seeds are:
 - `processor-frequency-measurement-session` owns only the standard processor
 	that turns Frequency Capture Episodes from `LiveMeasurement` into bounded
 	`MeasurementSession` requests.
+- [`processor-lfr-frequency-provision/`](processor-lfr-frequency-provision/)
+  owns only the LFR per-second preferred-frequency processor. It vendors its
+  own `sdk/` copy so its workflow validates without the parent checkout.
+- [`processor-weather-map/`](processor-weather-map/) owns only the Berlin
+  Open-Meteo weather collector that publishes to `LiveMeasurement`.
 
-Its three-source, EE-editable policy and PoC timing limits are defined in the
-[data-flow contract](../docs/reference/wama-data-flow-contracts.md). It does
-not represent Alarm lifecycle.
+Gateways:
 
-The explicitly declared C37.118 gateway-deployment-test checkout is
-[`gateway-c37-118/`](gateway-c37-118/). It owns only the
-one-shot `masterdata-publisher` and guarded generated legacy-v2 adapters for
-active approved sources in this increment.
+- [`gateway-c37-118/`](gateway-c37-118/) is the explicitly declared C37.118
+  gateway-deployment test. It owns only the one-shot `masterdata-publisher` and
+  guarded generated legacy-v2 adapters for active approved sources.
+- [`gateway-c37-118-onboarding/`](gateway-c37-118-onboarding/) owns only the
+  five-source onboarding variant targeted by
+  [`../scripts/test-masterdata-onboarding.sh`](../scripts/test-masterdata-onboarding.sh).
 
-The co-located gateway worktree and tracked processor seeds are development
-checkouts and bootstrap sources. When a Forgejo remote has no refs,
-`forgejo-init` copies their working content while omitting nested `.git`
-metadata. The C37.118 gateway credential installer accepts the co-located
-gateway checkout and rejects the parent infrastructure checkout.
+[`history/`](history/) is not a repository. It holds archived bundles of former
+nested worktrees; see its README.
+
+The tracked seeds are development checkouts and bootstrap sources. When a
+Forgejo remote has no refs, `forgejo-init` copies their working content while
+omitting nested `.git` metadata. The C37.118 gateway credential installer
+accepts the co-located gateway checkout and rejects the parent infrastructure
+checkout.
 
 `forgejo-init` seeds each repository only when its remote has no refs; that
 initial `main` push starts the repository workflow without a duplicate manual
