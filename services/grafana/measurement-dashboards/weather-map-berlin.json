@@ -10,9 +10,38 @@
         "type": "grafadruid-druid-datasource",
         "uid": "druid"
       },
-      "description": "Latest PMU frequency readings mapped to five tracked OpenStreetMap demonstration locations: Neuenhagen, Marzahn, Koppenplatz, Lichterfelde, and Radeland. Marker colour and size represent frequency in Hz.",
+      "description": "Latest PMU frequency readings mapped to five tracked OpenStreetMap demonstration locations: Neuenhagen, Marzahn, Koppenplatz, Lichterfelde, and Radeland. Marker colour shows deviation from 50 Hz: green within 50 mHz, orange within 200 mHz, red beyond.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 49.8
+              },
+              {
+                "color": "green",
+                "value": 49.95
+              },
+              {
+                "color": "orange",
+                "value": 50.05
+              },
+              {
+                "color": "red",
+                "value": 50.2
+              }
+            ]
+          },
           "unit": "hertz"
         },
         "overrides": []
@@ -50,13 +79,10 @@
               "style": {
                 "color": {
                   "field": "frequency_hz",
-                  "mode": "continuous-GrYlRd"
+                  "fixed": "green"
                 },
                 "size": {
-                  "field": "frequency_hz",
-                  "max": 30,
-                  "min": 6,
-                  "mode": "continuous"
+                  "fixed": 14
                 },
                 "symbol": {
                   "fixed": "img/icons/marker/circle.svg",
