@@ -1,0 +1,22 @@
+name: ${WAMA_GATEWAY_COMPOSE_PROJECT_NAME:-wama-gateway-c37-118}
+
+services:
+  masterdata-publisher:
+    image: "${WAMA_GATEWAY_IMAGE:-wama.local/gateway-c37-118:main}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "gateway_c37_118.masterdata_publisher"]
+    environment:
+      WAMA_CATALOG_DIR: /app/catalog
+      WAMA_CATALOG_REVISION: "${WAMA_CATALOG_REVISION:-local}"
+      WAMA_KAFKA_BOOTSTRAP_SERVERS: "${WAMA_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+      WAMA_MASTERDATA_TOPIC: "${WAMA_MASTERDATA_TOPIC:-Masterdata}"
+    networks:
+      - wama-infra
+    restart: "no"
+
+networks:
+  wama-infra:
+    external: true
+    name: ${WAMA_INFRA_NETWORK:-wama-infra}

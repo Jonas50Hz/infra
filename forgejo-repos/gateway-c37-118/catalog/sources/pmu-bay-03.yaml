@@ -1,0 +1,12 @@
+source_id: pmu-bay-03
+location: {site_id: bay-03, display_name: PMU Bay 03}
+connection: {ip_address: 172.30.0.10, port: 4714, pmu_idcode: 1003, wire_version: 2}
+signals:
+  - {signal_id: voltage-phase-a, source_channel: VL1, mrid: "urn:wama:poc:pmu:bay-03:voltage-phase-a", value_kind: double, quantity: voltage, unit: V, selector: {phasor_magnitude_channel: VL1}}
+  - {signal_id: voltage-phase-b, source_channel: VL2, mrid: "urn:wama:poc:pmu:bay-03:voltage-phase-b", value_kind: double, quantity: voltage, unit: V, selector: {phasor_magnitude_channel: VL2}}
+  - {signal_id: voltage-phase-c, source_channel: VL3, mrid: "urn:wama:poc:pmu:bay-03:voltage-phase-c", value_kind: double, quantity: voltage, unit: V, selector: {phasor_magnitude_channel: VL3}}
+  - {signal_id: current-phase-a, source_channel: IL1, mrid: "urn:wama:poc:pmu:bay-03:current-phase-a", value_kind: double, quantity: current, unit: A, selector: {phasor_magnitude_channel: IL1}}
+  - {signal_id: current-phase-b, source_channel: IL2, mrid: "urn:wama:poc:pmu:bay-03:current-phase-b", value_kind: double, quantity: current, unit: A, selector: {phasor_magnitude_channel: IL2}}
+  - {signal_id: current-phase-c, source_channel: IL3, mrid: "urn:wama:poc:pmu:bay-03:current-phase-c", value_kind: double, quantity: current, unit: A, selector: {phasor_magnitude_channel: IL3}}
+  - {signal_id: frequency, source_channel: FREQ, mrid: "urn:wama:poc:pmu:bay-03:frequency", value_kind: double, quantity: frequency, unit: Hz, selector: {frequency: true}}
+  - {signal_id: rocof, source_channel: DFREQ, mrid: "urn:wama:poc:pmu:bay-03:rocof", value_kind: double, quantity: rocof, unit: Hz/s, selector: {rocof: true}}

@@ -1,0 +1,96 @@
+name: Validate and deploy gateway-c37-118
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    runs-on: wama-processors-ci
+    timeout-minutes: 20
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Test catalog, gateway, and deployment guard
+        run: docker build --target test --file Dockerfile .
+
+  publish:
+    needs: validate
+    if: forgejo.ref == 'refs/heads/main'
+    runs-on: wama-processors-ci
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.registry.outputs.image }}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - id: registry
+        name: Resolve gateway image
+        run: |
+          registry="${FORGEJO_SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry%/}"
+          if [[ "$registry" == host.docker.internal:* ]]; then
+            registry="127.0.0.1:${registry#host.docker.internal:}"
+          fi
+          repository="$(printf '%s' "$FORGEJO_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "registry=$registry" >> "$FORGEJO_OUTPUT"
+          echo "image=$registry/$repository/gateway-c37-118" >> "$FORGEJO_OUTPUT"
+      - name: Authenticate to Forgejo Packages
+        env:
+          REGISTRY: ${{ steps.registry.outputs.registry }}
+        run: |
+          : "${FORGEJO_PROCESSORS_PACKAGE_USERNAME:?Package username is not configured}"
+          : "${FORGEJO_PROCESSORS_PACKAGE_TOKEN:?Package token is not configured}"
+          printf '%s' "$FORGEJO_PROCESSORS_PACKAGE_TOKEN" | docker login "$REGISTRY" --username "$FORGEJO_PROCESSORS_PACKAGE_USERNAME" --password-stdin
+      - name: Build and publish gateway
+        env:
+          IMAGE: ${{ steps.registry.outputs.image }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=$FORGEJO_SERVER_URL/$FORGEJO_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$FORGEJO_SHA" \
+            --tag "$IMAGE:sha-$FORGEJO_SHA" \
+            --tag "$IMAGE:main" \
+            --file Dockerfile .
+          docker push "$IMAGE:sha-$FORGEJO_SHA"
+          docker push "$IMAGE:main"
+
+  deploy:
+    needs: [validate, publish]
+    if: forgejo.ref == 'refs/heads/main'
+    runs-on: wama-processors-deploy
+    timeout-minutes: 20
+    concurrency:
+      group: wama-gateway-c37-118-deploy
+      cancel-in-progress: false
+    env:
+      WAMA_GATEWAY_C37_118_DEPLOY_ROOT: /var/lib/wama-gateway-c37-118
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Create deployment virtual environment
+        run: |
+          python3 -m venv .deploy-venv
+          .deploy-venv/bin/python -m pip install --no-cache-dir -r requirements.txt
+      - name: Authenticate to Forgejo Packages
+        run: |
+          registry="${FORGEJO_SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry%/}"
+          if [[ "$registry" == host.docker.internal:* ]]; then
+            registry="127.0.0.1:${registry#host.docker.internal:}"
+          fi
+          : "${FORGEJO_PROCESSORS_PACKAGE_USERNAME:?Package username is not configured}"
+          : "${FORGEJO_PROCESSORS_PACKAGE_TOKEN:?Package token is not configured}"
+          printf '%s' "$FORGEJO_PROCESSORS_PACKAGE_TOKEN" | docker login "$registry" --username "$FORGEJO_PROCESSORS_PACKAGE_USERNAME" --password-stdin
+      - name: Reconcile only catalog-derived C37.118 adapters
+        run: |
+          PYTHONPATH=src .deploy-venv/bin/python scripts/deploy_gateway.py \
+            --commit "$FORGEJO_SHA" \
+            --image "${{ needs.publish.outputs.image }}:sha-$FORGEJO_SHA" \
+            --project-name wama-gateway-c37-118
