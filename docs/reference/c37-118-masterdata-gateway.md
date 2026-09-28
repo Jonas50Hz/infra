@@ -126,7 +126,7 @@ status-evidence contract remains necessary for LFR audit use.
 
 ## Catalog-driven demonstration
 
-The manually operated `~/c37-118-simulator` repository provides the separate
+The manually operated `~/wama/c37-118-simulator` repository provides the separate
 V2 source fixture for this declared Forgejo gateway-deployment test. An
 operator starts its `five-pmu-v2.yaml` profile at the stable `wama-infra`
 address `172.30.0.10`, listeners `4712` through `4716`, and matching C37.118

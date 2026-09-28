@@ -46,7 +46,7 @@ monitoring. It is the ownership and deployment surface for all infrastructure,
 including the Druid image and supervisor,
 and every asset outside the narrow Forgejo deployment scope. The legacy
 `pmu-gateway` fixture is retained for reference but excluded from the default
-Compose stack. The separate `~/c37-118-simulator` repository owns the manually
+Compose stack. The separate `~/wama/c37-118-simulator` repository owns the manually
 started C37.118 source fixture and is also excluded from the root Compose
 stack. This checkout is
 never added as a Forgejo remote and is never pushed to Forgejo.
@@ -93,7 +93,7 @@ source catalog reconciles raw-Protobuf Masterdata records and tombstones to
 Kafka, then reconciles one source-scoped adapter per active catalog source. It
 does not modify the deprecated `pmu-gateway` fixture or run root Compose services.
 An operator manually starts the matching five-PMU V2 fixture from
-`~/c37-118-simulator` after the root stack has created `wama-infra`. Root
+`~/wama/c37-118-simulator` after the root stack has created `wama-infra`. Root
 startup can queue the gateway workflow but never starts or controls that
 simulator. The catalog may select any nonempty subset of that fixture or other
 reviewed compatible sources. The workflow's live verification needs the
@@ -178,7 +178,7 @@ seeded at `main`, whose push queues their workflows; existing managed remotes
 have their `processor.yaml` or `gateway.yaml` workflow dispatched at `main`
 after runner setup. Compose returns before those asynchronous Actions runs
 complete. Start the matching five-PMU V2 source separately from
-`~/c37-118-simulator` before the C37.118 gateway adapters need it: root startup
+`~/wama/c37-118-simulator` before the C37.118 gateway adapters need it: root startup
 does not start or control the simulator, and gateway live verification may not
 become green without it. A green `gateway.yaml` run in Forgejo proves the
 catalog-derived adapters, Kafka records, and their raw-Protobuf contract.
@@ -497,7 +497,7 @@ PMU_GATEWAY_CONFIG_SOURCE="$PWD/my-pmu-messages.yaml" \
 ## C37.118 Simulator
 
 The manually operated C37.118 simulator lives in
-`~/c37-118-simulator` and is the five-PMU C37.118.2-2011 V2 source fixture for
+`~/wama/c37-118-simulator` and is the five-PMU C37.118.2-2011 V2 source fixture for
 the C37.118 gateway demonstration. It remains a standalone TCP source and
 protocol-test service: it neither implements nor validates a gateway, and it
 has no Kafka, Common Format, or Druid dependency. V2 performs HDR -> CFG-1 ->
@@ -505,7 +505,7 @@ CFG-2 -> start -> periodic data -> stop; V3 performs capability -> stream
 configuration -> start -> periodic data -> stop.
 
 ```sh
-cd ~/c37-118-simulator
+cd ~/wama/c37-118-simulator
 docker compose up -d --build
 ```
 

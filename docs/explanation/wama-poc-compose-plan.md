@@ -71,7 +71,7 @@ first.** Generate Python bindings from the `.proto` in gateways + processors.
 - `node-exporter` — host CPU, memory, filesystem, and network metrics.
 - `cadvisor` — Docker-container metrics.
 - `grafana` — infrastructure dashboards over VictoriaMetrics and the
-   Druid-backed `WAMA Measurements` PMU dashboard.
+   Druid-backed `WAMA Gateways` per-PMU dashboards.
 - `gateway-dashboard-provisioner` — root-owned compacted-Masterdata consumer
    that renders Grafana's `WAMA Gateways` fleet and active-source Druid pages.
 - `iec104-exporter` — root-owned one-way IEC 104 controlled station consuming
@@ -207,7 +207,7 @@ retroactive correctness for pre-cutover state; see
    contract, and deployment-guard tests -> Systemexperte decision -> audited
    Masterdata and source-gateway reconciliation. The guarded adapter path is
    limited to reviewed legacy-v2 C37.118 TCP sources. An operator manually
-   starts the matching five-PMU V2 fixture from `~/c37-118-simulator`, but only
+   starts the matching five-PMU V2 fixture from `~/wama/c37-118-simulator`, but only
    the C37.118 gateway workflow owns adapter reconciliation.
 
 ### Phase 5 — CI/CD loop (automates deploy)

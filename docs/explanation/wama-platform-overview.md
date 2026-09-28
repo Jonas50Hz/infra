@@ -57,9 +57,9 @@ foundation matters once multiple use cases reuse and extend it.
   `LiveMeasurement` records into the no-rollup `live_measurements` datasource.
   Its only host API is the Router on port 8888; Kafka remains a single KRaft
   broker and has no ZooKeeper service.
-- Grafana's root-owned `WAMA Measurements` dashboard queries Druid directly to
-  show valid PMU voltage, current, frequency, and ROCOF values over time. It is
-  separate from VictoriaMetrics-backed infrastructure dashboards.
+- Grafana's generated per-source `WAMA Gateway: <source>` dashboards query
+  Druid directly to show PMU voltage, current, frequency, and ROCOF values over
+  time. They are separate from VictoriaMetrics-backed infrastructure dashboards.
 - The root-owned `gateway-dashboard-provisioner` replays compacted Masterdata
   into Grafana's `WAMA Gateways` fleet page and one Druid-backed live dashboard
   per active source. A source tombstone removes its generated page; this
@@ -100,7 +100,7 @@ default service or a C37.118 endpoint. The separately managed, memory-bounded
 C37.118 TCP simulator is specified in
 [the C37.118 simulator reference](../reference/c37-118-simulator.md).
 An operator manually starts its five-PMU V2 fixture from
-`~/c37-118-simulator` as the reviewed source for the declared C37.118 gateway
+`~/wama/c37-118-simulator` as the reviewed source for the declared C37.118 gateway
 demonstration. It remains a standalone source and protocol-test service: it
 does not implement, deploy, or validate a gateway or publish `LiveMeasurement`
 records itself.

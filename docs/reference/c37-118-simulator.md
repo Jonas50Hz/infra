@@ -9,7 +9,7 @@
 ## Scope and authority
 
 `c37-118-simulator` is a manually operated C37.118 TCP source simulator in
-`~/c37-118-simulator`. Its separate Compose project uses the five-PMU V2
+`~/wama/c37-118-simulator`. Its separate Compose project uses the five-PMU V2
 profile for the C37.118 gateway demonstration and attaches to the existing external
 `wama-infra` network. It is not a gateway and has no Kafka, Common Format,
 Protobuf, Druid, SeaweedFS, Forgejo, or data-plane dependency.
@@ -198,7 +198,7 @@ gateway catalog sources `pmu-bay-01` through `pmu-bay-05`. Its
 `v2_good_stat_pmu_ids` lists only `1001` and `1002`:
 
 ```sh
-cd ~/c37-118-simulator
+cd ~/wama/c37-118-simulator
 docker network inspect "${WAMA_INFRA_NETWORK:-wama-infra}" >/dev/null
 docker compose up -d --force-recreate
 
@@ -238,7 +238,7 @@ profile rejection, fixed-point bounds, fragmented/concatenated command handling,
 and standalone TCP exchanges:
 
 ```sh
-cd ~/c37-118-simulator
+cd ~/wama/c37-118-simulator
 docker build --target test --file Dockerfile .
 ```
 
@@ -254,9 +254,9 @@ standalone probe.
 The 25-PMU five-minute and 100-PMU 15-minute tests are manually armed only:
 
 ```sh
-C37_118_RUN_25_PMU=1 ~/c37-118-simulator/scripts/test-25-pmu.sh
-C37_118_RUN_100_PMU=1 ~/c37-118-simulator/scripts/test-100-pmu.sh
-C37_118_RUN_100_PMU=1 ~/c37-118-simulator/scripts/test-100-pmu-idle.sh
+C37_118_RUN_25_PMU=1 ~/wama/c37-118-simulator/scripts/test-25-pmu.sh
+C37_118_RUN_100_PMU=1 ~/wama/c37-118-simulator/scripts/test-100-pmu.sh
+C37_118_RUN_100_PMU=1 ~/wama/c37-118-simulator/scripts/test-100-pmu-idle.sh
 ```
 
 Set `C37_118_WIRE_VERSION=2` only when deliberately running one of these

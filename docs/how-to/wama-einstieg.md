@@ -23,15 +23,15 @@ Installiert sein müssen:
 
 Es gibt zwei getrennte Repositories:
 
-- `~/infra` enthält die WAMA-Infrastruktur und die Benutzeroberflächen.
-- `~/c37-118-simulator` enthält die simulierte PMU-Quelle.
+- `~/wama/infra` enthält die WAMA-Infrastruktur und die Benutzeroberflächen.
+- `~/wama/c37-118-simulator` enthält die simulierte PMU-Quelle.
 
 ## 2. Starten
 
 Zuerst die Infrastruktur starten:
 
 ```sh
-cd ~/infra
+cd ~/wama/infra
 docker compose up -d --build
 docker compose ps --all
 ```
@@ -39,7 +39,7 @@ docker compose ps --all
 Danach den C37.118-Simulator separat starten:
 
 ```sh
-cd ~/c37-118-simulator
+cd ~/wama/c37-118-simulator
 docker compose up -d --build
 ```
 
@@ -47,7 +47,7 @@ Der Simulator ist eine Quelle für C37.118-Telegramme. Er schreibt nicht selbst
 nach Kafka und kennt weder Druid noch Grafana. Die Gateway-Demonstration
 verbindet ihn mit der Infrastruktur. Nach dem Start können Provisionierung und
 Gateway-Workflow einige Sekunden benötigen. Die Infrastruktur startet oder
-steuert den Simulator nicht; ohne das passende externe Drei-PMU-V2-Profil kann
+steuert den Simulator nicht; ohne das passende externe Fünf-PMU-V2-Profil kann
 die Live-Verifikation des Gateway-Workflows nicht grün werden.
 
 ## 3. Vom PMU-Wert zur Anzeige
@@ -73,7 +73,8 @@ Von Kafka gehen die Werte in mehrere Richtungen:
 | PMU Control Console | <http://localhost:8081> |
 | Alerta WAMA-Incidents | <http://localhost:18081/alerts#environment:WAMA;status:open,ack;dateRange:,;sb:default;sd:0;asi:0> |
 | Grafana | <http://localhost:3001> |
-| WAMA Measurements Dashboard | <http://localhost:3001/d/wama-measurement-sessions/wama-measurement-sessions> |
+| WAMA Gateway Fleet | <http://localhost:3001/d/wama-gateway-fleet> |
+| WAMA Measurement Sessions | <http://localhost:3001/d/wama-measurement-sessions/wama-measurement-sessions> |
 | Kafka UI | <http://localhost:8080> |
 | Druid | <http://localhost:8888> |
 | Measurement-Session-Anfrage | <http://localhost:3004> |
@@ -92,7 +93,9 @@ gebunden ist.
 
 1. Öffne die PMU Control Console.
 2. Prüfe, dass die simulierte Quelle läuft und Messwerte sendet.
-3. Öffne Grafana und das Dashboard **WAMA Measurements**.
+3. Öffne in Grafana im Ordner **WAMA Gateways** das Dashboard
+   **WAMA Gateway Fleet** und von dort die Seite einer PMU, zum Beispiel
+   **PMU Bay 01**.
 4. Wähle einen Zeitraum, in dem neue Messwerte eintreffen.
 5. Öffne bei Bedarf Kafka UI und prüfe das Topic `LiveMeasurement`.
 
@@ -102,7 +105,7 @@ Bereich weniger Sekunden; der genaue Zeitpunkt hängt vom Startzustand der
 Container und vom Gateway-Workflow ab.
 
 
-### Alarm über die Controller Console auslösen
+### Alarm über die PMU Control Console auslösen
 
 Die **PMU Control Console** ist der sichtbare Einstieg in die Demo. Sie steuert
 nicht die Infrastruktur, sondern stellt kontrollierte Szenarien für die
@@ -123,10 +126,11 @@ Repositories.
 3. Wähle bei PMU Bay 01 oder PMU Bay 02 das Szenario **Signal excursion** aus.
    Das Basisszenario erhöht die Frequenz für
    500 Frames bei 50 Hz um `0.5 Hz` und ist damit eine ungefähr zehnsekündige
-   Überfrequenz.
+   Überfrequenz. PMU Bay 03 bis Bay 05 liefern im Simulatorprofil bewusst
+   ungültige Qualität und lösen deshalb keinen Alarm aus.
 4. Starte die Aktion über den Button und bestätige sie ausdrücklich.
 5. Beobachte anschließend die veränderten Live-Werte in Grafana und bei Bedarf
-  im Kafka UI im Topic `LiveMeasurement`.
+   im Kafka UI im Topic `LiveMeasurement`.
 
 Eine **Signal excursion** ist dabei zunächst ein simuliertes Eingangssignal:
 Die PMU liefert für eine begrenzte Zeit einen Wert außerhalb des normalen
@@ -150,12 +154,12 @@ Measurement Session ist ebenfalls kein Alarm.
 Eine Measurement Session ist eine begrenzte historische Abfrage. Sie enthält
 Startzeit, Endzeit und eine sortierte Liste von MRIDs.
 
-1. Öffne das WAMA Measurements Dashboard in Grafana.
+1. Öffne das WAMA Measurement Sessions Dashboard in Grafana.
 2. Wähle einen kurzen Zeitraum und die gewünschten MRIDs.
 3. Öffne die Aktion für die Measurement Session.
 4. Bestätige die Anfrage im lokalen Measurement-Session-Portal.
 5. Warte, bis die Session als abgeschlossen oder teilweise abgeschlossen
-  erscheint.
+   erscheint.
 6. Öffne den erzeugten Link oder lade die ausgewählten Werte als CSV herunter.
 
 Der lokale API-Dienst auf Port `3004` veröffentlicht nur die bestätigte Anfrage
@@ -166,7 +170,7 @@ Parquet-Artefakt nach SeaweedFS und veröffentlicht danach `Blobmeta`.
 Der vollständige Ende-zu-Ende-Check lautet:
 
 ```sh
-cd ~/infra
+cd ~/wama/infra
 scripts/test-measurement-session-flow.sh
 ```
 
@@ -177,9 +181,9 @@ auch kein Ersatz für die Live-Messwertansicht.
 
 Ein Alarm entsteht über den Alarm-Processor und wird als aktueller, kompaktierter
 raw-Protobuf-Zustand im Kafka-Topic `Alarm` veröffentlicht. Der Dienst
-`alarm-alerta-ingress` gleicht diesen Zustand mit Alerta ab. Öffne danach die
+`alarm-alerta-ingress` gleicht diesen Zustand mit Alerta ab. Öffne den
 Alerta-[WAMA-Incident-Tab](http://localhost:18081/alerts#environment:WAMA;status:open,ack;dateRange:,;sb:default;sd:0;asi:0)
-**vor** der Szenarioaktivierung und prüfe den zugehörigen
+**vor** der Szenarioaktivierung und prüfe danach den zugehörigen
 WAMA-Incident. Während der Überfrequenz ist der Incident offen; nach dem Ende
 des transienten Szenarios veröffentlicht der Processor einen gleichschlüssigen
 Tombstone und Alerta schließt genau diesen WAMA-Incident. Das Topic
@@ -190,7 +194,7 @@ geschlossenen Incident nicht erneut öffnen kann.
 Der fokussierte Alarm-Pfad kann reproduzierbar geprüft werden mit:
 
 ```sh
-cd ~/infra
+cd ~/wama/infra
 scripts/test-alerta-alarm-flow.sh
 ```
 
@@ -204,7 +208,7 @@ wartet darauf, dass der zugehörige Incident nach Ende der Anregung geschlossen
 wird:
 
 ```sh
-cd ~/infra
+cd ~/wama/infra
 WAMA_RUN_C37_118_ALARM_WORKFLOW_TEST=run-c37-118-alarm-workflow-test \
   scripts/test-c37-118-alarm-workflow.sh
 ```
@@ -285,7 +289,7 @@ Der C37.118-Simulator liefert Telegramme an das Gateway. Das Gateway wandelt
 die Quelle in den WAMA-Datenvertrag um und veröffentlicht raw-Protobuf
 `LiveMeasurement`-Datensätze auf Kafka. Druid konsumiert diese Datensätze
 direkt und stellt sie ohne Rollup für Zeitreihenabfragen bereit. Grafana fragt
-Druid für das WAMA-Messwert-Dashboard ab.
+Druid für die Gateway-Dashboards je PMU im Ordner **WAMA Gateways** ab.
 
 ### Alarme
 
@@ -317,7 +321,7 @@ Session-Artefakt; sie werden nicht in PostgreSQL oder VictoriaMetrics kopiert.
 Prüfe zuerst den Infrastrukturstatus:
 
 ```sh
-cd ~/infra
+cd ~/wama/infra
 docker compose ps --all
 docker compose logs --tail=100 infra-readiness
 docker compose logs --tail=100 gateway-dashboard-provisioner
@@ -326,7 +330,7 @@ docker compose logs --tail=100 gateway-dashboard-provisioner
 Für den Simulator:
 
 ```sh
-cd ~/c37-118-simulator
+cd ~/wama/c37-118-simulator
 docker compose ps
 docker compose logs --tail=100
 ```

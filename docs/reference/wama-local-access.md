@@ -22,6 +22,7 @@ different ports or credentials.
 | Trino | [Open Trino](http://localhost:8085) | No login |
 | Druid Router and web console | [Open Druid](http://localhost:8888) | No login |
 | VictoriaMetrics API and VMUI | [Open VMUI](http://127.0.0.1:8428/vmui/) · [Open API root](http://127.0.0.1:8428/) | No login; loopback-only |
+| PMU Control Console | [Open PMU Control Console](http://localhost:8081) | No login; belongs to the separately started simulator |
 
 ## Grafana dashboards
 
@@ -32,6 +33,7 @@ different ports or credentials.
 | WAMA Kafka Operations | [Open dashboard](http://localhost:3001/d/wama-kafka-operations) |
 | WAMA Measurement Sessions | [Open dashboard](http://localhost:3001/d/wama-measurement-sessions/wama-measurement-sessions) |
 | WAMA Gateway Fleet | [Open dashboard](http://localhost:3001/d/wama-gateway-fleet) |
+| WAMA Weather Map / Berlin | [Open dashboard](http://localhost:3001/d/wama-weather-map-berlin/wama-weather-map-berlin) |
 
 The Gateway Fleet page links to the generated per-gateway dashboards. Those
 pages appear only after active `Masterdata` has been provisioned.
