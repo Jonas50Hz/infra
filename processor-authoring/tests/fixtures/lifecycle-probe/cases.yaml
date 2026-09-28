@@ -1,0 +1,12 @@
+cases:
+  - name: lifecycle nominal conversion
+    inputs:
+      frequency_hz:
+        value: 50.01
+        valid: true
+        timestamp_ms: 1000
+    expect:
+      frequency_millihertz:
+        value: 50010.0
+        unit: mHz
+        timestamp_ms: 1000

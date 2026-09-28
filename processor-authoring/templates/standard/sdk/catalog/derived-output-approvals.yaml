@@ -1,0 +1,45 @@
+catalog_id: wama-derived-output-v1
+outputs:
+- mrid: urn:wama:poc:pmu:bay-01:frequency-millihertz
+  value: double
+  unit: mHz
+  topic: LiveMeasurement
+  owner: processor-frequency-scale
+  approval: WAMA-OUTPUT-001
+- mrid: urn:wama:poc:pmu:bay-01:apparent-power-l1
+  value: double
+  unit: VA
+  topic: LiveMeasurement
+  owner: processor-apparent-power
+  approval: WAMA-OUTPUT-002
+- mrid: urn:wama:poc:pmu:bay-01:apparent-power-l2
+  value: double
+  unit: VA
+  topic: LiveMeasurement
+  owner: processor-apparent-power
+  approval: WAMA-OUTPUT-003
+- mrid: urn:wama:poc:pmu:bay-01:apparent-power-l3
+  value: double
+  unit: VA
+  topic: LiveMeasurement
+  owner: processor-apparent-power
+  approval: WAMA-OUTPUT-004
+- mrid: urn:wama:example:lfr:preferred-frequency
+  value: double
+  unit: Hz
+  topic: LiveMeasurement
+  owner: processor-lfr-frequency-provision
+  approval: WAMA-OUTPUT-005
+- mrid: urn:wama:poc:test:lifecycle:frequency-millihertz
+  value: double
+  unit: mHz
+  topic: LiveMeasurement
+  owner: processor-lifecycle-probe
+  approval: WAMA-OUTPUT-TEST-001
+typed_contracts:
+- id: iec104-export-record
+  topic: Export
+  protobuf_type: wama.iec104.v1.ExportRecord
+  owner: processor-frequency-iec104-export
+  approval: WAMA-CONTRACT-001
+revision: sha256:52048e66685946994a40c4c28e435824b930295b10eb92d858365dfdaaa49f35

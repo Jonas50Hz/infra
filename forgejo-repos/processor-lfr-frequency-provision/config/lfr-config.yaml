@@ -1,0 +1,31 @@
+# Example only. Replace every MRID and engineering threshold before production use.
+close_delay_ms: 600
+even_median_tie_break: lower_frequency
+frequency_band_hz:
+  minimum: 49.0
+  maximum: 51.0
+maximum_future_seconds: 1
+output_mrid: urn:wama:example:lfr:preferred-frequency
+status_evidence:
+  mode: generic_quality_provisional
+pmus:
+  - id: example-pmu-a
+    frequency_mrid: urn:wama:example:pmu-a:frequency
+    voltage_mrid: urn:wama:example:pmu-a:voltage
+    nominal_voltage: 230.0
+    count_thresholds:
+      bad_maximum_good_samples: 9
+      very_good_minimum_good_samples: 26
+    voltage_thresholds:
+      very_good_maximum_deviation: 1.0
+      good_maximum_deviation: 2.0
+  - id: example-pmu-b
+    frequency_mrid: urn:wama:example:pmu-b:frequency
+    voltage_mrid: urn:wama:example:pmu-b:voltage
+    nominal_voltage: 230.0
+    count_thresholds:
+      bad_maximum_good_samples: 9
+      very_good_minimum_good_samples: 26
+    voltage_thresholds:
+      very_good_maximum_deviation: 1.0
+      good_maximum_deviation: 2.0
