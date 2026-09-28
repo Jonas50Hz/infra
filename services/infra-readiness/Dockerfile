@@ -19,14 +19,20 @@ RUN protoc \
     --python_out=/build/src/infra_readiness/generated \
     /build/proto/rtd_schema.proto
 
-FROM python:3.12-slim
+FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
 COPY --from=build /install /usr/local
 COPY --from=build /build/src /app
-COPY services/infra-readiness/tests /app/tests
 
 ENV PYTHONPATH=/app
+
+FROM runtime AS test
+
+COPY services/infra-readiness/tests /app/tests
+RUN python -m unittest discover -s /app/tests -v
+
+FROM runtime
 
 CMD ["python", "-m", "infra_readiness.main"]
