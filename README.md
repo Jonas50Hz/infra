@@ -539,7 +539,6 @@ shortcuts, see [WAMA local access links](docs/reference/wama-local-access.md).
 | VictoriaMetrics API and VMUI | `http://127.0.0.1:8428` |
 | IEC 104 controlled station | `tcp://127.0.0.1:2404` |
 | IEC 104 live monitor | `http://localhost:3003` |
-| IEC 104 live monitor | `http://localhost:3003` |
 
 Kafka UI exposes topic contents, partitions, consumer groups, messages, and
 broker metadata. Its port is exposed on all host interfaces so it can be opened

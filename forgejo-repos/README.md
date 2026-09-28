@@ -63,6 +63,15 @@ Gateways:
 [`history/`](history/) is not a repository. It holds archived bundles of former
 nested worktrees; see its README.
 
+Seven of these repositories are bootstrapped by default; `FORGEJO_MANAGED_REPOSITORIES`
+in [`../.env.example`](../.env.example) lists them. `gateway-c37-118-onboarding`
+and `processor-lfr-frequency-provision` are tracked here but are deliberately
+not in that default set: the first exists for
+[`../scripts/test-masterdata-onboarding.sh`](../scripts/test-masterdata-onboarding.sh),
+and the second is a reviewed seed awaiting the open LFR decisions recorded in
+[`../docs/reference/lfr-frequency-provision.md`](../docs/reference/lfr-frequency-provision.md).
+Both still build and test standalone.
+
 The tracked seeds are development checkouts and bootstrap sources. When a
 Forgejo remote has no refs, `forgejo-init` copies their working content while
 omitting nested `.git` metadata. The C37.118 gateway credential installer
