@@ -578,9 +578,10 @@ read-only dashboard under **WAMA Measurements**:
   internal read-only Trino datasource, with Blobmeta evidence and MRID coverage.
   Its **Export CSV** dashboard action downloads the current selection through
   the loopback-only fixed-query exporter.
-- **WAMA Weather Map / Berlin**: five static Berlin marker locations over an
-  OpenStreetMap basemap, queried through the Druid datasource for a focused
-  Geomap demonstration.
+- **WAMA Weather Map / Berlin**: two OpenStreetMap Geomap panels queried
+  through the Druid datasource: the latest PMU frequency at five static Berlin
+  marker locations, and the latest Open-Meteo Berlin temperature, wind speed,
+  and wind direction.
 
 The root-owned `gateway-dashboard-provisioner` also consumes compacted
 `Masterdata` and provisions the **WAMA Gateways** folder:
@@ -622,6 +623,19 @@ The Forgejo-managed `processor-weather-map` calls Open-Meteo every five
 minutes for Berlin current temperature, wind speed, and wind direction. It
 publishes each as a valid numeric raw-Protobuf `LiveMeasurement`; its
 repository-local workflow deploys only that processor on `wama-infra`.
+
+Run the Berlin weather map end-to-end validation against the running stack:
+
+```sh
+scripts/test-weather-map.sh
+```
+
+The script runs the processor unit tests, builds and deploys the processor,
+waits up to `WEATHER_MAP_INGEST_TIMEOUT_SECONDS` (default 420) for all three
+Open-Meteo signals to reach Druid, requires the five mapped PMU frequency
+signals, then sends each provisioned geomap panel query through Grafana and
+requires the expected rows with every marker-layer field. On failure it leaves
+the stack running and prints focused diagnostic logs.
 
 Query the configured PMU frequency record through the LAN-accessible Router:
 

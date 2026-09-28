@@ -1,49 +1,232 @@
 {
-  "annotations": {"list": []},
+  "annotations": {
+    "list": []
+  },
   "editable": false,
   "graphTooltip": 0,
   "panels": [
     {
-      "datasource": {"type": "grafadruid-druid-datasource", "uid": "druid"},
-      "description": "Latest PMU frequency readings mapped to five tracked OpenStreetMap demonstration locations: Neuenhagen, Marzahn, Koppenplatz, Lichterfelde, and Radeland. Marker colour and size represent frequency in Hz.",
-      "fieldConfig": {"defaults": {"unit": "hertz"}, "overrides": []},
-      "gridPos": {"h": 18, "w": 12, "x": 0, "y": 0},
+      "datasource": {
+        "type": "grafadruid-druid-datasource",
+        "uid": "druid"
+      },
+      "description": "Latest PMU frequency readings mapped to five tracked OpenStreetMap demonstration locations: Neuenhagen, Marzahn, Koppenplatz, Lichterfelde, and Radeland. Marker colour shows deviation from 50 Hz: green within 50 mHz, orange within 200 mHz, red beyond.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 49.8
+              },
+              {
+                "color": "green",
+                "value": 49.95
+              },
+              {
+                "color": "orange",
+                "value": 50.05
+              },
+              {
+                "color": "red",
+                "value": 50.2
+              }
+            ]
+          },
+          "unit": "hertz"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
       "options": {
-        "basemap": {"config": {"showLabels": true}, "name": "OpenStreetMap", "type": "default"},
-        "controls": {"mouseWheelZoom": true, "showAttribution": true, "showDebug": false, "showMeasure": false, "showScale": false, "showZoom": true},
-        "layers": [{"config": {"location": {"latitude": "latitude", "longitude": "longitude", "mode": "coords"}, "showLegend": true, "style": {"color": {"field": "frequency_hz", "mode": "continuous-GrYlRd"}, "size": {"field": "frequency_hz", "max": 30, "min": 6, "mode": "continuous"}, "symbol": {"fixed": "img/icons/marker/circle.svg", "mode": "fixed"}}}, "name": "PMU frequency", "type": "markers"}],
-        "tooltip": {"mode": "details"},
-        "view": {"allLayers": true, "id": "coords", "lat": 52.516, "lon": 13.405, "zoom": 10}
+        "basemap": {
+          "config": {},
+          "name": "OpenStreetMap",
+          "type": "osm-standard"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "location": {
+                "latitude": "latitude",
+                "longitude": "longitude",
+                "mode": "coords"
+              },
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "frequency_hz",
+                  "fixed": "green"
+                },
+                "size": {
+                  "fixed": 14
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                }
+              }
+            },
+            "name": "PMU frequency",
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "coords",
+          "lat": 52.516,
+          "lon": 13.405,
+          "zoom": 10
+        }
       },
-      "targets": [{"queryType": "sql", "rawSql": "SELECT CASE \"mrid\" WHEN 'urn:wama:poc:pmu:bay-01:frequency' THEN 'Neuenhagen' WHEN 'urn:wama:poc:pmu:bay-02:frequency' THEN 'Marzahn' WHEN 'urn:wama:poc:pmu:bay-03:frequency' THEN 'Koppenplatz / Mitte' WHEN 'urn:wama:poc:pmu:bay-04:frequency' THEN 'Lichterfelde' WHEN 'urn:wama:poc:pmu:bay-05:frequency' THEN 'Radeland / Spandau' END AS site, CASE \"mrid\" WHEN 'urn:wama:poc:pmu:bay-01:frequency' THEN CAST(52.5384117 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-02:frequency' THEN CAST(52.5356976 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-03:frequency' THEN CAST(52.5276066 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-04:frequency' THEN CAST(52.4238697 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-05:frequency' THEN CAST(52.5503022 AS DOUBLE) END AS latitude, CASE \"mrid\" WHEN 'urn:wama:poc:pmu:bay-01:frequency' THEN CAST(13.7007858 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-02:frequency' THEN CAST(13.5240397 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-03:frequency' THEN CAST(13.3985493 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-04:frequency' THEN CAST(13.3100566 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-05:frequency' THEN CAST(13.1716294 AS DOUBLE) END AS longitude, \"double_value\" AS frequency_hz, \"__time\" AS observed_at FROM \"live_measurements\" WHERE \"mrid\" IN ('urn:wama:poc:pmu:bay-01:frequency','urn:wama:poc:pmu:bay-02:frequency','urn:wama:poc:pmu:bay-03:frequency','urn:wama:poc:pmu:bay-04:frequency','urn:wama:poc:pmu:bay-05:frequency') AND \"__time\" BETWEEN MILLIS_TO_TIMESTAMP(${__from}) AND MILLIS_TO_TIMESTAMP(${__to}) ORDER BY \"__time\" DESC", "refId": "A"}],
+      "targets": [
+        {
+          "builder": {
+            "query": "SELECT CASE \"mrid\" WHEN 'urn:wama:poc:pmu:bay-01:frequency' THEN 'Neuenhagen' WHEN 'urn:wama:poc:pmu:bay-02:frequency' THEN 'Marzahn' WHEN 'urn:wama:poc:pmu:bay-03:frequency' THEN 'Koppenplatz / Mitte' WHEN 'urn:wama:poc:pmu:bay-04:frequency' THEN 'Lichterfelde' WHEN 'urn:wama:poc:pmu:bay-05:frequency' THEN 'Radeland / Spandau' END AS site, CASE \"mrid\" WHEN 'urn:wama:poc:pmu:bay-01:frequency' THEN CAST(52.5384117 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-02:frequency' THEN CAST(52.5356976 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-03:frequency' THEN CAST(52.5276066 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-04:frequency' THEN CAST(52.4238697 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-05:frequency' THEN CAST(52.5503022 AS DOUBLE) END AS latitude, CASE \"mrid\" WHEN 'urn:wama:poc:pmu:bay-01:frequency' THEN CAST(13.7007858 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-02:frequency' THEN CAST(13.5240397 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-03:frequency' THEN CAST(13.3985493 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-04:frequency' THEN CAST(13.3100566 AS DOUBLE) WHEN 'urn:wama:poc:pmu:bay-05:frequency' THEN CAST(13.1716294 AS DOUBLE) END AS longitude, LATEST_BY(\"double_value\", \"__time\") AS frequency_hz, MAX(\"__time\") AS observed_at FROM \"live_measurements\" WHERE \"mrid\" IN ('urn:wama:poc:pmu:bay-01:frequency','urn:wama:poc:pmu:bay-02:frequency','urn:wama:poc:pmu:bay-03:frequency','urn:wama:poc:pmu:bay-04:frequency','urn:wama:poc:pmu:bay-05:frequency') AND \"__time\" BETWEEN MILLIS_TO_TIMESTAMP(${__from}) AND MILLIS_TO_TIMESTAMP(${__to}) GROUP BY 1, 2, 3",
+            "queryType": "sql"
+          },
+          "refId": "A",
+          "settings": {
+            "format": "table"
+          }
+        }
+      ],
       "title": "PMU frequency heat map",
       "type": "geomap"
     },
     {
-      "datasource": {"type": "grafadruid-druid-datasource", "uid": "druid"},
+      "datasource": {
+        "type": "grafadruid-druid-datasource",
+        "uid": "druid"
+      },
       "description": "Live Open-Meteo Berlin observations published by the managed weather processor. Marker colour and size reflect the queried weather value; the tooltip includes the metric and time.",
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 18, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "id": 2,
       "options": {
-        "basemap": {"config": {"showLabels": true}, "name": "OpenStreetMap", "type": "default"},
-        "controls": {"mouseWheelZoom": true, "showAttribution": true, "showDebug": false, "showMeasure": false, "showScale": false, "showZoom": true},
-        "layers": [{"config": {"location": {"latitude": "latitude", "longitude": "longitude", "mode": "coords"}, "showLegend": true, "style": {"color": {"field": "value", "mode": "continuous-YlGnBu"}, "size": {"field": "value", "max": 30, "min": 6, "mode": "continuous"}, "symbol": {"fixed": "img/icons/marker/circle.svg", "mode": "fixed"}}}, "name": "Open-Meteo weather", "type": "markers"}],
-        "tooltip": {"mode": "details"},
-        "view": {"allLayers": true, "id": "coords", "lat": 52.52, "lon": 13.405, "zoom": 10}
+        "basemap": {
+          "config": {},
+          "name": "OpenStreetMap",
+          "type": "osm-standard"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "location": {
+                "latitude": "latitude",
+                "longitude": "longitude",
+                "mode": "coords"
+              },
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "value",
+                  "mode": "continuous-YlGnBu"
+                },
+                "size": {
+                  "field": "value",
+                  "max": 30,
+                  "min": 6,
+                  "mode": "continuous"
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                }
+              }
+            },
+            "name": "Open-Meteo weather",
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "coords",
+          "lat": 52.52,
+          "lon": 13.405,
+          "zoom": 10
+        }
       },
-      "targets": [{"queryType": "sql", "rawSql": "SELECT 'Berlin' AS site, CAST(52.5200 AS DOUBLE) AS latitude, CAST(13.4050 AS DOUBLE) AS longitude, CASE \"mrid\" WHEN 'urn:wama:poc:weather:berlin:temperature-2m-c' THEN 'Temperature (°C)' WHEN 'urn:wama:poc:weather:berlin:wind-speed-10m-kmh' THEN 'Wind speed (km/h)' WHEN 'urn:wama:poc:weather:berlin:wind-direction-10m-degrees' THEN 'Wind direction (°)' END AS metric, \"double_value\" AS value, \"__time\" AS observed_at FROM \"live_measurements\" WHERE \"mrid\" IN ('urn:wama:poc:weather:berlin:temperature-2m-c','urn:wama:poc:weather:berlin:wind-speed-10m-kmh','urn:wama:poc:weather:berlin:wind-direction-10m-degrees') AND \"__time\" BETWEEN MILLIS_TO_TIMESTAMP(${__from}) AND MILLIS_TO_TIMESTAMP(${__to}) ORDER BY \"__time\" DESC", "refId": "A"}],
+      "targets": [
+        {
+          "builder": {
+            "query": "SELECT 'Berlin' AS site, CAST(52.5200 AS DOUBLE) AS latitude, CAST(13.4050 AS DOUBLE) AS longitude, CASE \"mrid\" WHEN 'urn:wama:poc:weather:berlin:temperature-2m-c' THEN 'Temperature (°C)' WHEN 'urn:wama:poc:weather:berlin:wind-speed-10m-kmh' THEN 'Wind speed (km/h)' WHEN 'urn:wama:poc:weather:berlin:wind-direction-10m-degrees' THEN 'Wind direction (°)' END AS metric, LATEST_BY(\"double_value\", \"__time\") AS \"value\", MAX(\"__time\") AS observed_at FROM \"live_measurements\" WHERE \"mrid\" IN ('urn:wama:poc:weather:berlin:temperature-2m-c','urn:wama:poc:weather:berlin:wind-speed-10m-kmh','urn:wama:poc:weather:berlin:wind-direction-10m-degrees') AND \"__time\" BETWEEN MILLIS_TO_TIMESTAMP(${__from}) AND MILLIS_TO_TIMESTAMP(${__to}) GROUP BY 1, 2, 3, 4",
+            "queryType": "sql"
+          },
+          "refId": "A",
+          "settings": {
+            "format": "table"
+          }
+        }
+      ],
       "title": "Open-Meteo wind and weather",
       "type": "geomap"
     }
   ],
   "schemaVersion": 41,
-  "tags": ["wama", "weather", "berlin", "druid", "geomap"],
-  "templating": {"list": []},
-  "time": {"from": "now-6h", "to": "now"},
+  "tags": [
+    "wama",
+    "weather",
+    "berlin",
+    "druid",
+    "geomap"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timezone": "browser",
   "title": "WAMA Weather Map / Berlin",
   "uid": "wama-weather-map-berlin",
-  "version": 2
+  "version": 3
 }
