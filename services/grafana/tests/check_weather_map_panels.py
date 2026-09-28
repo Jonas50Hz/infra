@@ -95,6 +95,10 @@ def main() -> int:
         if expected_rows is not None and rows != expected_rows:
             failures.append(f"{title}: expected {expected_rows} mapped rows, received {rows}")
 
+        basemap = panel["options"]["basemap"]["type"]
+        if basemap != "osm-standard":
+            failures.append(f"{title}: basemap is {basemap!r}, expected keyless 'osm-standard'")
+
         layer = panel["options"]["layers"][0]
         location = layer["config"]["location"]
         required = {location["latitude"], location["longitude"]}

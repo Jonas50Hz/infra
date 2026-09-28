@@ -26,11 +26,9 @@
       "id": 1,
       "options": {
         "basemap": {
-          "config": {
-            "showLabels": true
-          },
+          "config": {},
           "name": "OpenStreetMap",
-          "type": "default"
+          "type": "osm-standard"
         },
         "controls": {
           "mouseWheelZoom": true,
@@ -117,11 +115,9 @@
       "id": 2,
       "options": {
         "basemap": {
-          "config": {
-            "showLabels": true
-          },
+          "config": {},
           "name": "OpenStreetMap",
-          "type": "default"
+          "type": "osm-standard"
         },
         "controls": {
           "mouseWheelZoom": true,
