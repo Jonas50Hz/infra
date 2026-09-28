@@ -7,7 +7,7 @@ runner_dir="${FORGEJO_RUNNER_DIRECTORY:-/runner}"
 runner_config_file="$runner_dir/config.yaml"
 runner_layout_file="$runner_dir/forgejo-managed-repositories.layout"
 runner_scope_file="$runner_dir/forgejo-managed-repositories.scope"
-runner_layout=twelve-connections-v6
+runner_layout=fourteen-connections-v7
 runner_package_token_file="$runner_dir/forgejo-processors-package.token"
 package_token_name=wama-processors-package-publish
 gateway_c37_118_agent_username="${FORGEJO_GATEWAY_C37_118_AGENT_USERNAME:-wama-gateway-c37-118-agent}"
@@ -24,12 +24,14 @@ apparent_repository="${FORGEJO_APPARENT_POWER_REPOSITORY:-processor-apparent-pow
 frequency_iec104_export_repository="${FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY:-processor-frequency-iec104-export}"
 frequency_measurement_session_repository="${FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY:-processor-frequency-measurement-session}"
 alarm_threshold_repository="${FORGEJO_ALARM_THRESHOLD_REPOSITORY:-processor-alarm-threshold}"
+weather_map_repository="${FORGEJO_WEATHER_MAP_REPOSITORY:-processor-weather-map}"
 gateway_c37_118_repository="${FORGEJO_GATEWAY_C37_118_REPOSITORY:-gateway-c37-118}"
 frequency_deploy_root="${WAMA_FREQUENCY_SCALE_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-scale}"
 apparent_deploy_root="${WAMA_APPARENT_POWER_DEPLOY_ROOT:-/var/lib/wama-processor-apparent-power}"
 frequency_iec104_export_deploy_root="${WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-iec104-export}"
 frequency_measurement_session_deploy_root="${WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT:-/var/lib/wama-processor-frequency-measurement-session}"
 alarm_threshold_deploy_root="${WAMA_ALARM_THRESHOLD_DEPLOY_ROOT:-/var/lib/wama-processor-alarm-threshold}"
+weather_map_deploy_root="${WAMA_WEATHER_MAP_DEPLOY_ROOT:-/var/lib/wama-processor-weather-map}"
 gateway_c37_118_deploy_root="${WAMA_GATEWAY_C37_118_DEPLOY_ROOT:-/var/lib/wama-gateway-c37-118}"
 infra_network="${WAMA_INFRA_NETWORK:-wama-infra}"
 runner_url="${FORGEJO_RUNNER_URL:-}"
@@ -361,6 +363,7 @@ require_value WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 require_value WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
 require_value WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT "$frequency_measurement_session_deploy_root"
 require_value WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
+require_value WAMA_WEATHER_MAP_DEPLOY_ROOT "$weather_map_deploy_root"
 require_value WAMA_GATEWAY_C37_118_DEPLOY_ROOT "$gateway_c37_118_deploy_root"
 validate_identifier FORGEJO_BOOTSTRAP_ADMIN_USERNAME "$admin_username"
 validate_identifier FORGEJO_FREQUENCY_SCALE_REPOSITORY "$frequency_repository"
@@ -368,6 +371,7 @@ validate_identifier FORGEJO_APPARENT_POWER_REPOSITORY "$apparent_repository"
 validate_identifier FORGEJO_FREQUENCY_IEC104_EXPORT_REPOSITORY "$frequency_iec104_export_repository"
 validate_identifier FORGEJO_FREQUENCY_MEASUREMENT_SESSION_REPOSITORY "$frequency_measurement_session_repository"
 validate_identifier FORGEJO_ALARM_THRESHOLD_REPOSITORY "$alarm_threshold_repository"
+validate_identifier FORGEJO_WEATHER_MAP_REPOSITORY "$weather_map_repository"
 validate_identifier FORGEJO_GATEWAY_C37_118_REPOSITORY "$gateway_c37_118_repository"
 validate_identifier FORGEJO_GATEWAY_C37_118_AGENT_USERNAME "$gateway_c37_118_agent_username"
 validate_deploy_root WAMA_FREQUENCY_SCALE_DEPLOY_ROOT "$frequency_deploy_root"
@@ -375,6 +379,7 @@ validate_deploy_root WAMA_APPARENT_POWER_DEPLOY_ROOT "$apparent_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_IEC104_EXPORT_DEPLOY_ROOT "$frequency_iec104_export_deploy_root"
 validate_deploy_root WAMA_FREQUENCY_MEASUREMENT_SESSION_DEPLOY_ROOT "$frequency_measurement_session_deploy_root"
 validate_deploy_root WAMA_ALARM_THRESHOLD_DEPLOY_ROOT "$alarm_threshold_deploy_root"
+validate_deploy_root WAMA_WEATHER_MAP_DEPLOY_ROOT "$weather_map_deploy_root"
 validate_deploy_root WAMA_GATEWAY_C37_118_DEPLOY_ROOT "$gateway_c37_118_deploy_root"
 
 if ! forgejo_as_git admin user list | awk -v username="$admin_username" '$2 == username { found = 1 } END { exit !found }'; then
@@ -395,12 +400,14 @@ apparent_seeded_file="$temporary_directory/processor-apparent-power.seeded"
 frequency_iec104_export_seeded_file="$temporary_directory/processor-frequency-iec104-export.seeded"
 frequency_measurement_session_seeded_file="$temporary_directory/processor-frequency-measurement-session.seeded"
 alarm_threshold_seeded_file="$temporary_directory/processor-alarm-threshold.seeded"
+weather_map_seeded_file="$temporary_directory/processor-weather-map.seeded"
 gateway_c37_118_seeded_file="$temporary_directory/gateway-c37-118.seeded"
 initialize_deploy_root "$frequency_repository" "$frequency_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$apparent_repository" "$apparent_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$frequency_iec104_export_repository" "$frequency_iec104_export_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$frequency_measurement_session_repository" "$frequency_measurement_session_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$alarm_threshold_repository" "$alarm_threshold_deploy_root" "$processor_deploy_marker"
+initialize_deploy_root "$weather_map_repository" "$weather_map_deploy_root" "$processor_deploy_marker"
 initialize_deploy_root "$gateway_c37_118_repository" "$gateway_c37_118_deploy_root" "$gateway_c37_118_deploy_marker"
 api_auth_header="$(printf '%s:%s' "$admin_username" "$admin_password" | base64 | tr -d '\n')"
 ensure_repository "$frequency_repository"
@@ -408,6 +415,7 @@ ensure_repository "$apparent_repository"
 ensure_repository "$frequency_iec104_export_repository"
 ensure_repository "$frequency_measurement_session_repository"
 ensure_repository "$alarm_threshold_repository"
+ensure_repository "$weather_map_repository"
 ensure_repository "$gateway_c37_118_repository"
 seed_repository_if_empty \
   "$frequency_repository" \
@@ -430,13 +438,17 @@ seed_repository_if_empty \
   "$seed_root/processor-alarm-threshold" \
   "$alarm_threshold_seeded_file"
 seed_repository_if_empty \
+  "$weather_map_repository" \
+  "$seed_root/processor-weather-map" \
+  "$weather_map_seeded_file"
+seed_repository_if_empty \
   "$gateway_c37_118_repository" \
   "$seed_root/gateway-c37-118" \
   "$gateway_c37_118_seeded_file"
 ensure_package_token
 ensure_gateway_c37_118_agent
 
-scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$frequency_measurement_session_repository,$admin_username/$alarm_threshold_repository,$admin_username/$gateway_c37_118_repository"
+scope_manifest="$admin_username/$frequency_repository,$admin_username/$apparent_repository,$admin_username/$frequency_iec104_export_repository,$admin_username/$frequency_measurement_session_repository,$admin_username/$alarm_threshold_repository,$admin_username/$weather_map_repository,$admin_username/$gateway_c37_118_repository"
 if [ ! -f "$runner_layout_file" ] || [ "$(cat "$runner_layout_file")" != "$runner_layout" ]; then
   reset_runner_state
 fi
@@ -454,6 +466,8 @@ frequency_measurement_session_ci_name=wama-processor-frequency-measurement-sessi
 frequency_measurement_session_deploy_name=wama-processor-frequency-measurement-session-deploy
 alarm_threshold_ci_name=wama-processor-alarm-threshold-ci
 alarm_threshold_deploy_name=wama-processor-alarm-threshold-deploy
+weather_map_ci_name=wama-processor-weather-map-ci
+weather_map_deploy_name=wama-processor-weather-map-deploy
 gateway_c37_118_ci_name=wama-gateway-c37-118-ci
 gateway_c37_118_deploy_name=wama-gateway-c37-118-deploy
 register_runner "$frequency_repository" "$frequency_ci_name" "$runner_ci_label"
@@ -466,6 +480,8 @@ register_runner "$frequency_measurement_session_repository" "$frequency_measurem
 register_runner "$frequency_measurement_session_repository" "$frequency_measurement_session_deploy_name" "$runner_deploy_label"
 register_runner "$alarm_threshold_repository" "$alarm_threshold_ci_name" "$runner_ci_label"
 register_runner "$alarm_threshold_repository" "$alarm_threshold_deploy_name" "$runner_deploy_label"
+register_runner "$weather_map_repository" "$weather_map_ci_name" "$runner_ci_label"
+register_runner "$weather_map_repository" "$weather_map_deploy_name" "$runner_deploy_label"
 register_runner "$gateway_c37_118_repository" "$gateway_c37_118_ci_name" "$runner_ci_label"
 register_runner "$gateway_c37_118_repository" "$gateway_c37_118_deploy_name" "$runner_deploy_label"
 
@@ -476,8 +492,8 @@ runner_valid_volumes="    - \"$frequency_deploy_root\"
     - \"$apparent_deploy_root\"
     - \"$frequency_iec104_export_deploy_root\"
     - \"$frequency_measurement_session_deploy_root\"
-    - \"$alarm_threshold_deploy_root\""
-runner_valid_volumes="$runner_valid_volumes
+    - \"$alarm_threshold_deploy_root\"
+    - \"$weather_map_deploy_root\"
     - \"$gateway_c37_118_deploy_root\""
 runner_connections="$(
   runner_connection "$frequency_ci_name"
@@ -490,6 +506,8 @@ runner_connections="$(
   runner_connection "$frequency_measurement_session_deploy_name"
   runner_connection "$alarm_threshold_ci_name"
   runner_connection "$alarm_threshold_deploy_name"
+  runner_connection "$weather_map_ci_name"
+  runner_connection "$weather_map_deploy_name"
   runner_connection "$gateway_c37_118_ci_name"
   runner_connection "$gateway_c37_118_deploy_name"
 )"
@@ -535,6 +553,9 @@ if [ ! -e "$frequency_measurement_session_seeded_file" ]; then
 fi
 if [ ! -e "$alarm_threshold_seeded_file" ]; then
   dispatch_workflow "$alarm_threshold_repository" processor.yaml
+fi
+if [ ! -e "$weather_map_seeded_file" ]; then
+  dispatch_workflow "$weather_map_repository" processor.yaml
 fi
 if [ ! -e "$gateway_c37_118_seeded_file" ]; then
   dispatch_workflow "$gateway_c37_118_repository" gateway.yaml

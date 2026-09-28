@@ -12,7 +12,9 @@ tracked files in this directory:
 - **VictoriaMetrics** remains the default datasource for **WAMA Infrastructure**
 	dashboards: host, Compose-container, and Kafka operations telemetry.
 - **Druid** connects internally to `http://druid:8888` for the generated
-	**WAMA Gateways** live-value dashboards.
+	**WAMA Gateways** live-value dashboards and the **WAMA Weather Map / Berlin**
+	Geomap dashboard. The weather map uses five static Berlin locations over the
+	OpenStreetMap basemap.
 - **Trino** connects internally to `http://trino:8080` for **WAMA Measurements**.
 	**WAMA Measurement Sessions** selects one immutable `blob_id` and queries its
 	registered Iceberg artifact without parsing object paths. Its visible **Export

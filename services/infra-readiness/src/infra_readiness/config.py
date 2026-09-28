@@ -13,6 +13,7 @@ DEFAULT_FORGEJO_MANAGED_REPOSITORIES = (
     "processor-frequency-iec104-export",
     "processor-frequency-measurement-session",
     "processor-alarm-threshold",
+    "processor-weather-map",
     "gateway-c37-118",
 )
 

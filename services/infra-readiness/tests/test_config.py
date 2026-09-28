@@ -36,6 +36,7 @@ class SettingsTests(unittest.TestCase):
                 "processor-frequency-iec104-export",
                 "processor-frequency-measurement-session",
                 "processor-alarm-threshold",
+                "processor-weather-map",
                 "gateway-c37-118",
             ),
         )

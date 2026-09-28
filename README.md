@@ -55,6 +55,7 @@ never added as a Forgejo remote and is never pushed to Forgejo.
 [`forgejo-repos/processor-apparent-power/`](forgejo-repos/processor-apparent-power/),
 [`forgejo-repos/processor-frequency-iec104-export/`](forgejo-repos/processor-frequency-iec104-export/),
 [`forgejo-repos/processor-alarm-threshold/`](forgejo-repos/processor-alarm-threshold/),
+[`forgejo-repos/processor-weather-map/`](forgejo-repos/processor-weather-map/),
 and the standard `processor-frequency-measurement-session` seed
 are separate processor-repository seeds. `forgejo-init` automatically creates
 one private Forgejo repository per seed and seeds each `main` branch only when
@@ -367,11 +368,12 @@ exporter permits one control center.
 
 ## Forgejo Actions
 
-`forgejo-init` creates the configured administrator and six private managed
+`forgejo-init` creates the configured administrator and seven private managed
 repositories: `<owner>/processor-frequency-scale`,
 `<owner>/processor-apparent-power`, `<owner>/processor-frequency-iec104-export`,
 `<owner>/processor-frequency-measurement-session`,
-`<owner>/processor-alarm-threshold`, and `<owner>/gateway-c37-118`. The
+`<owner>/processor-alarm-threshold`, `<owner>/processor-weather-map`, and
+`<owner>/gateway-c37-118`. The
 processor roots use
 `.wama-forgejo-processor-root`; the C37.118 gateway root uses
 `.wama-forgejo-gateway-c37-118-root`. Bootstrap skips seeding without
@@ -438,8 +440,8 @@ project, Forgejo bootstrap guard, and C37.118 gateway credential bridge together
 sh scripts/test-masterdata-gateway-c37-118.sh
 ```
 
-Each of the six default managed repositories has distinct repository-scoped CI
-and deployment runner connections, twelve in total, all handled by the same
+Each of the seven default managed repositories has distinct repository-scoped CI
+and deployment runner connections, fourteen in total, all handled by the same
 capacity-one runner daemon. The deployment connection runs in the runner
 container with the host Docker socket and its matching deployment root mounted
 at the same path. This is trusted local-PoC access: managed-repository workflow
@@ -451,6 +453,7 @@ Create or adapt processors only from the instructions in the individual
 [apparent-power README](forgejo-repos/processor-apparent-power/README.md) or
 [frequency IEC 104 export README](forgejo-repos/processor-frequency-iec104-export/README.md) or
 [alarm-threshold README](forgejo-repos/processor-alarm-threshold/README.md) or
+[weather-map README](forgejo-repos/processor-weather-map/README.md) or
 [C37.118 gateway README](forgejo-repos/gateway-c37-118/README.md).
 Each repository owns its Python code, test suite, and app-local Compose fragment.
 
@@ -576,6 +579,9 @@ read-only dashboard under **WAMA Measurements**:
   internal read-only Trino datasource, with Blobmeta evidence and MRID coverage.
   Its **Export CSV** dashboard action downloads the current selection through
   the loopback-only fixed-query exporter.
+- **WAMA Weather Map / Berlin**: five static Berlin marker locations over an
+  OpenStreetMap basemap, queried through the Druid datasource for a focused
+  Geomap demonstration.
 
 The root-owned `gateway-dashboard-provisioner` also consumes compacted
 `Masterdata` and provisions the **WAMA Gateways** folder:
@@ -612,6 +618,11 @@ The supervisor reads raw `MCCSMeasurementValue` values directly from
 and preserves the typed scalar value alternatives plus quality and source
 timestamps. `live_measurements` uses `queryGranularity: none` and `rollup:
 false`.
+
+The Forgejo-managed `processor-weather-map` calls Open-Meteo every five
+minutes for Berlin current temperature, wind speed, and wind direction. It
+publishes each as a valid numeric raw-Protobuf `LiveMeasurement`; its
+repository-local workflow deploys only that processor on `wama-infra`.
 
 Query the configured PMU frequency record through the LAN-accessible Router:
 
