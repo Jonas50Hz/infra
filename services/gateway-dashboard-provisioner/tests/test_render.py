@@ -55,13 +55,70 @@ class DashboardRenderTests(unittest.TestCase):
         self.assertNotIn('"quality_valid" = \'true\'', latest_query)
         self.assertIn('"quality_valid"', latest_query)
 
-    def test_scopes_ordered_series_context_without_changing_rendered_sql(self) -> None:
+    def test_renders_all_quality_flags_as_a_stepped_graph(self) -> None:
+        dashboard = render_gateway_dashboard(_source())
+        panels = {panel["title"]: panel for panel in dashboard["panels"]}
+
+        quality_panel = panels["Quality Flags"]
+        quality_targets = quality_panel["targets"]
+
+        self.assertEqual(quality_panel["gridPos"], {"h": 8, "w": 24, "x": 0, "y": 30})
+        self.assertEqual(quality_panel["type"], "timeseries")
+        self.assertEqual(
+            quality_panel["fieldConfig"]["defaults"],
+            {
+                "custom": {
+                    "drawStyle": "line",
+                    "lineInterpolation": "stepAfter",
+                    "spanNulls": False,
+                },
+                "decimals": 0,
+                "displayName": "${__field.labels.quality} / ${__field.name}",
+                "max": 1,
+                "min": 0,
+                "noValue": "Unknown",
+                "unit": "none",
+            },
+        )
+        self.assertEqual([target["refId"] for target in quality_targets], ["A"])
+        self.assertEqual(
+            quality_panel["transformations"],
+            [{"id": "partitionByValues", "options": {"fields": ["quality"]}}],
+        )
+        quality_target = quality_targets[0]
+        quality_query = quality_target["builder"]["query"]
+        self.assertEqual(quality_target["settings"]["format"], "long")
+        self.assertEqual(
+            quality_target["settings"]["contextParameters"],
+            [{"name": "maxSegmentPartitionsOrderedInMemory", "value": 75}],
+        )
+        self.assertIn("urn:wama:poc:pmu:bay-01:voltage-o''hara", quality_query)
+        self.assertIn('SELECT TIME_FLOOR("__time", \'PT1S\') AS "__time"', quality_query)
+        for field, label in (
+            ("quality_valid", "Valid"),
+            ("quality_substituted", "Substituted"),
+            ("quality_operator_blocked", "Operator blocked"),
+            ("quality_overflow", "Overflow"),
+            ("quality_old_data", "Old data"),
+        ):
+            with self.subTest(field=field):
+                self.assertIn(
+                    f'LATEST_BY(CASE "{field}" WHEN \'true\' THEN 1', quality_query
+                )
+                self.assertIn(
+                    f'WHEN \'false\' THEN 0 ELSE NULL END, "__time") AS "{label}"',
+                    quality_query,
+                )
+        self.assertIn("GROUP BY 1, 2 ORDER BY 1 ASC", quality_query)
+
+    def test_scopes_ordered_series_context_and_buckets_rendered_sql(self) -> None:
         dashboard = render_gateway_dashboard(_source())
         panels = {panel["title"]: panel for panel in dashboard["panels"]}
 
         series_target = panels["Phase Voltages"]["targets"][0]
         freshness_target = panels["Last Measurement"]["targets"][0]
         latest_records_target = panels["Latest Records"]["targets"][0]
+        quality_targets = panels["Quality Flags"]["targets"]
 
         self.assertEqual(
             series_target["settings"]["contextParameters"],
@@ -74,17 +131,22 @@ class DashboardRenderTests(unittest.TestCase):
         )
         self.assertEqual(freshness_target["settings"]["contextParameters"], [])
         self.assertEqual(latest_records_target["settings"]["contextParameters"], [])
+        for quality_target in quality_targets:
+            self.assertEqual(
+                quality_targets[0]["settings"]["contextParameters"],
+                [{"name": "maxSegmentPartitionsOrderedInMemory", "value": 75}],
+            )
         self.assertEqual(
             series_target["builder"]["query"],
-            'SELECT "__time", CASE "mrid" '
+            'SELECT TIME_FLOOR("__time", \'PT1S\') AS "__time", CASE "mrid" '
             "WHEN 'urn:wama:poc:pmu:bay-01:voltage-o''hara' THEN 'voltage-l1' "
-            'END AS "signal", "double_value" '
+            'END AS "signal", LATEST_BY("double_value", "__time") AS "double_value" '
             'FROM "live_measurements" '
             "WHERE \"mrid\" IN ('urn:wama:poc:pmu:bay-01:voltage-o''hara') "
             'AND "double_value" IS NOT NULL '
             'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
             'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '
-            'ORDER BY "__time" ASC',
+            'GROUP BY 1, 2 ORDER BY 1 ASC',
         )
         self.assertEqual(
             freshness_target["builder"]["query"],

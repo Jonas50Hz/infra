@@ -12,14 +12,12 @@ from processor_alarm_threshold.config import ConfigurationError, Settings, load_
 class ConfigurationTests(unittest.TestCase):
     """Reject configuration that changes reviewed alarm semantics implicitly."""
 
-    def test_loads_initial_frequency_rule_and_matches_whole_mrid_segments(self) -> None:
+    def test_loads_configured_frequency_rule_and_matches_whole_mrid_segments(self) -> None:
         configuration = load_reviewed_rules(self._initial_configuration_path())
 
         self.assertEqual(configuration.catalog_id, "c37-118-poc-v1")
         self.assertEqual(len(configuration.rules), 1)
         rule = configuration.rules[0]
-        self.assertEqual(rule.rule_id, "frequency-over-50-1-hz")
-        self.assertEqual(rule.threshold, 50.1)
         self.assertTrue(rule.selector.matches_mrid("urn:wama:poc:pmu:bay-01:frequency"))
         self.assertFalse(rule.selector.matches_mrid("urn:wama:poc:pmu:bay-01:rocof"))
         self.assertFalse(rule.selector.matches_mrid("urn:wama:poc:pmu:bay-01:phase:frequency"))

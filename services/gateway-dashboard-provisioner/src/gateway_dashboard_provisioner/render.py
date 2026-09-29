@@ -27,6 +27,13 @@ _QUANTITY_ORDER: Final = ("voltage", "current", "frequency", "rocof")
 _ORDERED_SERIES_CONTEXT_PARAMETERS: Final = (
     ("maxSegmentPartitionsOrderedInMemory", 75),
 )
+_QUALITY_FLAGS: Final = (
+    ("quality_valid", "Valid"),
+    ("quality_substituted", "Substituted"),
+    ("quality_operator_blocked", "Operator blocked"),
+    ("quality_overflow", "Overflow"),
+    ("quality_old_data", "Old data"),
+)
 
 
 class DashboardRenderError(ValueError):
@@ -131,6 +138,7 @@ def render_gateway_dashboard(source: GatewaySource) -> dict[str, Any]:
             _latest_records_panel(source.signals, data_row),
         )
     )
+    panels.append(_quality_panel(source.signals, data_row + 8))
     return {
         "annotations": {"list": []},
         "editable": False,
@@ -317,6 +325,51 @@ def _latest_records_panel(signals: tuple[GatewaySignal, ...], y: int) -> dict[st
     }
 
 
+def _quality_panel(signals: tuple[GatewaySignal, ...], y: int) -> dict[str, Any]:
+    return {
+        "datasource": _druid_datasource(),
+        "fieldConfig": {
+            "defaults": {
+                "custom": {
+                    "drawStyle": "line",
+                    "lineInterpolation": "stepAfter",
+                    "spanNulls": False,
+                },
+                "decimals": 0,
+                "displayName": "${__field.labels.quality} / ${__field.name}",
+                "max": 1,
+                "min": 0,
+                "noValue": "Unknown",
+                "unit": "none",
+            },
+            "overrides": [],
+        },
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
+        "id": 102,
+        "options": {
+            "legend": {
+                "calcs": ["lastNotNull", "min", "max"],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": True,
+            },
+            "tooltip": {"mode": "multi", "sort": "desc"},
+        },
+        "targets": [
+            _druid_target(
+                _quality_query(signals),
+                "long",
+                context_parameters=_ORDERED_SERIES_CONTEXT_PARAMETERS,
+            )
+        ],
+        "title": "Quality Flags",
+        "transformations": [
+            {"id": "partitionByValues", "options": {"fields": ["quality"]}}
+        ],
+        "type": "timeseries",
+    }
+
+
 def _druid_datasource() -> dict[str, str]:
     return {"type": DRUID_DATASOURCE_TYPE, "uid": DRUID_DATASOURCE_UID}
 
@@ -345,14 +398,15 @@ def _series_query(signals: tuple[GatewaySignal, ...]) -> str:
         for signal in signals
     )
     return (
-        'SELECT "__time", CASE "mrid" '
-        f'{aliases} END AS "signal", "double_value" '
+        'SELECT TIME_FLOOR("__time", \'PT1S\') AS "__time", CASE "mrid" '
+        f'{aliases} END AS "signal", LATEST_BY("double_value", "__time") '
+        'AS "double_value" '
         f'FROM "{LIVE_MEASUREMENTS_DATASOURCE}" '
         f'WHERE "mrid" IN ({_mrid_list(signals)}) '
         'AND "double_value" IS NOT NULL '
         'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
         'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '
-        'ORDER BY "__time" ASC'
+        'GROUP BY 1, 2 ORDER BY 1 ASC'
     )
 
 
@@ -362,6 +416,29 @@ def _freshness_query(signals: tuple[GatewaySignal, ...]) -> str:
         f'FROM "{LIVE_MEASUREMENTS_DATASOURCE}" '
         f'WHERE "mrid" IN ({_mrid_list(signals)}) '
         'AND "double_value" IS NOT NULL'
+    )
+
+
+def _quality_query(signals: tuple[GatewaySignal, ...]) -> str:
+    aliases = " ".join(
+        f"WHEN {_sql_literal(signal.mrid)} THEN {_sql_literal(signal.signal_id)}"
+        for signal in signals
+    )
+    quality_fields = ", ".join(
+        f'LATEST_BY(CASE "{field}" WHEN \'true\' THEN 1 WHEN \'false\' THEN 0 '
+        f'ELSE NULL END, "__time") AS "{label}"'
+        for field, label in _QUALITY_FLAGS
+    )
+    return (
+        'SELECT TIME_FLOOR("__time", \'PT1S\') AS "__time", CASE "mrid" '
+        f'{aliases} END AS "quality", '
+        f"{quality_fields} "
+        f'FROM "{LIVE_MEASUREMENTS_DATASOURCE}" '
+        f'WHERE "mrid" IN ({_mrid_list(signals)}) '
+        'AND "double_value" IS NOT NULL '
+        'AND "__time" >= MILLIS_TO_TIMESTAMP(${__from}) '
+        'AND "__time" <= MILLIS_TO_TIMESTAMP(${__to}) '
+        'GROUP BY 1, 2 ORDER BY 1 ASC'
     )
 
 

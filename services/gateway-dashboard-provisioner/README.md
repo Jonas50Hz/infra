@@ -16,8 +16,10 @@ Grafana reads the volume through its dedicated **WAMA Gateways** file provider:
 - **WAMA Gateway Fleet** is always present, including when no active sources
   exist.
 - Each active source receives one deterministic dashboard with catalog
-  provenance, endpoint metadata, unit-safe Druid trends, freshness, and latest
-  records. Trends include every finite measurement; the latest-record table
+  provenance, endpoint metadata, unit-safe Druid trends, quality-history graph,
+  freshness, and latest records. The quality graph shows each optional Common
+  Format quality flag as a stepped `1` or `0` series and leaves absent evidence
+  unknown. Trends include every finite measurement; the latest-record table
   retains `quality_valid` so conservative synchronization uncertainty remains
   visible instead of suppressing the source data.
 - A source-keyed Masterdata tombstone removes only that generated source page
